@@ -106,15 +106,9 @@ AI 도구는 디자인과 구현을 구체화하는 협업 도구로 사용했�
 
 ## 예정 아키텍처
 
-```mermaid
-flowchart LR
-    U[사용자] --> FE[React Frontend]
-    FE -->|REST API / HttpOnly Session| BE[Spring Boot]
-    BE --> DB[(PostgreSQL)]
-    BE --> CACHE[(Redis 선택)]
-    BE -->|OAuth / REST API| GL[GitLab]
-    GL --> REPO[(스터디 프로젝트)]
-```
+![Study Workspace 예정 서비스 아키텍처](docs/images/study-workspace-architecture.png)
+
+> 편집 가능한 원본: [study-workspace-architecture.svg](docs/images/study-workspace-architecture.svg)
 
 브라우저에는 GitLab 토큰을 저장하지 않습니다. Spring 백엔드가 암호화된 사용자 OAuth 토큰으로 Workspace에 연결된 프로젝트만 호출합니다.
 
