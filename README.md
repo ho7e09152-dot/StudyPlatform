@@ -2,7 +2,7 @@
 
 > GitLab 저장소를 학습 기록의 원본으로 유지하면서, 팀원의 진행 상황과 일정·제출·기록을 웹에서 편하게 관리하는 스터디 플랫폼
 
-![Study Workspace 학습 기록 화면](output/playwright/score-ui-2026-07-25/01-records-score-desktop.png)
+![Study Workspace 학습 기록 화면](frontend/public/og.png)
 
 ## 프로젝트를 시작한 배경
 
