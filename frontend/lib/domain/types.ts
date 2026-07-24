@@ -1,0 +1,140 @@
+export type SessionType = "algorithm" | "english" | "cs" | "free";
+
+export type SubmissionType = "link" | "text" | "code" | "mixed";
+
+export type SessionStatus = "active" | "cancelled";
+
+export type ItemStatus = "active" | "cancelled" | "replaced";
+
+export interface StudyMember {
+  id: string;
+  gitlabUserId: number;
+  username: string;
+  displayName: string;
+  avatar: string;
+  color: string;
+  fileName: string;
+  status: "ACTIVE" | "PROJECT_ACCESS_LOST";
+  accessLevel: number;
+}
+
+export interface SessionItem {
+  id: string;
+  order: number;
+  title: string;
+  source?: string;
+  url?: string;
+  submitType: SubmissionType;
+  required: boolean;
+  status: ItemStatus;
+  replaces?: string;
+  replacedBy?: string;
+}
+
+export interface StudySession {
+  date: string;
+  folder: string;
+  revision: number;
+  type: SessionType;
+  title: string;
+  description: string;
+  status: SessionStatus;
+  deadline: string;
+  secondaryDeadline?: string;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+  change?: {
+    changed: boolean;
+    message: string;
+    reason: string;
+  };
+  items: SessionItem[];
+  archivedItems: SessionItem[];
+  lastCommitId: string;
+}
+
+export interface SubmissionEntry {
+  itemId: string;
+  type: SubmissionType;
+  value: string;
+  language?: string;
+  submittedAt: string;
+  updatedAt: string;
+}
+
+export interface MemberSubmissionFile {
+  version: 1;
+  memberId: string;
+  gitlabUserId: number;
+  username: string;
+  date: string;
+  sessionRevision: number;
+  sessionType: SessionType;
+  updatedAt: string;
+  submissions: SubmissionEntry[];
+  reflection?: string;
+  lastCommitId: string;
+  lastCommitMessage?: string;
+}
+
+export interface WorkspaceSettings {
+  timezone: string;
+  requireChangeNoteWhenSubmitted: boolean;
+  notifications: {
+    scheduleChanges: boolean;
+    submissionMismatch: boolean;
+    syncFailures: boolean;
+  };
+}
+
+export interface Workspace {
+  id: string;
+  name: string;
+  gitlabProjectId: number;
+  gitlabProjectPath: string;
+  defaultBranch: string;
+  status: "ACTIVE" | "SOFT_DELETED";
+  lastSyncedAt: string;
+  members: StudyMember[];
+  sessions: Record<string, StudySession>;
+  submissions: Record<string, MemberSubmissionFile>;
+  settings: WorkspaceSettings;
+}
+
+export interface DashboardMetrics {
+  completedMembers: number;
+  totalMembers: number;
+  memberCompletionRate: number;
+  submittedItems: number;
+  totalRequiredSubmissions: number;
+  submissionRate: number;
+}
+
+export interface MemberProgress {
+  member: StudyMember;
+  completedItems: number;
+  requiredItems: number;
+  completionRate: number;
+  status: "NOT_STARTED" | "PARTIAL" | "COMPLETE";
+  lastSubmittedAt?: string;
+}
+
+export interface SessionDraft {
+  date: string;
+  type: SessionType;
+  title: string;
+  description: string;
+  deadline: string;
+  secondaryDeadline?: string;
+  changeReason: string;
+  items: SessionItem[];
+}
+
+export interface SubmissionDraft {
+  type: SubmissionType;
+  value: string;
+  language?: string;
+  commitMessage: string;
+}
