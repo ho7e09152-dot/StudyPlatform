@@ -27,18 +27,7 @@ repository_hygiene:
   before_script:
     - apk add --no-cache git
   script:
-    - |
-      tracked_env_files="$(git ls-files | grep -E '(^|/)\.env$' || true)"
-      if [ -n "$tracked_env_files" ]; then
-        echo "실제 .env 파일이 Git에 포함되어 있습니다:"
-        echo "$tracked_env_files"
-        exit 1
-      fi
-    - |
-      if git grep -nE 'GITLAB_ACCESS_TOKEN=[^[:space:]]+' -- ':!*.example' ':!docs/**'; then
-        echo "GitLab token처럼 보이는 값이 추적 파일에 있습니다."
-        exit 1
-      fi
+    - ./scripts/check-no-secrets.sh
 
 frontend_lint:
   stage: validate

@@ -1,0 +1,11 @@
+version: 1
+workspace:
+  name: 저녁 알고리즘 스터디
+  timezone: Asia/Seoul
+members:
+  - memberId: member-a
+    gitlabUserId: 101
+    username: study-member-a
+    displayName: 멤버 A
+    fileName: member-a.md
+    status: active

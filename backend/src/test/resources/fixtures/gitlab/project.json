@@ -1,0 +1,8 @@
+{
+  "id": 1234,
+  "name": "algorithm-study",
+  "path_with_namespace": "study-group/algorithm-study",
+  "default_branch": "main",
+  "web_url": "https://gitlab.example.test/study-group/algorithm-study",
+  "visibility": "private"
+}

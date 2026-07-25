@@ -1,0 +1,16 @@
+[
+  {
+    "id": "tree-260723",
+    "name": "260723",
+    "type": "tree",
+    "path": "260723",
+    "mode": "040000"
+  },
+  {
+    "id": "blob-session",
+    "name": "session.yml",
+    "type": "blob",
+    "path": "260723/session.yml",
+    "mode": "100644"
+  }
+]

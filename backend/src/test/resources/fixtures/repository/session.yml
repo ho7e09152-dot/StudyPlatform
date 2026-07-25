@@ -1,0 +1,21 @@
+version: 1
+revision: 1
+date: 2026-07-23
+type: algorithm
+title: 큐와 배열 집중 학습
+description: 블로그 풀이 링크를 제출합니다.
+status: active
+deadline: 2026-07-23T23:59:00+09:00
+secondaryDeadline: 2026-07-24T23:59:00+09:00
+updatedAt: 2026-07-20T21:00:00+09:00
+updatedBy:
+  username: study-member-a
+items:
+  - id: item-b712dd
+    order: 1
+    title: 행렬 테두리 회전하기
+    source: programmers
+    url: https://example.test/problems/1
+    submitType: link
+    required: true
+    status: active
