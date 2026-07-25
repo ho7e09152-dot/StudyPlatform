@@ -9,6 +9,8 @@ import java.time.Duration;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.studyworkspace.gitlab.config.GitLabProperties;
+import com.studyworkspace.gitlab.dto.GitLabBranch;
+import com.studyworkspace.gitlab.dto.GitLabCommitResponse;
 import com.studyworkspace.gitlab.dto.GitLabFileResponse;
 import com.studyworkspace.gitlab.dto.GitLabProject;
 import com.studyworkspace.gitlab.dto.GitLabTreeItem;
@@ -62,10 +64,44 @@ class GitLabClientIntegrationTests {
 		assertThat(lastToken).hasValue("test-read-token");
 	}
 
+	@Test
+	void createsBranchAndCreatesUpdatesDeletesFile() {
+		GitLabBranch branch = client.createBranch("spike", "main");
+		GitLabCommitResponse created = client.createRepositoryFile(
+			".study-workspace-spike/write-check.md",
+			"spike",
+			"first",
+			"test: create spike file"
+		);
+		GitLabCommitResponse updated = client.updateRepositoryFile(
+			".study-workspace-spike/write-check.md",
+			"spike",
+			"second",
+			"test: update spike file",
+			"last-commit-id"
+		);
+		client.deleteRepositoryFile(
+			".study-workspace-spike/write-check.md",
+			"spike",
+			"test: delete spike file",
+			"updated-commit-id"
+		);
+		client.deleteBranch("spike");
+
+		assertThat(branch.name()).isEqualTo("spike");
+		assertThat(branch.defaultBranch()).isFalse();
+		assertThat(branch.canPush()).isTrue();
+		assertThat(created.filePath()).isEqualTo(".study-workspace-spike/write-check.md");
+		assertThat(updated.branch()).isEqualTo("spike");
+		assertThat(lastToken).hasValue("test-read-token");
+	}
+
 	private void handle(HttpExchange exchange) throws IOException {
 		lastToken.set(exchange.getRequestHeaders().getFirst("PRIVATE-TOKEN"));
 		String path = exchange.getRequestURI().getRawPath();
+		String method = exchange.getRequestMethod();
 		String response;
+		int status = 200;
 
 		if (path.equals("/api/v4/user")) {
 			response = """
@@ -88,16 +124,55 @@ class GitLabClientIntegrationTests {
 				 "encoding":"base64","content":"dGl0bGU6IHN0dWR5Cg==","ref":"main",
 				 "blob_id":"blob-id","commit_id":"commit-id","last_commit_id":"last-commit-id"}
 				""";
+		} else if (
+			path.equals("/api/v4/projects/group%2Fstudy/repository/branches") &&
+			method.equals("POST")
+		) {
+			status = 201;
+			response = """
+				{"name":"spike","default":false,"protected":false,"can_push":true,
+				 "web_url":"https://gitlab.example.com/group/study/-/tree/spike"}
+				""";
+		} else if (
+			path.equals(
+				"/api/v4/projects/group%2Fstudy/repository/files/" +
+					".study-workspace-spike%2Fwrite-check.md"
+			) &&
+			(method.equals("POST") || method.equals("PUT"))
+		) {
+			status = method.equals("POST") ? 201 : 200;
+			response = """
+				{"file_path":".study-workspace-spike/write-check.md","branch":"spike"}
+				""";
+		} else if (
+			path.equals(
+				"/api/v4/projects/group%2Fstudy/repository/files/" +
+					".study-workspace-spike%2Fwrite-check.md"
+			) &&
+			method.equals("DELETE")
+		) {
+			sendEmpty(exchange, 200);
+			return;
+		} else if (
+			path.equals("/api/v4/projects/group%2Fstudy/repository/branches/spike") &&
+			method.equals("DELETE")
+		) {
+			sendEmpty(exchange, 204);
+			return;
 		} else {
-			exchange.sendResponseHeaders(404, -1);
-			exchange.close();
+			sendEmpty(exchange, 404);
 			return;
 		}
 
 		byte[] body = response.getBytes(StandardCharsets.UTF_8);
 		exchange.getResponseHeaders().set("Content-Type", MediaType.APPLICATION_JSON_VALUE);
-		exchange.sendResponseHeaders(200, body.length);
+		exchange.sendResponseHeaders(status, body.length);
 		exchange.getResponseBody().write(body);
+		exchange.close();
+	}
+
+	private void sendEmpty(HttpExchange exchange, int status) throws IOException {
+		exchange.sendResponseHeaders(status, -1);
 		exchange.close();
 	}
 }

@@ -6,9 +6,14 @@ import java.util.List;
 import com.studyworkspace.common.exception.GitLabApiException;
 import com.studyworkspace.common.exception.GitLabConfigurationException;
 import com.studyworkspace.gitlab.config.GitLabProperties;
+import com.studyworkspace.gitlab.dto.GitLabBranch;
+import com.studyworkspace.gitlab.dto.GitLabCommitResponse;
+import com.studyworkspace.gitlab.dto.GitLabCreateFileRequest;
+import com.studyworkspace.gitlab.dto.GitLabDeleteFileRequest;
 import com.studyworkspace.gitlab.dto.GitLabFileResponse;
 import com.studyworkspace.gitlab.dto.GitLabProject;
 import com.studyworkspace.gitlab.dto.GitLabTreeItem;
+import com.studyworkspace.gitlab.dto.GitLabUpdateFileRequest;
 import com.studyworkspace.gitlab.dto.GitLabUser;
 import com.studyworkspace.gitlab.port.GitLabRepositoryPort;
 import org.springframework.core.ParameterizedTypeReference;
@@ -102,6 +107,109 @@ public class GitLabClient implements GitLabRepositoryPort {
 		);
 	}
 
+	@Override
+	public GitLabBranch createBranch(String branch, String ref) {
+		requireConfiguration();
+		return execute(
+			webClient.post()
+				.uri(builder -> builder
+					.pathSegment("projects", properties.projectId(), "repository", "branches")
+					.queryParam("branch", branch)
+					.queryParam("ref", ref)
+					.build())
+				.header(TOKEN_HEADER, properties.accessToken())
+				.retrieve()
+				.onStatus(HttpStatusCode::isError, this::toException)
+				.bodyToMono(GitLabBranch.class)
+		);
+	}
+
+	@Override
+	public void deleteBranch(String branch) {
+		requireConfiguration();
+		execute(
+			webClient.delete()
+				.uri(builder -> builder
+					.pathSegment("projects", properties.projectId(), "repository", "branches", branch)
+					.build())
+				.header(TOKEN_HEADER, properties.accessToken())
+				.retrieve()
+				.onStatus(HttpStatusCode::isError, this::toException)
+				.toBodilessEntity()
+		);
+	}
+
+	@Override
+	public GitLabCommitResponse createRepositoryFile(
+		String path,
+		String branch,
+		String content,
+		String commitMessage
+	) {
+		requireConfiguration();
+		return execute(
+			webClient.post()
+				.uri(builder -> builder
+					.pathSegment("projects", properties.projectId(), "repository", "files", path)
+					.build())
+				.header(TOKEN_HEADER, properties.accessToken())
+				.bodyValue(new GitLabCreateFileRequest(branch, content, commitMessage))
+				.retrieve()
+				.onStatus(HttpStatusCode::isError, this::toException)
+				.bodyToMono(GitLabCommitResponse.class)
+		);
+	}
+
+	@Override
+	public GitLabCommitResponse updateRepositoryFile(
+		String path,
+		String branch,
+		String content,
+		String commitMessage,
+		String lastCommitId
+	) {
+		requireConfiguration();
+		return execute(
+			webClient.put()
+				.uri(builder -> builder
+					.pathSegment("projects", properties.projectId(), "repository", "files", path)
+					.build())
+				.header(TOKEN_HEADER, properties.accessToken())
+				.bodyValue(
+					new GitLabUpdateFileRequest(
+						branch,
+						content,
+						commitMessage,
+						lastCommitId
+					)
+				)
+				.retrieve()
+				.onStatus(HttpStatusCode::isError, this::toException)
+				.bodyToMono(GitLabCommitResponse.class)
+		);
+	}
+
+	@Override
+	public void deleteRepositoryFile(
+		String path,
+		String branch,
+		String commitMessage,
+		String lastCommitId
+	) {
+		requireConfiguration();
+		execute(
+			webClient.method(org.springframework.http.HttpMethod.DELETE)
+				.uri(builder -> builder
+					.pathSegment("projects", properties.projectId(), "repository", "files", path)
+					.build())
+				.header(TOKEN_HEADER, properties.accessToken())
+				.bodyValue(new GitLabDeleteFileRequest(branch, commitMessage, lastCommitId))
+				.retrieve()
+				.onStatus(HttpStatusCode::isError, this::toException)
+				.toBodilessEntity()
+		);
+	}
+
 	private <T> T execute(Mono<T> request) {
 		try {
 			T response = request.block(properties.requestTimeout());
@@ -135,6 +243,11 @@ public class GitLabClient implements GitLabRepositoryPort {
 	) {
 		int status = response.statusCode().value();
 		GitLabApiException exception = switch (status) {
+			case 400 -> new GitLabApiException(
+				"GITLAB_COMMIT_REJECTED",
+				"GitLab이 커밋을 거부했습니다. 동일한 내용, 잘못된 경로 또는 최신 커밋 충돌을 확인해 주세요.",
+				status
+			);
 			case 401 -> new GitLabApiException(
 				"GITLAB_AUTHENTICATION_FAILED",
 				"GitLab 토큰이 유효하지 않거나 만료되었습니다.",
@@ -153,6 +266,11 @@ public class GitLabClient implements GitLabRepositoryPort {
 			case 429 -> new GitLabApiException(
 				"GITLAB_RATE_LIMITED",
 				"GitLab 요청 제한에 도달했습니다. 잠시 후 다시 시도해 주세요.",
+				status
+			);
+			case 409 -> new GitLabApiException(
+				"GITLAB_CONFLICT",
+				"GitLab 리소스가 다른 요청과 충돌했습니다.",
 				status
 			);
 			default -> new GitLabApiException(

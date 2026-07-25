@@ -1,6 +1,6 @@
 # Study Workspace Backend
 
-Spring Boot 기반 Study Workspace 백엔드입니다. 현재는 전체 도메인 구현에 앞서 SSAFY GitLab과의 네트워크·토큰·프로젝트 권한을 검증하는 읽기 전용 연결 스파이크가 구현되어 있습니다.
+Spring Boot 기반 Study Workspace 백엔드입니다. 현재는 전체 도메인 구현에 앞서 SSAFY GitLab과의 네트워크·토큰·프로젝트 읽기 권한 및 임시 브랜치 쓰기 권한을 검증하는 연결 스파이크가 구현되어 있습니다.
 
 ## 현재 구현 범위
 
@@ -9,13 +9,16 @@ Spring Boot 기반 Study Workspace 백엔드입니다. 현재는 전체 도메�
 - 서버에 고정된 GitLab 프로젝트 조회
 - 기본 브랜치의 repository tree 조회
 - 선택한 텍스트 파일 조회 및 Base64 디코딩
+- 공통 GitLab Port의 브랜치 생성·삭제, 파일 생성·수정·삭제
+- `last_commit_id`를 이용한 파일 수정·삭제 충돌 방지
+- 기본 브랜치를 건드리지 않는 실제 GitLab 쓰기 스파이크
 - 프로젝트 ID를 프론트 요청으로 받지 않는 단일 프로젝트 경계
 - 상대 파일 경로 검증과 1MB 미리보기 제한
 - GitLab 인증·권한·404·요청 제한 오류 변환
 - 프론트엔드 개발 주소 CORS 허용
 - GitLab 응답 없이도 실행 가능한 미설정 상태
 
-파일 생성·수정 API와 OAuth 로그인은 아직 구현하지 않았습니다. 먼저 아래 읽기 흐름을 실제 SSAFY GitLab에서 확인한 뒤 추가합니다.
+브라우저에 공개하는 파일 쓰기 API와 OAuth 로그인은 아직 구현하지 않았습니다. 공통 클라이언트의 쓰기 능력만 일회성 통합 테스트로 검증했으며, 실제 Session·Submission 저장 정책은 각 기능 담당자가 구현합니다.
 
 ## 기술 구성
 
@@ -50,7 +53,7 @@ FRONTEND_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 SERVER_PORT=8080
 ```
 
-- 연결 검증 단계의 토큰 scope는 `read_api`를 권장합니다.
+- 읽기 연결 검증만 할 때는 `read_api`, 수동 쓰기 스파이크를 실행할 때는 `api` scope가 필요합니다.
 - `GITLAB_PROJECT_ID`는 숫자 Project ID 또는 URL 인코딩하지 않은 `group/project` 경로를 사용할 수 있습니다.
 - `GITLAB_DEFAULT_REF`가 비어 있으면 프로젝트의 기본 브랜치를 사용합니다.
 - 실제 토큰이 들어 있는 `.env`는 Git에 포함되지 않습니다.
@@ -104,7 +107,28 @@ cd backend
 ./gradlew build
 ```
 
-테스트는 실제 GitLab 토큰을 사용하지 않습니다. 로컬 가짜 HTTP 서버를 통해 토큰 헤더, URL 인코딩, 사용자·프로젝트·tree·파일 응답 매핑을 검증합니다.
+기본 테스트는 실제 GitLab 토큰을 사용하지 않습니다. 로컬 가짜 HTTP 서버를 통해 토큰 헤더, URL 인코딩, 사용자·프로젝트·tree·파일 응답과 쓰기 요청 매핑을 검증합니다.
+
+실제 GitLab 쓰기 스파이크는 명시적으로 활성화할 때만 실행됩니다.
+
+```bash
+cd backend
+set -a
+source .env
+set +a
+GITLAB_WRITE_SPIKE_ENABLED=true \
+  ./gradlew test \
+  --tests com.studyworkspace.gitlab.client.GitLabWriteSpikeTests \
+  --rerun-tasks
+```
+
+이 테스트는 다음 안전장치를 가집니다.
+
+- 실행 시각이 포함된 `codex-write-spike-*` 임시 브랜치만 사용
+- `.study-workspace-spike/write-check.md` 경로만 사용
+- 기본 브랜치에는 쓰지 않음
+- 생성 → 조회 → `last_commit_id` 기반 수정 → 재조회 → 삭제 순서 검증
+- 성공·실패와 무관하게 `finally`에서 임시 브랜치 삭제 시도
 
 ## 현재 패키지 구조
 
@@ -125,9 +149,9 @@ src/main/java/com/studyworkspace/
 
 ## 다음 구현 순서
 
-1. 실제 SSAFY GitLab에서 `CONNECTED` 확인
-2. 프로젝트 루트 tree와 파일 미리보기 확인
-3. 쓰기 전용 테스트 브랜치에서 임시 파일 생성·수정 검증
+1. ~~실제 SSAFY GitLab에서 `CONNECTED` 확인~~
+2. ~~프로젝트 루트 tree와 파일 미리보기 확인~~
+3. ~~격리된 테스트 브랜치에서 임시 파일 생성·수정·정리 검증~~
 4. PAT 방식을 GitLab OAuth로 교체
 5. Workspace DB 연결 후 프로젝트를 환경변수 대신 Workspace에서 조회
 6. 역할별 Session, Submission, Records API 구현

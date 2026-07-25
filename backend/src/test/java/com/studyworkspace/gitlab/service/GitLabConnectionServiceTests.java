@@ -5,6 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.time.Duration;
 import java.util.List;
 
+import com.studyworkspace.gitlab.dto.GitLabBranch;
+import com.studyworkspace.gitlab.dto.GitLabCommitResponse;
 import com.studyworkspace.gitlab.config.GitLabProperties;
 import com.studyworkspace.gitlab.dto.GitLabFileResponse;
 import com.studyworkspace.gitlab.dto.GitLabProject;
@@ -52,6 +54,47 @@ class GitLabConnectionServiceTests {
 
 		@Override
 		public GitLabFileResponse getRepositoryFile(String path, String ref) {
+			throw new AssertionError("GitLab must not be called");
+		}
+
+		@Override
+		public GitLabBranch createBranch(String branch, String ref) {
+			throw new AssertionError("GitLab must not be called");
+		}
+
+		@Override
+		public void deleteBranch(String branch) {
+			throw new AssertionError("GitLab must not be called");
+		}
+
+		@Override
+		public GitLabCommitResponse createRepositoryFile(
+			String path,
+			String branch,
+			String content,
+			String commitMessage
+		) {
+			throw new AssertionError("GitLab must not be called");
+		}
+
+		@Override
+		public GitLabCommitResponse updateRepositoryFile(
+			String path,
+			String branch,
+			String content,
+			String commitMessage,
+			String lastCommitId
+		) {
+			throw new AssertionError("GitLab must not be called");
+		}
+
+		@Override
+		public void deleteRepositoryFile(
+			String path,
+			String branch,
+			String commitMessage,
+			String lastCommitId
+		) {
 			throw new AssertionError("GitLab must not be called");
 		}
 	}
