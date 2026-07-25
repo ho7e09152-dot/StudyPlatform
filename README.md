@@ -2,7 +2,7 @@
 
 > GitLab 저장소를 학습 기록의 원본으로 유지하면서, 팀원의 진행 상황과 일정·제출·기록을 웹에서 편하게 관리하는 스터디 플랫폼
 
-![Study Workspace 학습 기록 화면](frontend/public/og.png)
+![Study Workspace 랜딩 페이지](docs/images/screenshots/landing.png)
 
 ## 프로젝트를 시작한 배경
 
@@ -58,6 +58,8 @@ Study Workspace는 이 과정을 `일정 생성 → 항목별 제출 → GitLab 
 
 | 화면 | 구현 내용 |
 |---|---|
+| 랜딩 | 서비스 소개, GitLab 기반 워크플로, 자동 전환 제품 미리보기, 스크롤 애니메이션 |
+| 로그인 | GitLab OAuth 진입, 보안 원칙 안내, 로그인 없는 데모 Workspace 진입 |
 | 오늘 | 오늘의 학습 항목, 팀 진행률, 개인 진행률, 멤버 현황, 저장소 미리보기 |
 | 일정 | 일정 검색·필터, 일정 생성·수정, 여러 학습 항목, 1차·2차 마감, revision 표시 |
 | 제출 | 항목별 링크·텍스트·코드 제출, 커밋 메시지, GitLab 반영 대상 미리보기 |
@@ -71,6 +73,18 @@ Study Workspace는 이 과정을 `일정 생성 → 항목별 제출 → GitLab 
 ## 화면 소개
 
 아래 이미지는 실제 로컬 프론트엔드를 1440×900 데스크톱 환경에서 캡처한 화면입니다.
+
+### 랜딩
+
+서비스의 문제 정의와 `일정 → 웹 제출 → GitLab commit → 진행률` 흐름을 소개합니다. 제품 화면을 재구성한 Hero 애니메이션, 자동으로 전환되는 기능 미리보기, 스크롤 등장 효과와 모션 감소 접근성 설정을 포함합니다.
+
+![랜딩 페이지 — GitLab 기반 스터디 워크플로](docs/images/screenshots/landing.png)
+
+### 로그인
+
+별도의 비밀번호 대신 GitLab OAuth로 인증을 시작합니다. 브라우저에 토큰을 저장하지 않는 구조와 로그인 후 이어지는 흐름을 설명하며, 백엔드 인증 구현 전에도 준비된 데이터로 들어갈 수 있는 데모 진입을 제공합니다.
+
+![로그인 페이지 — GitLab OAuth와 데모 진입](docs/images/screenshots/login.png)
 
 ### 오늘
 
@@ -246,7 +260,9 @@ npm run dev
 기본 개발 주소:
 
 ```text
-http://localhost:3000
+http://localhost:3000         # 랜딩
+http://localhost:3000/login   # GitLab 로그인
+http://localhost:3000/today   # 데모 Workspace
 ```
 
 ## 백엔드 실행

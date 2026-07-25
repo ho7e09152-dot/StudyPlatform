@@ -23,21 +23,33 @@ async function render(pathname = "/") {
   );
 }
 
-test("server-renders the Study Workspace dashboard", async () => {
+test("server-renders the public landing page", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /Study Workspace/);
-  assert.match(html, /오늘의 학습/);
+  assert.match(html, /함께 움직이는 Workspace로/);
+  assert.match(html, /GitLab로 시작하기/);
+  assert.match(html, /스터디의 반복 작업을/);
   assert.match(html, /GitLab learning hub/);
-  assert.match(html, /저녁 스터디/);
   assert.doesNotMatch(html, /codex-preview|SkeletonPreview|react-loading-skeleton/);
 });
 
-test("all workspace routes render their product heading", async () => {
+test("login page renders GitLab OAuth and demo entry points", async () => {
+  const response = await render("/login");
+  assert.equal(response.status, 200);
+
+  const html = await response.text();
+  assert.match(html, /GitLab 계정으로 시작/);
+  assert.match(html, /GitLab로 계속하기/);
+  assert.match(html, /데모 Workspace 둘러보기/);
+  assert.match(html, /\/api\/v1\/auth\/gitlab\/login/);
+});
+
+test("all authenticated workspace routes render their product heading", async () => {
   const routes = [
+    ["/today", "오늘의 학습"],
     ["/schedule", "학습 일정"],
     ["/records", "학습 기록"],
     ["/repository", "저장소"],
@@ -52,14 +64,17 @@ test("all workspace routes render their product heading", async () => {
 });
 
 test("starter preview infrastructure is removed", async () => {
-  const [page, layout, packageJson] = await Promise.all([
+  const [page, layout, rootShell, packageJson] = await Promise.all([
     readFile(new URL("../app/page.tsx", import.meta.url), "utf8"),
     readFile(new URL("../app/layout.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../components/shell/RootShell.tsx", import.meta.url), "utf8"),
     readFile(new URL("../package.json", import.meta.url), "utf8"),
   ]);
 
-  assert.match(page, /TodayWorkspace/);
-  assert.match(layout, /WorkspaceProvider/);
+  assert.match(page, /LandingPage/);
+  assert.match(layout, /RootShell/);
+  assert.match(rootShell, /WorkspaceProvider/);
+  assert.match(rootShell, /GitLabConnectionProvider/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
   await assert.rejects(access(new URL("../app/_sites-preview", import.meta.url)));
 });

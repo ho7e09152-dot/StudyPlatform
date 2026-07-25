@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
-import { TodayWorkspace } from "@/components/today/TodayWorkspace";
+import { LandingPage } from "@/components/marketing/LandingPage";
 
 export const metadata: Metadata = {
-  title: "오늘의 학습",
+  title: "GitLab로 이어지는 스터디 Workspace",
 };
 
 export default function HomePage() {
-  return <TodayWorkspace />;
+  return <LandingPage />;
 }

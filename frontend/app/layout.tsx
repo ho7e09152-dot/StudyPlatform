@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import { headers } from "next/headers";
-import { WorkspaceProvider } from "@/components/providers/WorkspaceProvider";
-import { AppShell } from "@/components/shell/AppShell";
-import { GitLabConnectionProvider } from "@/lib/api/hooks/useGitLabConnection";
+import { RootShell } from "@/components/shell/RootShell";
 import "./globals.css";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -20,7 +18,7 @@ export async function generateMetadata(): Promise<Metadata> {
       template: "%s · Study Workspace",
     },
     description:
-      "GitLab 저장소를 원본으로 사용하는 팀 학습 일정·제출 관리 Workspace",
+      "GitLab 저장소를 원본으로 사용하는 팀 학습 일정·제출·기록 관리 Workspace",
     icons: {
       icon: "/ssafy_icon.png",
       shortcut: "/ssafy_icon.png",
@@ -48,13 +46,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko">
-      <body>
-        <WorkspaceProvider>
-          <GitLabConnectionProvider>
-            <AppShell>{children}</AppShell>
-          </GitLabConnectionProvider>
-        </WorkspaceProvider>
-      </body>
+      <body><RootShell>{children}</RootShell></body>
     </html>
   );
 }

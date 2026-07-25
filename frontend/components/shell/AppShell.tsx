@@ -23,7 +23,7 @@ import { Toast } from "@/components/ui/Toast";
 import { useGitLabConnection } from "@/lib/api/hooks/useGitLabConnection";
 
 const navigation = [
-  { href: "/", label: "오늘", icon: LayoutDashboard },
+  { href: "/today", label: "오늘", icon: LayoutDashboard },
   { href: "/schedule", label: "일정", icon: CalendarDays },
   { href: "/records", label: "기록", icon: ChartNoAxesColumnIncreasing },
   { href: "/repository", label: "저장소", icon: FolderGit2 },
@@ -31,7 +31,7 @@ const navigation = [
 ];
 
 function isActive(pathname: string, href: string) {
-  return href === "/" ? pathname === "/" : pathname.startsWith(href);
+  return pathname.startsWith(href);
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -83,7 +83,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="app-frame">
       <aside className="sidebar" aria-label="주요 메뉴">
-        <Link className="brand-block" href="/" aria-label="STUDY 홈으로 이동">
+        <Link className="brand-block" href="/" aria-label="STUDY 랜딩 페이지로 이동">
           <Image
             className="brand-image"
             src="/ssafy_icon.png"

@@ -23,8 +23,9 @@ npm test
 
 ```text
 app/                         App Router 페이지와 메타데이터
+components/marketing/        공개 랜딩·GitLab OAuth 로그인
 components/providers/        Workspace 상태와 목업 API 동작
-components/shell/            반응형 애플리케이션 셸
+components/shell/            공개/인증 라우트 분리와 반응형 앱 셸
 components/today/            오늘의 학습과 항목별 제출
 components/schedule/         일정 생성·수정과 revision 처리
 components/records/          저장소 데이터 기반 학습 통계
@@ -37,6 +38,18 @@ lib/data/                    독립 Workspace 목업 데이터
 lib/repository/              YAML·Markdown 직렬화
 ```
 
+주요 라우트:
+
+```text
+/             공개 랜딩
+/login        GitLab OAuth 로그인
+/today        인증 후 오늘의 학습
+/schedule     일정
+/records      기록과 점수
+/repository   GitLab 저장소
+/settings     Workspace 설정
+```
+
 ## 설계 기준
 
 - GitLab 저장소가 학습 일정과 제출의 원본입니다.
@@ -46,6 +59,7 @@ lib/repository/              YAML·Markdown 직렬화
 - 항목 ID는 생성 후 변경하지 않습니다.
 - 제거된 항목은 삭제하지 않고 보관합니다.
 - 완료율은 필수 활성 항목과 실제 멤버 제출로 계산합니다.
+- 공개 라우트에서는 Workspace 상태와 GitLab 연결 API를 불러오지 않습니다.
 
 일정·제출·기록은 아직 메모리 기반 목업 어댑터를 사용합니다. 저장소와 설정 화면의 연결 정보는 Spring Boot의 GitLab 연결 API를 먼저 호출하며, 실제 연결 전에는 상태를 표시한 뒤 목업 저장소를 유지합니다.
 
