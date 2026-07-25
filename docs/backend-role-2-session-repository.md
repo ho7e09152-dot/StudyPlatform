@@ -1,5 +1,7 @@
 # 팀원 2 — 일정·저장소
 
+> 처음 구현하는 사람은 요구사항을 읽은 뒤 [팀원 2 초심자 구현 핸드북](guides/member-2-session-repository-handbook.md)을 순서대로 따라가세요. 핸드북에는 클래스·패키지, UML, YAML 매핑, GitLab 시퀀스, 충돌 처리와 테스트 fixture 사용법이 포함되어 있습니다.
+
 > [프로젝트 README로 돌아가기](../README.md)
 
 ## 역할 목표
@@ -275,4 +277,3 @@ backend/src/main/java/.../
 - 항목 교체 시 과거 제출을 보존하는 정책
 - 저장소 경로 검증과 파일 미리보기 보안
 - GitLab 오류·보호 브랜치·요청 제한 대응
-
