@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { Avatar } from "@/components/ui/Avatar";
+import { Modal } from "@/components/ui/Modal";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import {
   REFERENCE_DATE,
@@ -158,19 +159,45 @@ function StatCard({
   label,
   detail,
   className,
+  onClick,
+  actionLabel,
 }: {
   icon: ReactNode;
   value: string;
   label: string;
   detail: string;
   className?: string;
+  onClick?: () => void;
+  actionLabel?: string;
 }) {
-  return (
-    <article className={className}>
+  const content = (
+    <>
       <span>{icon}</span>
       <strong>{value}</strong>
       <p>{label}</p>
       <small>{detail}</small>
+    </>
+  );
+
+  return (
+    <article
+      className={`${className ?? ""} ${onClick ? "record-stat-card--interactive" : ""}`.trim()}
+    >
+      {onClick ? (
+        <button
+          type="button"
+          className="record-stat-card__trigger"
+          onClick={onClick}
+          aria-label={actionLabel ?? `${label} 상세 보기`}
+        >
+          {content}
+          <span className="record-stat-card__open">
+            순위 보기 <ChevronRight size={13} aria-hidden="true" />
+          </span>
+        </button>
+      ) : (
+        content
+      )}
     </article>
   );
 }
@@ -188,6 +215,7 @@ export function RecordsWorkspace() {
   const [view, setView] = useState<RecordsView>("month");
   const [selectedDate, setSelectedDate] = useState(initialDate);
   const [selectedMonth, setSelectedMonth] = useState(initialDate.slice(0, 7));
+  const [isScoreModalOpen, setIsScoreModalOpen] = useState(false);
 
   const selected =
     workspace.sessions[selectedDate]?.status === "active"
@@ -395,74 +423,97 @@ export function RecordsWorkspace() {
           value={`${myScore?.points ?? 0}P`}
           label="내 현재 점수"
           detail={`${myScore?.primaryCount ?? 0}건 1차 · ${myScore?.secondaryCount ?? 0}건 2차`}
+          onClick={() => setIsScoreModalOpen(true)}
+          actionLabel={`${periodLabel} 내 점수와 멤버 순위 보기`}
         />
       </section>
 
-      <section
-        key={`score-${view}-${periodKey}`}
-        className="surface score-ranking record-switch-animation"
-        aria-labelledby="score-ranking-title"
-      >
-        <header className="score-ranking__header">
-          <div>
-            <p className="eyebrow">POINT RANKING</p>
-            <h2 id="score-ranking-title">멤버 점수 순위</h2>
-            <p>마감 단계와 필수 항목 제출 시각을 기준으로 계산합니다.</p>
+      {isScoreModalOpen ? (
+        <Modal
+          title="점수 상세"
+          description={`${periodLabel} 마감 단계와 필수 항목 제출 시각을 기준으로 계산한 점수입니다.`}
+          onClose={() => setIsScoreModalOpen(false)}
+          size="large"
+        >
+          <div className="score-modal-body">
+            <section className="score-modal-summary" aria-label="내 점수 요약">
+              <span className="score-modal-summary__icon">
+                <Medal size={22} aria-hidden="true" />
+              </span>
+              <div>
+                <small>{periodLabel}</small>
+                <strong>{myScore?.points ?? 0}P</strong>
+                <p>
+                  1차 {myScore?.primaryCount ?? 0}건 · 2차{" "}
+                  {myScore?.secondaryCount ?? 0}건
+                </p>
+              </div>
+              <span className="score-modal-summary__rank">
+                {myScore?.rank ?? "-"}위
+              </span>
+            </section>
+
+            <div className="score-rule" aria-label="점수 계산 기준">
+              <span><i className="primary" />1차 마감 내 <strong>+{SCORE_RULES.primary}P</strong></span>
+              <span><i className="secondary" />2차 마감 내 <strong>+{SCORE_RULES.secondary}P</strong></span>
+              <span><i className="missed" />미제출·기한 초과 <strong>0P</strong></span>
+            </div>
+
+            <div className="score-modal-ranking-heading">
+              <div>
+                <p className="eyebrow">POINT RANKING</p>
+                <h3>멤버 점수 순위</h3>
+              </div>
+              <span>{workspace.members.length}명</span>
+            </div>
+
+            <ol className="score-ranking__list">
+              {scoreboard.map((score) => {
+                const scoreRate = score.maxPoints
+                  ? Math.round((score.points / score.maxPoints) * 100)
+                  : 0;
+                const isMe = score.member.id === currentUserId;
+                return (
+                  <li key={score.member.id} className={isMe ? "is-me" : undefined}>
+                    <span className={`score-rank score-rank--${Math.min(score.rank, 3)}`}>
+                      {score.rank}
+                    </span>
+                    <Avatar member={score.member} />
+                    <span className="score-member">
+                      <strong>
+                        {score.member.displayName}
+                        {isMe ? <em>나</em> : null}
+                      </strong>
+                      <small>
+                        1차 {score.primaryCount}건 · 2차 {score.secondaryCount}건
+                      </small>
+                    </span>
+                    <span
+                      className="score-bar"
+                      role="progressbar"
+                      aria-label={`${score.member.displayName} 점수`}
+                      aria-valuemin={0}
+                      aria-valuemax={score.maxPoints}
+                      aria-valuenow={score.points}
+                    >
+                      <i
+                        style={{
+                          width: `${scoreRate}%`,
+                          backgroundColor: score.member.color,
+                        }}
+                      />
+                    </span>
+                    <strong className="score-points">
+                      {score.points}P
+                      <small>/{score.maxPoints}P</small>
+                    </strong>
+                  </li>
+                );
+              })}
+            </ol>
           </div>
-          <span>{periodLabel}</span>
-        </header>
-
-        <div className="score-rule" aria-label="점수 계산 기준">
-          <span><i className="primary" />1차 마감 내 <strong>+{SCORE_RULES.primary}P</strong></span>
-          <span><i className="secondary" />2차 마감 내 <strong>+{SCORE_RULES.secondary}P</strong></span>
-          <span><i className="missed" />미제출·기한 초과 <strong>0P</strong></span>
-        </div>
-
-        <ol className="score-ranking__list">
-          {scoreboard.map((score) => {
-            const scoreRate = score.maxPoints
-              ? Math.round((score.points / score.maxPoints) * 100)
-              : 0;
-            const isMe = score.member.id === currentUserId;
-            return (
-              <li key={score.member.id} className={isMe ? "is-me" : undefined}>
-                <span className={`score-rank score-rank--${Math.min(score.rank, 3)}`}>
-                  {score.rank}
-                </span>
-                <Avatar member={score.member} />
-                <span className="score-member">
-                  <strong>
-                    {score.member.displayName}
-                    {isMe ? <em>나</em> : null}
-                  </strong>
-                  <small>
-                    1차 {score.primaryCount}건 · 2차 {score.secondaryCount}건
-                  </small>
-                </span>
-                <span
-                  className="score-bar"
-                  role="progressbar"
-                  aria-label={`${score.member.displayName} 점수`}
-                  aria-valuemin={0}
-                  aria-valuemax={score.maxPoints}
-                  aria-valuenow={score.points}
-                >
-                  <i
-                    style={{
-                      width: `${scoreRate}%`,
-                      backgroundColor: score.member.color,
-                    }}
-                  />
-                </span>
-                <strong className="score-points">
-                  {score.points}P
-                  <small>/{score.maxPoints}P</small>
-                </strong>
-              </li>
-            );
-          })}
-        </ol>
-      </section>
+        </Modal>
+      ) : null}
 
       <div
         key={`overview-${view}-${periodKey}`}

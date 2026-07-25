@@ -6,7 +6,9 @@ import {
   ChevronDown,
   ChevronRight,
   Clipboard,
+  Code2,
   CodeXml,
+  Eye,
   ExternalLink,
   FileCode2,
   FileText,
@@ -21,6 +23,7 @@ import { getGitLabFile } from "@/lib/api/services/gitlabApi";
 import type { GitLabFileContent } from "@/lib/api/types/gitlab";
 import { getSubmissionKey } from "@/lib/domain/metrics";
 import { getRepositoryFiles } from "@/lib/repository/serializers";
+import { MarkdownPreview } from "./MarkdownPreview";
 
 const ROOT_GROUP = "__root__";
 
@@ -74,6 +77,9 @@ export function RepositoryWorkspace() {
     error: string | null;
   } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [markdownView, setMarkdownView] = useState<"preview" | "source">(
+    "preview",
+  );
   const [searchQuery, setSearchQuery] = useState("");
   const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(
     () => new Set(),
@@ -202,9 +208,14 @@ export function RepositoryWorkspace() {
       const firstMatch = files.find((file) =>
         file.path.toLocaleLowerCase("ko").includes(normalizedQuery),
       );
-      if (firstMatch) setSelectedPath(firstMatch.path);
+      if (firstMatch) handleSelectFile(firstMatch.path);
     }
     setCollapsedFolders(new Set());
+  }
+
+  function handleSelectFile(path: string) {
+    setSelectedPath(path);
+    setMarkdownView("preview");
   }
 
   function toggleFolder(folder: string) {
@@ -309,7 +320,7 @@ export function RepositoryWorkspace() {
                           selected?.path === file.path ? "active" : undefined
                         }
                         title={file.path}
-                        onClick={() => setSelectedPath(file.path)}
+                        onClick={() => handleSelectFile(file.path)}
                       >
                         <Icon size={15} /> {getFileName(file.path)}
                       </button>
@@ -345,15 +356,40 @@ export function RepositoryWorkspace() {
                         : "Text · GitLab repository file"}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  className="button button--secondary button--small"
-                  onClick={copy}
-                  disabled={!selectedContent}
-                >
-                  {copied ? <Check size={15} /> : <Clipboard size={15} />}
-                  {copied ? "복사됨" : "원문 복사"}
-                </button>
+                <div className="file-viewer__actions">
+                  {selected.kind === "markdown" ? (
+                    <div
+                      className="markdown-view-switch"
+                      aria-label="Markdown 보기 방식"
+                    >
+                      <button
+                        type="button"
+                        className={markdownView === "preview" ? "active" : undefined}
+                        aria-pressed={markdownView === "preview"}
+                        onClick={() => setMarkdownView("preview")}
+                      >
+                        <Eye size={14} /> 미리보기
+                      </button>
+                      <button
+                        type="button"
+                        className={markdownView === "source" ? "active" : undefined}
+                        aria-pressed={markdownView === "source"}
+                        onClick={() => setMarkdownView("source")}
+                      >
+                        <Code2 size={14} /> 원문
+                      </button>
+                    </div>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="button button--secondary button--small"
+                    onClick={copy}
+                    disabled={!selectedContent}
+                  >
+                    {copied ? <Check size={15} /> : <Clipboard size={15} />}
+                    {copied ? "복사됨" : "원문 복사"}
+                  </button>
+                </div>
               </header>
               {fileState === "loading" ? (
                 <div className="repository-file-state">
@@ -365,6 +401,10 @@ export function RepositoryWorkspace() {
                   <strong>파일을 불러오지 못했습니다</strong>
                   <p>{fileError}</p>
                 </div>
+              ) : selectedContent !== undefined &&
+                selected.kind === "markdown" &&
+                markdownView === "preview" ? (
+                <MarkdownPreview content={selectedContent} />
               ) : selectedContent !== undefined ? (
                 <div className="code-panel">
                   <ol aria-hidden="true">
