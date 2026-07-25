@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { headers } from "next/headers";
 import { WorkspaceProvider } from "@/components/providers/WorkspaceProvider";
 import { AppShell } from "@/components/shell/AppShell";
+import { GitLabConnectionProvider } from "@/lib/api/hooks/useGitLabConnection";
 import "./globals.css";
 
 export async function generateMetadata(): Promise<Metadata> {
@@ -49,7 +50,9 @@ export default function RootLayout({
     <html lang="ko">
       <body>
         <WorkspaceProvider>
-          <AppShell>{children}</AppShell>
+          <GitLabConnectionProvider>
+            <AppShell>{children}</AppShell>
+          </GitLabConnectionProvider>
         </WorkspaceProvider>
       </body>
     </html>

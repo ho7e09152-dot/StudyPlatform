@@ -1,99 +1,139 @@
 # Study Workspace Backend
 
-Spring Boot 백엔드 구현을 위한 디렉터리 골격입니다. 현재는 역할 분담과 패키지 경계만 구성했으며, Spring Initializr 빌드 파일과 실제 구현 코드는 아직 추가하지 않았습니다.
+Spring Boot 기반 Study Workspace 백엔드입니다. 현재는 전체 도메인 구현에 앞서 SSAFY GitLab과의 네트워크·토큰·프로젝트 권한을 검증하는 읽기 전용 연결 스파이크가 구현되어 있습니다.
 
-## 예정 기술
+## 현재 구현 범위
 
-- Java
-- Spring Boot
+- 서버 환경변수에서만 GitLab Personal Access Token 사용
+- 현재 GitLab 사용자 조회
+- 서버에 고정된 GitLab 프로젝트 조회
+- 기본 브랜치의 repository tree 조회
+- 선택한 텍스트 파일 조회 및 Base64 디코딩
+- 프로젝트 ID를 프론트 요청으로 받지 않는 단일 프로젝트 경계
+- 상대 파일 경로 검증과 1MB 미리보기 제한
+- GitLab 인증·권한·404·요청 제한 오류 변환
+- 프론트엔드 개발 주소 CORS 허용
+- GitLab 응답 없이도 실행 가능한 미설정 상태
+
+파일 생성·수정 API와 OAuth 로그인은 아직 구현하지 않았습니다. 먼저 아래 읽기 흐름을 실제 SSAFY GitLab에서 확인한 뒤 추가합니다.
+
+## 기술 구성
+
+- Java 21 호환 바이트코드
+- Spring Boot 4.1
 - Spring MVC
-- Spring Security OAuth2 Client
-- Spring Data JPA
 - WebClient
-- PostgreSQL
-- Redis 또는 Spring Session
-- Flyway
-- JUnit, Testcontainers, WireMock
+- Bean Validation
+- Actuator
+- Gradle Wrapper
+- JUnit 5
 
-## 디렉터리 구조
+Spring Boot 4.1은 Java 17부터 26까지 지원합니다. 로컬 빌드는 현재 설치된 JDK를 사용하고 결과물은 Java 21 호환으로 컴파일합니다.
 
-```text
-backend/
-├── src/
-│   ├── main/
-│   │   ├── java/com/studyworkspace/
-│   │   │   ├── common/
-│   │   │   │   ├── api/             # 공통 응답 형식
-│   │   │   │   ├── config/          # Spring 공통 설정
-│   │   │   │   ├── exception/       # 공통 예외와 오류 코드
-│   │   │   │   └── security/        # 현재 사용자와 인가 기반
-│   │   │   ├── auth/                # GitLab OAuth와 로그인 세션
-│   │   │   ├── workspace/           # 프로젝트 연결과 멤버십
-│   │   │   ├── gitlab/
-│   │   │   │   ├── client/          # WebClient 기반 GitLab 호출
-│   │   │   │   ├── config/          # GitLab 환경변수와 설정
-│   │   │   │   ├── dto/             # GitLab 요청·응답 모델
-│   │   │   │   └── port/            # 공통 GitLab 인터페이스
-│   │   │   ├── session/             # 일정과 session.yml
-│   │   │   ├── repository/          # tree와 파일 조회
-│   │   │   ├── submission/          # 개인 제출 파일 병합
-│   │   │   ├── dashboard/           # 오늘의 진행률
-│   │   │   └── records/             # 일별·월별 기록과 점수
-│   │   └── resources/
-│   │       └── db/migration/         # Flyway SQL
-│   └── test/
-│       ├── java/com/studyworkspace/  # 기능 영역별 테스트
-│       └── resources/fixtures/
-│           ├── gitlab/               # GitLab API 응답 fixture
-│           └── repository/           # YAML·Markdown fixture
-└── README.md
+## 환경변수
+
+예시 파일을 로컬 설정으로 복사합니다.
+
+```bash
+cd backend
+cp .env.example .env
 ```
 
-## 패키지 내부 기준
+`.env`에 다음 값을 입력합니다.
 
-기능 영역은 필요에 따라 다음 하위 구조를 사용합니다.
-
-```text
-feature/
-├── controller/       # HTTP 요청·응답
-├── service/          # 유스케이스와 트랜잭션
-├── domain/           # 핵심 모델과 정책
-└── infrastructure/   # JPA, YAML, Markdown 등 외부 구현
+```dotenv
+GITLAB_BASE_URL=https://lab.ssafy.com
+GITLAB_ACCESS_TOKEN=발급받은_토큰
+GITLAB_PROJECT_ID=그룹명/프로젝트명
+GITLAB_DEFAULT_REF=
+FRONTEND_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+SERVER_PORT=8080
 ```
 
-모든 패키지에 동일한 하위 디렉터리를 강제하지 않습니다. 단순 조회 기능인 `repository`, `dashboard`는 필요한 구조만 사용합니다.
+- 연결 검증 단계의 토큰 scope는 `read_api`를 권장합니다.
+- `GITLAB_PROJECT_ID`는 숫자 Project ID 또는 URL 인코딩하지 않은 `group/project` 경로를 사용할 수 있습니다.
+- `GITLAB_DEFAULT_REF`가 비어 있으면 프로젝트의 기본 브랜치를 사용합니다.
+- 실제 토큰이 들어 있는 `.env`는 Git에 포함되지 않습니다.
 
-## 역할별 소유 영역
+## 실행
 
-| 담당 | 주요 패키지 |
-|---|---|
-| 팀원 1 | `auth`, `workspace`, `common/security` |
-| 팀원 2 | `session`, `repository`, `session/infrastructure/yaml` |
-| 팀원 3 | `submission`, `dashboard`, `records` |
-| 공동 | `common`, `gitlab` |
+macOS 또는 Linux:
 
-공동 `gitlab` 패키지는 첫 연결 스파이크에서 인터페이스와 오류 처리 규칙을 함께 확정합니다. 이후 기능 담당자는 GitLab HTTP 요청을 직접 중복 구현하지 않고 공통 port를 사용합니다.
-
-## 구현 시작 시 추가할 파일
-
-Spring Initializr로 프로젝트를 시작할 때 다음 파일을 이 디렉터리에 추가합니다.
-
-```text
-build.gradle
-settings.gradle
-gradlew
-gradlew.bat
-gradle/wrapper/
-src/main/java/com/studyworkspace/StudyWorkspaceApplication.java
-src/main/resources/application.yml
-src/test/resources/application-test.yml
+```bash
+cd backend
+set -a
+source .env
+set +a
+./gradlew bootRun
 ```
 
-환경변수 원문은 Git에 포함하지 않고 `.env.example` 또는 문서에는 변수 이름만 기록합니다.
+GitLab 설정 없이 실행해도 서버는 정상적으로 시작하며 연결 API가 `NOT_CONFIGURED`를 반환합니다.
+
+```bash
+curl http://localhost:8080/actuator/health
+curl http://localhost:8080/api/v1/gitlab/connection
+```
+
+연결 성공 후 파일 조회:
+
+```bash
+curl --get \
+  --data-urlencode "path=README.md" \
+  http://localhost:8080/api/v1/gitlab/repository/file
+```
+
+## API
+
+| Method | Endpoint | 설명 |
+|---|---|---|
+| `GET` | `/actuator/health` | 백엔드 상태 확인 |
+| `GET` | `/api/v1/gitlab/connection` | 사용자·프로젝트·저장소 트리 연결 확인 |
+| `GET` | `/api/v1/gitlab/repository/file?path=...` | 연결 프로젝트의 텍스트 파일 조회 |
+
+`/connection` 응답 상태:
+
+- `CONNECTED`: 사용자, 프로젝트, 저장소 트리 조회 성공
+- `NOT_CONFIGURED`: 토큰 또는 프로젝트 환경변수 미설정
+- HTTP `502`: GitLab 인증, 권한, 네트워크 또는 upstream 오류
+
+## 검증
+
+```bash
+cd backend
+./gradlew test
+./gradlew build
+```
+
+테스트는 실제 GitLab 토큰을 사용하지 않습니다. 로컬 가짜 HTTP 서버를 통해 토큰 헤더, URL 인코딩, 사용자·프로젝트·tree·파일 응답 매핑을 검증합니다.
+
+## 현재 패키지 구조
+
+```text
+src/main/java/com/studyworkspace/
+├── common/
+│   ├── api/                 # 공통 오류 응답
+│   ├── config/              # CORS
+│   └── exception/           # GitLab·경로 오류 변환
+└── gitlab/
+    ├── client/              # WebClient 기반 GitLab REST API
+    ├── config/              # 환경변수와 WebClient 설정
+    ├── controller/          # 프론트에 공개하는 읽기 API
+    ├── dto/                 # GitLab 및 앱 응답 모델
+    ├── port/                # 기능 영역이 공유할 GitLab 경계
+    └── service/             # 연결 확인, ref 선택, 파일 검증·디코딩
+```
+
+## 다음 구현 순서
+
+1. 실제 SSAFY GitLab에서 `CONNECTED` 확인
+2. 프로젝트 루트 tree와 파일 미리보기 확인
+3. 쓰기 전용 테스트 브랜치에서 임시 파일 생성·수정 검증
+4. PAT 방식을 GitLab OAuth로 교체
+5. Workspace DB 연결 후 프로젝트를 환경변수 대신 Workspace에서 조회
+6. 역할별 Session, Submission, Records API 구현
 
 ## 상세 역할 문서
 
 - [팀원 1 — 인증·Workspace](../docs/backend-role-1-auth-workspace.md)
 - [팀원 2 — 일정·저장소](../docs/backend-role-2-session-repository.md)
 - [팀원 3 — 제출·기록](../docs/backend-role-3-submission-analytics.md)
-

@@ -1,0 +1,22 @@
+spring:
+  application:
+    name: study-workspace-backend
+
+server:
+  port: ${SERVER_PORT:8080}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+app:
+  cors:
+    allowed-origins: ${FRONTEND_ORIGINS:http://localhost:3000,http://127.0.0.1:3000}
+  gitlab:
+    base-url: ${GITLAB_BASE_URL:https://lab.ssafy.com}
+    access-token: ${GITLAB_ACCESS_TOKEN:}
+    project-id: ${GITLAB_PROJECT_ID:}
+    default-ref: ${GITLAB_DEFAULT_REF:}
+    request-timeout: 10s

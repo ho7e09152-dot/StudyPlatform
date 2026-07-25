@@ -17,10 +17,10 @@ import {
   Settings,
   X,
 } from "lucide-react";
-import { formatDateTime } from "@/lib/domain/format";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { Toast } from "@/components/ui/Toast";
+import { useGitLabConnection } from "@/lib/api/hooks/useGitLabConnection";
 
 const navigation = [
   { href: "/", label: "오늘", icon: LayoutDashboard },
@@ -41,17 +41,30 @@ export function AppShell({ children }: { children: ReactNode }) {
     workspace,
     currentUserId,
     switchWorkspace,
-    syncWorkspace,
-    syncing,
     toast,
     dismissToast,
   } = useWorkspace();
+  const connection = useGitLabConnection();
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const currentMember = workspace.members.find(
     (member) => member.id === currentUserId,
   )!;
+  const gitLabConnected =
+    connection.state === "ready" &&
+    connection.data?.status === "CONNECTED";
+  const gitLabStatusLabel =
+    connection.state === "loading"
+      ? "GitLab 확인 중"
+      : connection.state === "error"
+        ? "GitLab 연결 실패"
+        : gitLabConnected
+          ? "GitLab 연결됨"
+          : "GitLab 설정 필요";
+  const gitLabStatusDetail = gitLabConnected
+    ? connection.data?.project?.pathWithNamespace
+    : connection.error ?? connection.data?.message ?? "백엔드 응답 대기 중";
 
   useEffect(() => {
     function onPointerDown(event: PointerEvent) {
@@ -149,13 +162,28 @@ export function AppShell({ children }: { children: ReactNode }) {
         <div className="sidebar-foot">
           <div className="sync-card">
             <div>
-              <span className="status-dot" />
-              GitLab 연결됨
+              <span
+                className={`status-dot ${
+                  gitLabConnected
+                    ? ""
+                    : connection.state === "error"
+                      ? "status-dot--danger"
+                      : "status-dot--warning"
+                }`}
+              />
+              {gitLabStatusLabel}
             </div>
-            <small>마지막 동기화 {formatDateTime(workspace.lastSyncedAt)}</small>
-            <button type="button" onClick={syncWorkspace} disabled={syncing}>
-              <RefreshCw className={syncing ? "spin" : undefined} size={16} />
-              {syncing ? "동기화 중" : "지금 동기화"}
+            <small title={gitLabStatusDetail}>{gitLabStatusDetail}</small>
+            <button
+              type="button"
+              onClick={connection.reload}
+              disabled={connection.state === "loading"}
+            >
+              <RefreshCw
+                className={connection.state === "loading" ? "spin" : undefined}
+                size={16}
+              />
+              {connection.state === "loading" ? "확인 중" : "연결 다시 확인"}
             </button>
           </div>
           <div className="account-row">

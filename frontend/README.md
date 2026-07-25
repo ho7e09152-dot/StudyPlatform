@@ -31,6 +31,7 @@ components/records/          저장소 데이터 기반 학습 통계
 components/repository/       session.yml·멤버 Markdown 조회
 components/settings/         연결·멤버·보안 설정
 components/ui/               공통 UI 컴포넌트
+lib/api/                     Spring Boot API 클라이언트·타입·연결 hook
 lib/domain/                  도메인 타입·완료율 계산·포맷
 lib/data/                    독립 Workspace 목업 데이터
 lib/repository/              YAML·Markdown 직렬화
@@ -46,5 +47,16 @@ lib/repository/              YAML·Markdown 직렬화
 - 제거된 항목은 삭제하지 않고 보관합니다.
 - 완료율은 필수 활성 항목과 실제 멤버 제출로 계산합니다.
 
-현재 프론트엔드는 백엔드 연동 전 검증을 위해 메모리 기반 목업 어댑터를 사용합니다.
-`WorkspaceProvider`의 액션은 설계서의 Dashboard, Session, Submission API 응답으로 교체할 수 있게 분리되어 있습니다.
+일정·제출·기록은 아직 메모리 기반 목업 어댑터를 사용합니다. 저장소와 설정 화면의 연결 정보는 Spring Boot의 GitLab 연결 API를 먼저 호출하며, 실제 연결 전에는 상태를 표시한 뒤 목업 저장소를 유지합니다.
+
+백엔드 주소는 다음 환경변수로 지정합니다.
+
+```bash
+cp .env.example .env.local
+```
+
+```dotenv
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
+```
+
+GitLab 연결에 성공하면 저장소 화면이 실제 프로젝트 경로, 기본 브랜치, repository tree와 파일 내용으로 전환됩니다. GitLab 토큰은 프론트 환경변수나 브라우저 저장소에 두지 않습니다.

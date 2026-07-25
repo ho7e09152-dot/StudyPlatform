@@ -319,8 +319,11 @@ a {
 }
 
 .sync-card small {
+  overflow: hidden;
   color: var(--ink-faint);
   font-size: 10px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .sync-card button {
@@ -343,6 +346,16 @@ a {
   border-radius: 50%;
   background: #39a778;
   box-shadow: 0 0 0 3px rgba(57, 167, 120, 0.15);
+}
+
+.status-dot--warning {
+  background: var(--warning);
+  box-shadow: 0 0 0 3px rgba(199, 126, 68, 0.15);
+}
+
+.status-dot--danger {
+  background: var(--danger);
+  box-shadow: 0 0 0 3px rgba(184, 73, 83, 0.15);
 }
 
 .account-row {
@@ -2989,6 +3002,12 @@ a {
   margin-left: auto;
 }
 
+.repository-source-note {
+  margin: -8px 2px 0;
+  color: var(--ink-faint);
+  font-size: 10px;
+}
+
 .repository-layout {
   display: grid;
   min-height: 640px;
@@ -3186,6 +3205,45 @@ a {
   font-size: 9px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.repository-file-state {
+  display: flex;
+  min-height: 360px;
+  flex: 1;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 8px;
+  padding: 28px;
+  background: var(--surface-soft);
+  color: var(--ink-faint);
+  text-align: center;
+}
+
+.repository-file-state strong {
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.repository-file-state p {
+  max-width: 460px;
+  line-height: 1.6;
+}
+
+.repository-file-state--error,
+.repository-file-state--error strong {
+  color: var(--danger);
+}
+
+.spin {
+  animation: spin 900ms linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .settings-page {

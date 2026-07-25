@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { Avatar } from "@/components/ui/Avatar";
+import { useGitLabConnection } from "@/lib/api/hooks/useGitLabConnection";
 import { GITLAB_ACCESS_LABEL } from "@/lib/domain/constants";
 
 const notifications = [
@@ -34,6 +35,28 @@ const notifications = [
 
 export function SettingsWorkspace() {
   const { workspace, toggleNotification } = useWorkspace();
+  const connection = useGitLabConnection();
+  const connected =
+    connection.state === "ready" &&
+    connection.data?.status === "CONNECTED" &&
+    Boolean(connection.data.project);
+  const project = connection.data?.project;
+  const connectionLabel =
+    connection.state === "loading"
+      ? "확인 중"
+      : connection.state === "error"
+        ? "연결 실패"
+        : connected
+          ? "연결됨"
+          : "설정 필요";
+  const connectionClass =
+    connection.state === "error"
+      ? "danger"
+      : connected
+        ? "success"
+        : connection.state === "loading"
+          ? "neutral"
+          : "warning";
 
   return (
     <div className="page-stack settings-page">
@@ -57,15 +80,17 @@ export function SettingsWorkspace() {
         <header className="section-heading">
           <span className="settings-icon"><GitBranch size={19} /></span>
           <div><h2 id="connection-title">저장소 연결</h2><p>Workspace는 아래 프로젝트 하나에만 접근합니다.</p></div>
-          <span className="status-badge success">연결됨</span>
+          <span className={`status-badge ${connectionClass}`}>{connectionLabel}</span>
         </header>
         <dl className="settings-definition-grid">
-          <div><dt>GitLab 프로젝트</dt><dd>{workspace.gitlabProjectPath}</dd></div>
-          <div><dt>Project ID</dt><dd>{workspace.gitlabProjectId}</dd></div>
-          <div><dt>기본 브랜치</dt><dd>{workspace.defaultBranch}</dd></div>
+          <div><dt>GitLab 프로젝트</dt><dd>{project?.pathWithNamespace ?? "연결 전"}</dd></div>
+          <div><dt>Project ID</dt><dd>{project?.id ?? "—"}</dd></div>
+          <div><dt>기본 브랜치</dt><dd>{project?.defaultBranch ?? "—"}</dd></div>
           <div><dt>시간대</dt><dd>{workspace.settings.timezone}</dd></div>
+          <div><dt>GitLab 사용자</dt><dd>{connection.data?.user ? `@${connection.data.user.username}` : "—"}</dd></div>
+          <div><dt>연결 상태</dt><dd>{connection.error ?? connection.data?.message ?? "백엔드 응답 대기 중"}</dd></div>
         </dl>
-        <div className="security-note"><LockKeyhole size={17} /><span><strong>토큰은 브라우저에 저장하지 않습니다.</strong>백엔드가 암호화한 OAuth 토큰으로 연결된 프로젝트만 호출합니다.</span></div>
+        <div className="security-note"><LockKeyhole size={17} /><span><strong>토큰은 브라우저에 저장하지 않습니다.</strong>연결 검증용 토큰은 백엔드 환경변수로만 관리하고, OAuth 전환 후에는 암호화해서 저장합니다.</span></div>
       </section>
 
       <section id="member-settings" className="surface settings-section" aria-labelledby="members-settings-title">

@@ -54,7 +54,7 @@ Study Workspace는 이 과정을 `일정 생성 → 항목별 제출 → GitLab 
 
 ## 현재 구현된 기능
 
-현재는 프론트엔드 UI와 도메인 동작을 검증한 단계입니다. 데이터는 메모리 기반 목업이며 실제 GitLab 네트워크 호출은 아직 연결하지 않았습니다.
+현재는 프론트엔드 UI와 도메인 동작을 검증하고, Spring Boot를 통한 GitLab 읽기 연결 스파이크까지 구현한 단계입니다. 일정·제출·기록 데이터는 아직 메모리 기반 목업이지만 저장소 화면은 백엔드 연결 성공 시 실제 GitLab 프로젝트와 파일을 표시합니다.
 
 | 화면 | 구현 내용 |
 |---|---|
@@ -66,6 +66,7 @@ Study Workspace는 이 과정을 `일정 생성 → 항목별 제출 → GitLab 
 | 저장소 | 날짜 폴더 탐색, 파일 검색, 폴더 접기, YAML·Markdown 미리보기, 커밋 정보 |
 | 설정 | 프로젝트 연결 정보, 멤버와 GitLab 권한, 알림, 보안 원칙 |
 | 반응형 UI | 데스크톱·태블릿·모바일 레이아웃과 모바일 전체 화면 모달 |
+| GitLab 연결 스파이크 | Spring Boot에서 사용자·프로젝트·repository tree·텍스트 파일 조회 |
 
 ## 개발 과정
 
@@ -76,7 +77,7 @@ Study Workspace는 이 과정을 `일정 생성 → 항목별 제출 → GitLab 
 3. Claude Design을 활용해 초기 프론트 디자인을 구성했습니다.
 4. Codex CLI를 활용해 페이지 구조, 반응형 UI, 모달, 필터, 기록·점수 기능과 세부 상호작용을 보완했습니다.
 5. 데스크톱과 모바일 화면을 실제 브라우저에서 반복 검증했습니다.
-6. 다음 단계로 Spring Boot와 GitLab API를 연결할 예정입니다.
+6. Spring Boot 공통 GitLab 클라이언트와 읽기 전용 연결 API를 구현했습니다.
 
 AI 도구는 디자인과 구현을 구체화하는 협업 도구로 사용했습니다. 실제 스터디 경험을 바탕으로 한 문제 정의, 기능 선택, 정책 결정과 최종 검증은 프로젝트 요구사항에 맞춰 지속적으로 조정하고 있습니다.
 
@@ -91,7 +92,7 @@ AI 도구는 디자인과 구현을 구체화하는 협업 도구로 사용했�
 - CSS
 - Lucide React
 
-### 예정된 백엔드
+### 백엔드
 
 - Java
 - Spring Boot
@@ -181,7 +182,7 @@ AI 도구는 디자인과 구현을 구체화하는 협업 도구로 사용했�
 ```text
 study_platform/
 ├── frontend/                              # 현재 구현된 프론트엔드
-│   └── lib/api/                           # Spring API 연동 예정 계층
+│   └── lib/api/                           # Spring API 연동 계층
 ├── backend/                               # Spring Boot 패키지 골격
 │   └── src/
 │       ├── main/java/com/studyworkspace/  # 기능별 백엔드 패키지
@@ -193,7 +194,7 @@ study_platform/
 └── STUDY_WORKSPACE_BACKEND_API_GITLAB.md  # 백엔드·API·GitLab 상세 설계
 ```
 
-`backend/`는 현재 구조만 구성한 상태입니다. Spring Initializr 빌드 파일과 실제 구현 코드는 GitLab 연결 스파이크를 시작할 때 추가합니다.
+`backend/`에는 Spring Boot 실행 구조와 GitLab 읽기 연결 스파이크가 구현되어 있습니다. 실제 토큰과 프로젝트는 Git에 넣지 않고 로컬 환경변수로 설정합니다.
 
 ## 프론트엔드 실행
 
@@ -211,6 +212,22 @@ npm run dev
 http://localhost:3000
 ```
 
+## 백엔드 실행
+
+실제 GitLab 연결 값은 [백엔드 실행 문서](backend/README.md)를 참고해 `backend/.env`에 입력합니다.
+
+```bash
+cd backend
+cp .env.example .env
+# .env에 GitLab 주소, read_api 토큰, 프로젝트 ID 입력
+set -a
+source .env
+set +a
+./gradlew bootRun
+```
+
+기본 API 주소는 `http://localhost:8080`입니다. 환경변수가 없으면 서버는 실행되지만 GitLab 연결 상태는 `NOT_CONFIGURED`로 표시됩니다.
+
 검증:
 
 ```bash
@@ -225,7 +242,7 @@ npm test
 - [백엔드·API·GitLab 전체 설계서](STUDY_WORKSPACE_BACKEND_API_GITLAB.md)
 - [Spring 백엔드 디렉터리 구조](backend/README.md)
 - [프론트엔드 실행 및 구조](frontend/README.md)
-- [프론트 API 연동 예정 구조](frontend/lib/api/README.md)
+- [프론트 API 연동 구조](frontend/lib/api/README.md)
 - [팀원 1 — 인증·Workspace](docs/backend-role-1-auth-workspace.md)
 - [팀원 2 — 일정·저장소](docs/backend-role-2-session-repository.md)
 - [팀원 3 — 제출·기록](docs/backend-role-3-submission-analytics.md)

@@ -1,7 +1,7 @@
 # Study Workspace 백엔드·API·GitLab 연동 설계서
 
 > 작성 기준: 2026-07-23  
-> 권장 구현: FastAPI + PostgreSQL + GitLab Self-Managed OAuth  
+> 구현 기준: Spring Boot + PostgreSQL + GitLab Self-Managed OAuth
 > 문서 목적: 프론트엔드 이후 백엔드 구현에 바로 사용할 수 있는 기준 정의
 
 ---
@@ -99,32 +99,37 @@ Workspace B → group-b/english-study
 ## 3. 권장 기술 스택
 
 ```text
-Python 3.12+
-FastAPI
-Pydantic v2
-SQLAlchemy 2.x
-Alembic
+Java 21+
+Spring Boot
+Spring MVC
+Spring Security OAuth2 Client
+Spring Data JPA
 PostgreSQL
-httpx
-PyYAML
-cryptography
-Redis (선택)
-pytest
+WebClient
+SnakeYAML
+Flyway
+Redis / Spring Session (선택)
+JUnit 5
+Testcontainers
 ```
 
 | 기술 | 역할 |
 |---|---|
-| FastAPI | REST API, OAuth callback, 검증 |
+| Spring MVC | REST API, OAuth callback, 검증 |
+| Spring Security OAuth2 Client | GitLab OAuth 로그인과 세션 |
+| Spring Data JPA | 사용자, Workspace, 멤버십, 감사 로그 |
 | PostgreSQL | 사용자, 토큰, Workspace, 멤버십, 감사 로그 |
-| httpx | GitLab REST API 비동기 호출 |
-| PyYAML | `study.yml`, `session.yml` 파싱·생성 |
-| cryptography | OAuth access/refresh token 암호화 |
+| WebClient | GitLab REST API 호출 |
+| SnakeYAML | `study.yml`, `session.yml` 파싱·생성 |
+| JCA/JCE | OAuth access/refresh token 암호화 |
+| Flyway | 데이터베이스 스키마 마이그레이션 |
 | Redis | OAuth state, 짧은 캐시, 분산 락(선택) |
+| JUnit·Testcontainers | 기능 및 외부 연동 테스트 |
 
 ```mermaid
 flowchart LR
     U[브라우저] -->|HTTPS / HttpOnly 쿠키| FE[React Frontend]
-    FE -->|REST API| BE[FastAPI]
+    FE -->|REST API| BE[Spring Boot]
     BE --> DB[(PostgreSQL)]
     BE --> R[(Redis 선택)]
     BE -->|OAuth / REST API| GL[GitLab Self-Managed]

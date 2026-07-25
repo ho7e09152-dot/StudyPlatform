@@ -99,6 +99,7 @@ backend/target/
 # Java build output
 *.class
 *.jar
+!backend/gradle/wrapper/gradle-wrapper.jar
 *.war
 *.ear
 hs_err_pid*
