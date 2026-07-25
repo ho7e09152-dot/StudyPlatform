@@ -243,6 +243,7 @@ npm test
 - [백엔드·API·GitLab 전체 설계서](STUDY_WORKSPACE_BACKEND_API_GITLAB.md)
 - [OpenAPI 실행 계약](docs/openapi.yaml)
 - [API 공통 오류 계약](docs/api-error-catalog.md)
+- [GitLab CI 사용 가이드](docs/ci-guide.md)
 - [Spring 백엔드 디렉터리 구조](backend/README.md)
 - [프론트엔드 실행 및 구조](frontend/README.md)
 - [프론트 API 연동 구조](frontend/lib/api/README.md)
