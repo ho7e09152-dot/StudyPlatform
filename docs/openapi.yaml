@@ -1,0 +1,1774 @@
+openapi: 3.1.0
+info:
+  title: Study Workspace API
+  version: 0.2.0
+  description: |
+    Study Workspace 프론트엔드와 Spring Boot 백엔드가 공유하는 API 계약입니다.
+
+    구현 원칙:
+    - GitLab access token은 브라우저에 반환하지 않습니다.
+    - 인증된 API는 HttpOnly 세션 쿠키를 사용합니다.
+    - Workspace ID로 연결 프로젝트를 결정하며 요청에서 임의 프로젝트를 받지 않습니다.
+    - 날짜는 `YYYY-MM-DD`, 시각은 timezone을 포함한 ISO 8601 문자열입니다.
+    - 수정 요청은 `expectedRevision` 또는 `lastCommitId`로 낙관적 잠금을 적용합니다.
+  contact:
+    name: Study Workspace Team
+servers:
+  - url: http://localhost:8080/api/v1
+    description: 로컬 개발 서버
+tags:
+  - name: Auth
+    description: 팀원 1 담당 인증
+  - name: GitLab Projects
+    description: 팀원 1 담당 GitLab 프로젝트 선택
+  - name: Workspaces
+    description: 팀원 1 담당 Workspace와 멤버
+  - name: Sessions
+    description: 팀원 2 담당 일정과 session.yml
+  - name: Repository
+    description: 팀원 2 담당 저장소 읽기
+  - name: Submissions
+    description: 팀원 3 담당 멤버 제출
+  - name: Analytics
+    description: 팀원 3 담당 Dashboard, 기록, 점수
+  - name: Connection Spike
+    description: 공통 기반에서 이미 구현한 GitLab 읽기 진단 API
+
+paths:
+  /auth/gitlab/login:
+    get:
+      tags: [Auth]
+      summary: GitLab OAuth 로그인 시작
+      operationId: startGitLabLogin
+      x-owner: member-1
+      x-implementation-status: planned
+      security: []
+      parameters:
+        - name: returnUrl
+          in: query
+          required: false
+          schema:
+            type: string
+            default: /
+            pattern: ^/
+          description: 로그인 완료 후 이동할 앱 내부 경로
+      responses:
+        "302":
+          description: GitLab authorize URL로 이동
+          headers:
+            Location:
+              schema:
+                type: string
+                format: uri
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+
+  /auth/gitlab/callback:
+    get:
+      tags: [Auth]
+      summary: GitLab OAuth callback 처리
+      operationId: completeGitLabLogin
+      x-owner: member-1
+      x-implementation-status: planned
+      security: []
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: state
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        "302":
+          description: 앱으로 이동하고 HttpOnly 세션 쿠키 설정
+          headers:
+            Location:
+              schema:
+                type: string
+            Set-Cookie:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+
+  /auth/me:
+    get:
+      tags: [Auth]
+      summary: 현재 로그인 사용자 조회
+      operationId: getCurrentUser
+      x-owner: member-1
+      x-implementation-status: planned
+      responses:
+        "200":
+          description: 현재 사용자와 접근 가능한 Workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CurrentUserResponse"
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+
+  /auth/logout:
+    post:
+      tags: [Auth]
+      summary: 앱 세션 종료
+      operationId: logout
+      x-owner: member-1
+      x-implementation-status: planned
+      responses:
+        "204":
+          description: 로그아웃 완료
+
+  /gitlab/projects:
+    get:
+      tags: [GitLab Projects]
+      summary: 현재 사용자가 접근 가능한 GitLab 프로젝트 목록
+      operationId: listGitLabProjects
+      x-owner: member-1
+      x-implementation-status: planned
+      parameters:
+        - name: search
+          in: query
+          schema:
+            type: string
+            maxLength: 100
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: 프로젝트 목록
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GitLabProjectPageResponse"
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+        "502":
+          $ref: "#/components/responses/GitLabError"
+
+  /gitlab/projects/{projectId}/connection-check:
+    get:
+      tags: [GitLab Projects]
+      summary: 프로젝트 연결 가능 여부 확인
+      operationId: checkGitLabProjectConnection
+      x-owner: member-1
+      x-implementation-status: planned
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: 프로젝트·브랜치·멤버·Repository API 검사 결과
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ConnectionCheckResponse"
+        "403":
+          $ref: "#/components/responses/GitLabAccessDenied"
+        "502":
+          $ref: "#/components/responses/GitLabError"
+
+  /gitlab/connection:
+    get:
+      tags: [Connection Spike]
+      summary: 환경변수 기반 GitLab 읽기 연결 진단
+      operationId: getGitLabConnectionSpike
+      x-owner: shared
+      x-implementation-status: implemented
+      security: []
+      responses:
+        "200":
+          description: 현재 사용자·프로젝트·repository tree
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GitLabConnectionSpike"
+        "502":
+          $ref: "#/components/responses/GitLabError"
+
+  /gitlab/repository/file:
+    get:
+      tags: [Connection Spike]
+      summary: 환경변수 프로젝트의 텍스트 파일 읽기
+      operationId: getGitLabFileSpike
+      x-owner: shared
+      x-implementation-status: implemented
+      security: []
+      parameters:
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+          description: 프로젝트 루트 기준 상대 경로
+      responses:
+        "200":
+          description: Base64 디코딩된 파일
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GitLabFileContent"
+        "400":
+          $ref: "#/components/responses/InvalidPath"
+        "502":
+          $ref: "#/components/responses/GitLabError"
+
+  /workspaces:
+    get:
+      tags: [Workspaces]
+      summary: 내 Workspace 목록
+      operationId: listMyWorkspaces
+      x-owner: member-1
+      x-implementation-status: planned
+      responses:
+        "200":
+          description: 활성 및 복구 가능한 Workspace 목록
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/WorkspaceSummary"
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+    post:
+      tags: [Workspaces]
+      summary: GitLab 프로젝트와 Workspace 연결
+      operationId: createWorkspace
+      x-owner: member-1
+      x-implementation-status: planned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateWorkspaceRequest"
+      responses:
+        "201":
+          description: Workspace 생성 완료
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceResponse"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /workspaces/{workspaceId}:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+    get:
+      tags: [Workspaces]
+      summary: Workspace 상세
+      operationId: getWorkspace
+      x-owner: member-1
+      x-implementation-status: planned
+      responses:
+        "200":
+          description: Workspace 상세
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceResponse"
+        "403":
+          $ref: "#/components/responses/WorkspaceAccessDenied"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    patch:
+      tags: [Workspaces]
+      summary: Workspace 이름과 설정 수정
+      operationId: updateWorkspace
+      x-owner: member-1
+      x-implementation-status: planned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateWorkspaceRequest"
+      responses:
+        "200":
+          description: 수정된 Workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceResponse"
+        "403":
+          $ref: "#/components/responses/WorkspaceAccessDenied"
+    delete:
+      tags: [Workspaces]
+      summary: Workspace 소프트 삭제
+      operationId: softDeleteWorkspace
+      x-owner: member-1
+      x-implementation-status: planned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [confirmationName]
+              properties:
+                confirmationName:
+                  type: string
+      responses:
+        "204":
+          description: 소프트 삭제 완료
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+
+  /workspaces/{workspaceId}/restore:
+    post:
+      tags: [Workspaces]
+      summary: 삭제 후 7일 이내 Workspace 복원
+      operationId: restoreWorkspace
+      x-owner: member-1
+      x-implementation-status: planned
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      responses:
+        "200":
+          description: 복원된 Workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceResponse"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /workspaces/{workspaceId}/member-candidates:
+    get:
+      tags: [Workspaces]
+      summary: GitLab 프로젝트 멤버 후보
+      operationId: listWorkspaceMemberCandidates
+      x-owner: member-1
+      x-implementation-status: planned
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      responses:
+        "200":
+          description: Workspace 추가 가능 후보
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/MemberCandidate"
+
+  /workspaces/{workspaceId}/members:
+    get:
+      tags: [Workspaces]
+      summary: Workspace 멤버 목록
+      operationId: listWorkspaceMembers
+      x-owner: member-1
+      x-implementation-status: planned
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      responses:
+        "200":
+          description: 멤버 목록
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/WorkspaceMember"
+    post:
+      tags: [Workspaces]
+      summary: Workspace 멤버 추가
+      operationId: addWorkspaceMember
+      x-owner: member-1
+      x-implementation-status: planned
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddMemberRequest"
+      responses:
+        "201":
+          description: 추가된 멤버
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    $ref: "#/components/schemas/WorkspaceMember"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /workspaces/{workspaceId}/members/{userId}:
+    delete:
+      tags: [Workspaces]
+      summary: Workspace 멤버 비활성화
+      operationId: deactivateWorkspaceMember
+      x-owner: member-1
+      x-implementation-status: planned
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "204":
+          description: 비활성화 완료, 과거 제출은 유지
+
+  /workspaces/{workspaceId}/members/sync:
+    post:
+      tags: [Workspaces]
+      summary: GitLab 프로젝트 멤버와 동기화
+      operationId: syncWorkspaceMembers
+      x-owner: member-1
+      x-implementation-status: planned
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      responses:
+        "200":
+          description: 동기화 결과
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberSyncResponse"
+
+  /workspaces/{workspaceId}/sessions:
+    get:
+      tags: [Sessions]
+      summary: 기간·유형·상태별 일정 목록
+      operationId: listSessions
+      x-owner: member-2
+      x-implementation-status: planned
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - name: from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: type
+          in: query
+          schema:
+            $ref: "#/components/schemas/SessionType"
+        - name: status
+          in: query
+          schema:
+            $ref: "#/components/schemas/SessionStatus"
+      responses:
+        "200":
+          description: 일정 목록
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/StudySession"
+    post:
+      tags: [Sessions]
+      summary: 일정과 session.yml 생성
+      operationId: createSession
+      x-owner: member-2
+      x-implementation-status: planned
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSessionRequest"
+      responses:
+        "201":
+          description: 생성된 일정
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /workspaces/{workspaceId}/sessions/{date}:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/SessionDate"
+    get:
+      tags: [Sessions]
+      summary: 특정 날짜 일정
+      operationId: getSession
+      x-owner: member-2
+      x-implementation-status: planned
+      responses:
+        "200":
+          description: 일정 상세
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Sessions]
+      summary: revision과 lastCommitId를 확인하고 일정 수정
+      operationId: updateSession
+      x-owner: member-2
+      x-implementation-status: planned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateSessionRequest"
+      responses:
+        "200":
+          description: 수정된 일정
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Sessions]
+      summary: session.yml을 삭제하지 않고 cancelled 처리
+      operationId: cancelSession
+      x-owner: member-2
+      x-implementation-status: planned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedRevision, lastCommitId, changeReason]
+              properties:
+                expectedRevision:
+                  type: integer
+                  minimum: 1
+                lastCommitId:
+                  type: string
+                changeReason:
+                  type: string
+                  minLength: 1
+                  maxLength: 300
+      responses:
+        "200":
+          description: cancelled 상태의 일정
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResponse"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /workspaces/{workspaceId}/repository/tree:
+    get:
+      tags: [Repository]
+      summary: 연결 프로젝트의 repository tree
+      operationId: getRepositoryTree
+      x-owner: member-2
+      x-implementation-status: planned
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - name: path
+          in: query
+          schema:
+            type: string
+            default: ""
+        - name: ref
+          in: query
+          schema:
+            type: string
+          description: 생략하면 Workspace 기본 브랜치
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PerPage"
+      responses:
+        "200":
+          description: 저장소 항목
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepositoryTreeResponse"
+        "403":
+          $ref: "#/components/responses/InvalidPath"
+
+  /workspaces/{workspaceId}/repository/file:
+    get:
+      tags: [Repository]
+      summary: 허용된 텍스트 파일과 커밋 정보
+      operationId: getRepositoryFile
+      x-owner: member-2
+      x-implementation-status: planned
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+        - name: ref
+          in: query
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 파일 미리보기
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepositoryFileResponse"
+        "403":
+          $ref: "#/components/responses/InvalidPath"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /workspaces/{workspaceId}/sessions/{date}/submissions/me:
+    get:
+      tags: [Submissions]
+      summary: 내 제출 파일과 항목별 상태
+      operationId: getMySubmissions
+      x-owner: member-3
+      x-implementation-status: planned
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/SessionDate"
+      responses:
+        "200":
+          description: 제출 파일이 없으면 빈 submissions 반환
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberSubmissionResponse"
+
+  /workspaces/{workspaceId}/sessions/{date}/items/{itemId}/submission:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/SessionDate"
+      - $ref: "#/components/parameters/ItemId"
+    get:
+      tags: [Submissions]
+      summary: 내 특정 항목 제출 조회
+      operationId: getMyItemSubmission
+      x-owner: member-3
+      x-implementation-status: planned
+      responses:
+        "200":
+          description: 항목 제출
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ItemSubmissionResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    put:
+      tags: [Submissions]
+      summary: 항목 제출 생성 또는 수정
+      operationId: upsertItemSubmission
+      x-owner: member-3
+      x-implementation-status: planned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpsertSubmissionRequest"
+      responses:
+        "200":
+          description: 제출과 갱신된 진행률
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubmissionMutationResponse"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "422":
+          $ref: "#/components/responses/Unprocessable"
+    delete:
+      tags: [Submissions]
+      summary: 파일에서 해당 항목 제출만 제거
+      operationId: deleteItemSubmission
+      x-owner: member-3
+      x-implementation-status: planned
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [expectedFileCommitId, commitMessage]
+              properties:
+                expectedFileCommitId:
+                  type: string
+                commitMessage:
+                  type: string
+                  minLength: 1
+                  maxLength: 200
+      responses:
+        "204":
+          description: 항목 제출 제거 완료
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /workspaces/{workspaceId}/sessions/{date}/members/{memberId}/submission:
+    get:
+      tags: [Submissions]
+      summary: 다른 멤버의 제출 파일 읽기
+      operationId: getMemberSubmission
+      x-owner: member-3
+      x-implementation-status: planned
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - $ref: "#/components/parameters/SessionDate"
+        - name: memberId
+          in: path
+          required: true
+          schema:
+            type: string
+            pattern: ^[a-z0-9][a-z0-9-]{1,39}$
+      responses:
+        "200":
+          description: 읽기 전용 제출 파일
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemberSubmissionResponse"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
+  /workspaces/{workspaceId}/dashboard:
+    get:
+      tags: [Analytics]
+      summary: 선택 날짜의 팀·개인 진행률
+      operationId: getDashboard
+      x-owner: member-3
+      x-implementation-status: planned
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - name: date
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: 오늘 화면 집계
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DashboardResponse"
+
+  /workspaces/{workspaceId}/records:
+    get:
+      tags: [Analytics]
+      summary: 일별 또는 월별 기록
+      operationId: getRecords
+      x-owner: member-3
+      x-implementation-status: planned
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - name: view
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [day, month]
+        - name: date
+          in: query
+          schema:
+            type: string
+            format: date
+          description: view=day일 때 필수
+        - name: month
+          in: query
+          schema:
+            type: string
+            pattern: ^\d{4}-(0[1-9]|1[0-2])$
+          description: view=month일 때 필수
+      responses:
+        "200":
+          description: 기록 화면 집계
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RecordsResponse"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+
+  /workspaces/{workspaceId}/scores:
+    get:
+      tags: [Analytics]
+      summary: 기간별 내 점수와 멤버 순위
+      operationId: getScores
+      x-owner: member-3
+      x-implementation-status: planned
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - name: from
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+        - name: to
+          in: query
+          required: true
+          schema:
+            type: string
+            format: date
+      responses:
+        "200":
+          description: 점수 규칙과 순위
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScoreboardResponse"
+
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: sid
+
+  parameters:
+    WorkspaceId:
+      name: workspaceId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema:
+        type: integer
+        format: int64
+    SessionDate:
+      name: date
+      in: path
+      required: true
+      schema:
+        type: string
+        format: date
+    ItemId:
+      name: itemId
+      in: path
+      required: true
+      schema:
+        type: string
+        pattern: ^item-[a-f0-9]{6,16}$
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+    PerPage:
+      name: perPage
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+
+  responses:
+    InvalidRequest:
+      description: 요청 형식 또는 비즈니스 입력값 오류
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorResponse"
+          example:
+            code: INVALID_REQUEST
+            message: 요청값을 확인해 주세요.
+            details:
+              field: title
+            requestId: req_01J
+            timestamp: "2026-07-25T12:00:00Z"
+    InvalidPath:
+      description: 허용되지 않은 저장소 경로
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorResponse"
+          example:
+            code: FILE_PATH_NOT_ALLOWED
+            message: 허용되지 않은 저장소 경로입니다.
+            timestamp: "2026-07-25T12:00:00Z"
+    AuthRequired:
+      description: 로그인 또는 유효한 세션 필요
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorResponse"
+          example:
+            code: AUTH_REQUIRED
+            message: 로그인이 필요합니다.
+            timestamp: "2026-07-25T12:00:00Z"
+    WorkspaceAccessDenied:
+      description: Workspace 활성 멤버가 아님
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorResponse"
+          example:
+            code: WORKSPACE_ACCESS_DENIED
+            message: Workspace에 접근할 수 없습니다.
+            timestamp: "2026-07-25T12:00:00Z"
+    GitLabAccessDenied:
+      description: GitLab 프로젝트 권한 부족
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorResponse"
+          example:
+            code: GITLAB_PROJECT_ACCESS_DENIED
+            message: GitLab 프로젝트에 접근할 수 없습니다.
+            timestamp: "2026-07-25T12:00:00Z"
+    NotFound:
+      description: Workspace, Session, Item 또는 파일을 찾지 못함
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorResponse"
+          example:
+            code: RESOURCE_NOT_FOUND
+            message: 요청한 리소스를 찾지 못했습니다.
+            timestamp: "2026-07-25T12:00:00Z"
+    Conflict:
+      description: revision, lastCommitId 또는 중복 리소스 충돌
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorResponse"
+          example:
+            code: SESSION_REVISION_CONFLICT
+            message: 다른 사용자가 먼저 수정했습니다. 최신 내용을 확인해 주세요.
+            details:
+              expectedRevision: 3
+              actualRevision: 4
+            timestamp: "2026-07-25T12:00:00Z"
+    Unprocessable:
+      description: 요청 형식은 맞지만 도메인 규칙 위반
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorResponse"
+          example:
+            code: SUBMISSION_TYPE_MISMATCH
+            message: 이 항목은 링크 제출만 허용합니다.
+            timestamp: "2026-07-25T12:00:00Z"
+    GitLabError:
+      description: GitLab 인증·권한·네트워크·요청 제한 오류
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorResponse"
+          example:
+            code: GITLAB_API_ERROR
+            message: GitLab 요청을 처리하지 못했습니다.
+            requestId: req_01J
+            timestamp: "2026-07-25T12:00:00Z"
+
+  schemas:
+    ApiErrorResponse:
+      type: object
+      required: [code, message, timestamp]
+      properties:
+        code:
+          type: string
+          description: 프론트 분기와 테스트에서 사용하는 안정적인 오류 코드
+        message:
+          type: string
+          description: 사용자에게 표시 가능한 한국어 메시지
+        details:
+          type: object
+          additionalProperties: true
+          description: 필드 오류나 충돌 최신값
+        requestId:
+          type: string
+          description: 로그 추적 ID
+        timestamp:
+          type: string
+          format: date-time
+
+    PageMeta:
+      type: object
+      required: [page, perPage, total]
+      properties:
+        page:
+          type: integer
+        perPage:
+          type: integer
+        total:
+          type: integer
+
+    CurrentUserResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/CurrentUser"
+    CurrentUser:
+      type: object
+      required: [id, gitlabUserId, username, displayName, workspaces]
+      properties:
+        id:
+          type: string
+          format: uuid
+        gitlabUserId:
+          type: integer
+          format: int64
+        username:
+          type: string
+        displayName:
+          type: string
+        avatarUrl:
+          type: [string, "null"]
+          format: uri
+        workspaces:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkspaceSummary"
+
+    GitLabProject:
+      type: object
+      required:
+        [id, name, pathWithNamespace, visibility, effectiveAccessLevel]
+      properties:
+        id:
+          type: integer
+          format: int64
+        name:
+          type: string
+        pathWithNamespace:
+          type: string
+        defaultBranch:
+          type: [string, "null"]
+        visibility:
+          type: string
+        webUrl:
+          type: string
+          format: uri
+        effectiveAccessLevel:
+          type: integer
+          description: GitLab access level, Developer는 30 이상
+    GitLabProjectPageResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/GitLabProject"
+        meta:
+          $ref: "#/components/schemas/PageMeta"
+    ConnectionCheckResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [readable, writable, alreadyConnected, checks]
+          properties:
+            readable:
+              type: boolean
+            writable:
+              type: boolean
+            alreadyConnected:
+              type: boolean
+            checks:
+              type: array
+              items:
+                type: object
+                required: [name, passed]
+                properties:
+                  name:
+                    type: string
+                  passed:
+                    type: boolean
+                  message:
+                    type: string
+
+    WorkspaceStatus:
+      type: string
+      enum: [ACTIVE, SOFT_DELETED]
+    WorkspaceSummary:
+      type: object
+      required: [id, name, status, gitlabProjectPath, defaultBranch]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        status:
+          $ref: "#/components/schemas/WorkspaceStatus"
+        gitlabProjectPath:
+          type: string
+        defaultBranch:
+          type: string
+        deletedAt:
+          type: [string, "null"]
+          format: date-time
+    Workspace:
+      allOf:
+        - $ref: "#/components/schemas/WorkspaceSummary"
+        - type: object
+          required: [gitlabProjectId, members, settings]
+          properties:
+            gitlabProjectId:
+              type: integer
+              format: int64
+            members:
+              type: array
+              items:
+                $ref: "#/components/schemas/WorkspaceMember"
+            settings:
+              $ref: "#/components/schemas/WorkspaceSettings"
+    WorkspaceResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/Workspace"
+    WorkspaceSettings:
+      type: object
+      properties:
+        notifications:
+          type: object
+          properties:
+            deadline:
+              type: boolean
+            submission:
+              type: boolean
+            sessionChanged:
+              type: boolean
+    CreateWorkspaceRequest:
+      type: object
+      required:
+        [name, gitlabProjectId, defaultBranch, selectedGitlabUserIds]
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 80
+        gitlabProjectId:
+          type: integer
+          format: int64
+        defaultBranch:
+          type: string
+          minLength: 1
+        selectedGitlabUserIds:
+          type: array
+          minItems: 1
+          uniqueItems: true
+          items:
+            type: integer
+            format: int64
+        initializeRepository:
+          type: boolean
+          default: true
+    UpdateWorkspaceRequest:
+      type: object
+      minProperties: 1
+      properties:
+        name:
+          type: string
+          minLength: 2
+          maxLength: 80
+        settings:
+          $ref: "#/components/schemas/WorkspaceSettings"
+
+    MemberStatus:
+      type: string
+      enum: [ACTIVE, LOST_PROJECT_ACCESS, INACTIVE]
+    WorkspaceMember:
+      type: object
+      required:
+        [userId, memberId, gitlabUserId, username, displayName, fileName, status]
+      properties:
+        userId:
+          type: string
+          format: uuid
+        memberId:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9-]{1,39}$
+        gitlabUserId:
+          type: integer
+          format: int64
+        username:
+          type: string
+        displayName:
+          type: string
+        fileName:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9-]{1,39}\.md$
+        avatarUrl:
+          type: [string, "null"]
+          format: uri
+        gitlabAccessLevel:
+          type: integer
+        status:
+          $ref: "#/components/schemas/MemberStatus"
+    MemberCandidate:
+      type: object
+      required: [gitlabUserId, username, displayName, accessLevel, selectable]
+      properties:
+        gitlabUserId:
+          type: integer
+          format: int64
+        username:
+          type: string
+        displayName:
+          type: string
+        accessLevel:
+          type: integer
+        selectable:
+          type: boolean
+        reason:
+          type: [string, "null"]
+    AddMemberRequest:
+      type: object
+      required: [gitlabUserId, memberId, fileName, displayName]
+      properties:
+        gitlabUserId:
+          type: integer
+          format: int64
+        memberId:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9-]{1,39}$
+        fileName:
+          type: string
+          pattern: ^[a-z0-9][a-z0-9-]{1,39}\.md$
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 50
+    MemberSyncResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [active, lostProjectAccess, newCandidates]
+          properties:
+            active:
+              type: integer
+            lostProjectAccess:
+              type: integer
+            newCandidates:
+              type: integer
+
+    SessionType:
+      type: string
+      enum: [algorithm, english, cs, free]
+    SessionStatus:
+      type: string
+      enum: [active, cancelled]
+    SubmitType:
+      type: string
+      enum: [link, text, code]
+    StudyItem:
+      type: object
+      required: [id, order, title, submitType, required, status]
+      properties:
+        id:
+          type: string
+          pattern: ^item-[a-f0-9]{6,16}$
+        order:
+          type: integer
+          minimum: 1
+        title:
+          type: string
+        source:
+          type: [string, "null"]
+        url:
+          type: [string, "null"]
+          format: uri
+        submitType:
+          $ref: "#/components/schemas/SubmitType"
+        required:
+          type: boolean
+        status:
+          type: string
+          enum: [active, cancelled]
+    StudySession:
+      type: object
+      required:
+        [date, folder, revision, type, title, description, status, deadline, items, lastCommitId]
+      properties:
+        date:
+          type: string
+          format: date
+        folder:
+          type: string
+          pattern: ^\d{6}$
+        revision:
+          type: integer
+          minimum: 1
+        type:
+          $ref: "#/components/schemas/SessionType"
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          $ref: "#/components/schemas/SessionStatus"
+        deadline:
+          type: string
+          format: date-time
+        secondaryDeadline:
+          type: [string, "null"]
+          format: date-time
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/StudyItem"
+        lastCommitId:
+          type: string
+    SessionResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/StudySession"
+    SessionItemDraft:
+      type: object
+      required: [title, submitType, required]
+      properties:
+        id:
+          type: string
+          description: 수정 시 기존 항목 유지에만 전달
+        title:
+          type: string
+          minLength: 1
+          maxLength: 120
+        source:
+          type: string
+          maxLength: 80
+        url:
+          type: string
+          format: uri
+        submitType:
+          $ref: "#/components/schemas/SubmitType"
+        required:
+          type: boolean
+    CreateSessionRequest:
+      type: object
+      required: [date, type, title, description, deadline, items]
+      properties:
+        date:
+          type: string
+          format: date
+        type:
+          $ref: "#/components/schemas/SessionType"
+        title:
+          type: string
+          minLength: 1
+          maxLength: 120
+        description:
+          type: string
+          maxLength: 500
+        deadline:
+          type: string
+          format: date-time
+        secondaryDeadline:
+          type: [string, "null"]
+          format: date-time
+        items:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/SessionItemDraft"
+    UpdateSessionRequest:
+      allOf:
+        - $ref: "#/components/schemas/CreateSessionRequest"
+        - type: object
+          required: [expectedRevision, lastCommitId, changeReason]
+          properties:
+            expectedRevision:
+              type: integer
+              minimum: 1
+            lastCommitId:
+              type: string
+            changeReason:
+              type: string
+              minLength: 1
+              maxLength: 300
+
+    RepositoryTreeItem:
+      type: object
+      required: [id, name, type, path, mode]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [blob, tree]
+        path:
+          type: string
+        mode:
+          type: string
+    RepositoryTreeResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/RepositoryTreeItem"
+        meta:
+          $ref: "#/components/schemas/PageMeta"
+    RepositoryFileResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [path, type, rawContent, lastCommitId, webUrl]
+          properties:
+            path:
+              type: string
+            type:
+              type: string
+              enum: [yaml, markdown, text, code]
+            rawContent:
+              type: string
+            parsedContent:
+              type: [object, "null"]
+              additionalProperties: true
+            lastCommitId:
+              type: string
+            webUrl:
+              type: string
+              format: uri
+
+    SubmissionStatus:
+      type: string
+      enum: [NOT_SUBMITTED, SUBMITTED, UPDATED]
+    ItemSubmission:
+      type: object
+      required: [itemId, type, value, submittedAt, updatedAt]
+      properties:
+        itemId:
+          type: string
+        type:
+          $ref: "#/components/schemas/SubmitType"
+        value:
+          type: string
+        language:
+          type: [string, "null"]
+        submittedAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    MemberSubmission:
+      type: object
+      required:
+        [memberId, date, sessionRevision, submissions, filePath]
+      properties:
+        memberId:
+          type: string
+        date:
+          type: string
+          format: date
+        sessionRevision:
+          type: integer
+        submissions:
+          type: array
+          items:
+            $ref: "#/components/schemas/ItemSubmission"
+        filePath:
+          type: string
+        lastCommitId:
+          type: [string, "null"]
+    MemberSubmissionResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/MemberSubmission"
+    ItemSubmissionResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          $ref: "#/components/schemas/ItemSubmission"
+    UpsertSubmissionRequest:
+      type: object
+      required: [type, value, commitMessage]
+      properties:
+        type:
+          $ref: "#/components/schemas/SubmitType"
+        value:
+          type: string
+          minLength: 1
+          maxLength: 200000
+        language:
+          type: string
+          maxLength: 30
+        expectedFileCommitId:
+          type: [string, "null"]
+          description: 파일이 이미 존재할 때 필수
+        commitMessage:
+          type: string
+          minLength: 1
+          maxLength: 200
+    SubmissionMutationResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [itemId, status, filePath, commitId, dashboard]
+          properties:
+            itemId:
+              type: string
+            status:
+              $ref: "#/components/schemas/SubmissionStatus"
+            filePath:
+              type: string
+            commitId:
+              type: string
+            dashboard:
+              type: object
+              required: [myCompletedItems, myRequiredItems, teamSubmissionRate]
+              properties:
+                myCompletedItems:
+                  type: integer
+                myRequiredItems:
+                  type: integer
+                teamSubmissionRate:
+                  type: number
+
+    MemberProgress:
+      type: object
+      required:
+        [memberId, displayName, completedItems, requiredItems, completionRate, status]
+      properties:
+        memberId:
+          type: string
+        displayName:
+          type: string
+        completedItems:
+          type: integer
+        requiredItems:
+          type: integer
+        completionRate:
+          type: number
+        status:
+          type: string
+          enum: [NOT_STARTED, PARTIAL, COMPLETED]
+        lastSubmittedAt:
+          type: [string, "null"]
+          format: date-time
+    DashboardResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [session, metrics, me, members]
+          properties:
+            session:
+              $ref: "#/components/schemas/StudySession"
+            metrics:
+              type: object
+              required:
+                [completedMembers, totalMembers, submittedItems, totalRequiredSubmissions, submissionRate]
+              properties:
+                completedMembers:
+                  type: integer
+                totalMembers:
+                  type: integer
+                submittedItems:
+                  type: integer
+                totalRequiredSubmissions:
+                  type: integer
+                submissionRate:
+                  type: number
+            me:
+              $ref: "#/components/schemas/MemberProgress"
+            members:
+              type: array
+              items:
+                $ref: "#/components/schemas/MemberProgress"
+
+    DailyRecord:
+      type: object
+      required: [date, hasSession, submissionRate, submittedItems]
+      properties:
+        date:
+          type: string
+          format: date
+        hasSession:
+          type: boolean
+        submissionRate:
+          type: number
+        submittedItems:
+          type: integer
+    RecordsResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [view, period, averageSubmissionRate, totalSubmissions, days]
+          properties:
+            view:
+              type: string
+              enum: [day, month]
+            period:
+              type: string
+            averageSubmissionRate:
+              type: number
+            totalSubmissions:
+              type: integer
+            days:
+              type: array
+              items:
+                $ref: "#/components/schemas/DailyRecord"
+
+    ScoreEntry:
+      type: object
+      required:
+        [rank, memberId, displayName, points, maxPoints, primaryCount, secondaryCount]
+      properties:
+        rank:
+          type: integer
+          minimum: 1
+        memberId:
+          type: string
+        displayName:
+          type: string
+        points:
+          type: integer
+        maxPoints:
+          type: integer
+        primaryCount:
+          type: integer
+        secondaryCount:
+          type: integer
+    ScoreboardResponse:
+      type: object
+      required: [data]
+      properties:
+        data:
+          type: object
+          required: [from, to, rules, me, ranking]
+          properties:
+            from:
+              type: string
+              format: date
+            to:
+              type: string
+              format: date
+            rules:
+              type: object
+              required: [primary, secondary, missed]
+              properties:
+                primary:
+                  type: integer
+                  const: 10
+                secondary:
+                  type: integer
+                  const: 6
+                missed:
+                  type: integer
+                  const: 0
+            me:
+              $ref: "#/components/schemas/ScoreEntry"
+            ranking:
+              type: array
+              items:
+                $ref: "#/components/schemas/ScoreEntry"
+
+    GitLabConnectionSpike:
+      type: object
+      required: [configured, status, message, checkedAt, repositoryTree]
+      properties:
+        configured:
+          type: boolean
+        status:
+          type: string
+          enum: [CONNECTED, NOT_CONFIGURED]
+        message:
+          type: string
+        checkedAt:
+          type: string
+          format: date-time
+        user:
+          type: [object, "null"]
+          additionalProperties: true
+        project:
+          type: [object, "null"]
+          additionalProperties: true
+        repositoryTree:
+          type: array
+          items:
+            $ref: "#/components/schemas/RepositoryTreeItem"
+    GitLabFileContent:
+      type: object
+      required:
+        [fileName, filePath, size, content, ref, blobId, commitId, lastCommitId]
+      properties:
+        fileName:
+          type: string
+        filePath:
+          type: string
+        size:
+          type: integer
+          format: int64
+        content:
+          type: string
+        ref:
+          type: string
+        blobId:
+          type: string
+        commitId:
+          type: string
+        lastCommitId:
+          type: string
+
+security:
+  - sessionCookie: []
