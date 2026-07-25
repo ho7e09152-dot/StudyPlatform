@@ -1,5 +1,7 @@
 # 팀원 1 — 인증·Workspace
 
+> 처음 구현하는 사람은 요구사항을 읽은 뒤 [팀원 1 초심자 구현 핸드북](guides/member-1-auth-workspace-handbook.md)을 순서대로 따라가세요. 핸드북에는 정확한 클래스·패키지, UML, ERD, 구현 단계, 코드 뼈대와 테스트 표가 포함되어 있습니다.
+
 > [프로젝트 README로 돌아가기](../README.md)
 
 ## 역할 목표
@@ -276,4 +278,3 @@ String getValidAccessToken(UUID userId);
 - Workspace와 GitLab 프로젝트의 권한 차이
 - 토큰 refresh 동시성 문제 해결
 - 프로젝트 연결 검사와 중복 방지 정책
-
