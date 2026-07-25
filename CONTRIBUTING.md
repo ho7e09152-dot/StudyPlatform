@@ -5,10 +5,11 @@
 ## 1. 작업 시작 전 읽을 문서
 
 1. [README](README.md)
-2. [OpenAPI 계약](docs/openapi.yaml)
-3. [API 공통 오류 계약](docs/api-error-catalog.md)
-4. 자기 역할 문서
-5. [개발환경 가이드](docs/development-environment.md)
+2. [3인 팀 구현 로드맵](docs/team-implementation-roadmap.md)
+3. [OpenAPI 계약](docs/openapi.yaml)
+4. [API 공통 오류 계약](docs/api-error-catalog.md)
+5. 자기 역할 문서와 초심자 구현 핸드북
+6. [개발환경 가이드](docs/development-environment.md)
 
 기능 요구사항과 OpenAPI가 다르면 임의로 구현하지 말고 팀이 계약을 먼저 수정합니다.
 

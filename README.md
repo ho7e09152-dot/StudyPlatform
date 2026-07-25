@@ -134,13 +134,15 @@ AI 도구는 디자인과 구현을 구체화하는 협업 도구로 사용했�
 
 백엔드는 계층별로 나누지 않고, 각 팀원이 하나의 기능 영역을 Controller부터 GitLab 연동과 테스트까지 끝까지 구현하는 방식으로 진행합니다.
 
-| 담당 | 영역 | 주요 책임 | 상세 문서 |
-|---|---|---|---|
-| 팀원 1 | 인증·Workspace | GitLab OAuth, 사용자·토큰, 프로젝트 연결, Workspace와 멤버 | [팀원 1 역할 문서](docs/backend-role-1-auth-workspace.md) |
-| 팀원 2 | 일정·저장소 | Session CRUD, `session.yml`, 1·2차 마감, revision, tree·파일 조회 | [팀원 2 역할 문서](docs/backend-role-2-session-repository.md) |
-| 팀원 3 | 제출·기록 | 개인 제출 병합, 커밋, 완료율, 일별·월별 기록, 점수·순위 | [팀원 3 역할 문서](docs/backend-role-3-submission-analytics.md) |
+| 담당 | 영역 | 주요 책임 | 요구사항 | 초심자 구현 핸드북 |
+|---|---|---|---|---|
+| 팀원 1 | 인증·Workspace | GitLab OAuth, 사용자·토큰, 프로젝트 연결, Workspace와 멤버 | [역할 문서](docs/backend-role-1-auth-workspace.md) | [클래스·DB·OAuth 구현 순서](docs/guides/member-1-auth-workspace-handbook.md) |
+| 팀원 2 | 일정·저장소 | Session CRUD, `session.yml`, 1·2차 마감, revision, tree·파일 조회 | [역할 문서](docs/backend-role-2-session-repository.md) | [클래스·YAML·충돌 구현 순서](docs/guides/member-2-session-repository-handbook.md) |
+| 팀원 3 | 제출·기록 | 개인 제출 병합, 커밋, 완료율, 일별·월별 기록, 점수·순위 | [역할 문서](docs/backend-role-3-submission-analytics.md) | [클래스·Markdown·통계 구현 순서](docs/guides/member-3-submission-analytics-handbook.md) |
 
 세 영역이 공통으로 사용하는 GitLab HTTP 통신은 `GitLabRepositoryPort`와 하나의 클라이언트 구현으로 통합합니다. 각 기능에서 WebClient 호출을 중복 구현하지 않습니다.
+
+세 명이 개발을 시작하기 전에는 [팀 구현 로드맵](docs/team-implementation-roadmap.md)의 공통 계약 단계부터 함께 진행합니다.
 
 ## 추천 개발 순서
 
@@ -240,6 +242,7 @@ npm test
 
 ## 관련 문서
 
+- [3인 팀 백엔드 구현 로드맵](docs/team-implementation-roadmap.md)
 - [백엔드·API·GitLab 전체 설계서](STUDY_WORKSPACE_BACKEND_API_GITLAB.md)
 - [OpenAPI 실행 계약](docs/openapi.yaml)
 - [API 공통 오류 계약](docs/api-error-catalog.md)
@@ -250,8 +253,11 @@ npm test
 - [프론트엔드 실행 및 구조](frontend/README.md)
 - [프론트 API 연동 구조](frontend/lib/api/README.md)
 - [팀원 1 — 인증·Workspace](docs/backend-role-1-auth-workspace.md)
+- [팀원 1 초심자 구현 핸드북](docs/guides/member-1-auth-workspace-handbook.md)
 - [팀원 2 — 일정·저장소](docs/backend-role-2-session-repository.md)
+- [팀원 2 초심자 구현 핸드북](docs/guides/member-2-session-repository-handbook.md)
 - [팀원 3 — 제출·기록](docs/backend-role-3-submission-analytics.md)
+- [팀원 3 초심자 구현 핸드북](docs/guides/member-3-submission-analytics-handbook.md)
 
 ## 프로젝트 목표
 
