@@ -9,6 +9,7 @@
 | `api_contract` | `docs/openapi.yaml` 문법과 참조 | OpenAPI 경로·schema·`$ref` |
 | `repository_hygiene` | 실제 `.env`, token 형태의 값 추적 여부 | `.gitignore`, 스테이징 파일 |
 | `frontend_lint` | ESLint | Job 로그의 파일과 줄 번호 |
+| `frontend_audit` | 운영 npm 의존성의 high 이상 취약점 | 직접·전이 의존성의 수정 버전 |
 | `frontend_test` | 프로덕션 빌드와 라우트 smoke test | Vite 빌드 오류, Node 테스트 |
 | `backend_test` | Spring context와 모든 JUnit 테스트 | JUnit report |
 
@@ -23,6 +24,7 @@ PATH="$HOME/.nvm/versions/node/v22.22.2/bin:$PATH" \
 cd frontend
 npm ci
 npm run lint
+npm audit --omit=dev --audit-level=high
 npm run test
 
 # Backend

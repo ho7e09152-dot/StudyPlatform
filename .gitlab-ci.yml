@@ -44,6 +44,21 @@ frontend_lint:
   script:
     - npm run lint
 
+frontend_audit:
+  stage: validate
+  image: node:22-bookworm-slim
+  cache:
+    key:
+      files:
+        - frontend/package-lock.json
+    paths:
+      - .npm/
+  before_script:
+    - cd frontend
+    - npm ci --cache ../.npm --prefer-offline
+  script:
+    - npm audit --omit=dev --audit-level=high
+
 frontend_test:
   stage: test
   image: node:22-bookworm-slim
