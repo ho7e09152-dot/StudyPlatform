@@ -23,6 +23,7 @@ export interface SessionItem {
   id: string;
   order: number;
   title: string;
+  type: SessionType;
   source?: string;
   url?: string;
   submitType: SubmissionType;
@@ -96,6 +97,9 @@ export interface Workspace {
   gitlabProjectId: number;
   gitlabProjectPath: string;
   defaultBranch: string;
+  repositoryBasePath: string;
+  repositorySchemaVersion: number;
+  importMode: "EMPTY" | "COMPATIBLE" | "LEGACY" | "PARTIALLY_COMPATIBLE";
   status: "ACTIVE" | "SOFT_DELETED";
   lastSyncedAt: string;
   members: StudyMember[];
@@ -124,6 +128,7 @@ export interface MemberProgress {
 
 export interface SessionDraft {
   date: string;
+  /** 첫 번째 항목 유형에서 파생되는 하위 호환용 대표 유형 */
   type: SessionType;
   title: string;
   description: string;

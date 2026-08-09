@@ -177,10 +177,17 @@ public class GitLabOAuthProjectService {
 		String content,
 		String commitMessage
 	) {
+		return createRepositoryFile(accessToken, projectId, path, branch, content, commitMessage, null);
+	}
+
+	public GitLabFileContent createRepositoryFile(
+		String accessToken, long projectId, String path, String branch, String content,
+		String commitMessage, String authorName
+	) {
 		execute(webClient.post()
 			.uri(builder -> builder.pathSegment("projects", Long.toString(projectId), "repository", "files", path).build())
 			.headers(headers -> headers.setBearerAuth(accessToken))
-			.bodyValue(new GitLabCreateFileRequest(branch, content, commitMessage))
+			.bodyValue(new GitLabCreateFileRequest(branch, content, commitMessage, authorName))
 			.retrieve()
 			.onStatus(HttpStatusCode::isError, this::toException)
 			.bodyToMono(GitLabCommitResponse.class));
@@ -196,10 +203,17 @@ public class GitLabOAuthProjectService {
 		String commitMessage,
 		String lastCommitId
 	) {
+		return updateRepositoryFile(accessToken, projectId, path, branch, content, commitMessage, lastCommitId, null);
+	}
+
+	public GitLabFileContent updateRepositoryFile(
+		String accessToken, long projectId, String path, String branch, String content,
+		String commitMessage, String lastCommitId, String authorName
+	) {
 		execute(webClient.put()
 			.uri(builder -> builder.pathSegment("projects", Long.toString(projectId), "repository", "files", path).build())
 			.headers(headers -> headers.setBearerAuth(accessToken))
-			.bodyValue(new GitLabUpdateFileRequest(branch, content, commitMessage, lastCommitId))
+			.bodyValue(new GitLabUpdateFileRequest(branch, content, commitMessage, lastCommitId, authorName))
 			.retrieve()
 			.onStatus(HttpStatusCode::isError, this::toException)
 			.bodyToMono(GitLabCommitResponse.class));

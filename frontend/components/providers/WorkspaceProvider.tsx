@@ -23,11 +23,10 @@ import {
 } from "@/lib/api/services/workspaceApi";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { WorkspaceOnboarding } from "@/components/onboarding/WorkspaceOnboarding";
-import { AppLoadingScreen } from "@/components/ui/AppLoadingScreen";
 import { initialWorkspaces } from "@/lib/data/seed";
 import { REFERENCE_DATE } from "@/lib/domain/constants";
 import { getSubmissionKey } from "@/lib/domain/metrics";
-import { getDateKeyInTimeZone, toFolderName } from "@/lib/domain/format";
+import { getDateKeyInTimeZone, getWorkspaceRepositoryPath, toFolderName } from "@/lib/domain/format";
 import type {
   SessionDraft,
   StudySession,
@@ -105,7 +104,7 @@ function reconcileItems(
 }
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
-  const { mode, user } = useAuth();
+  const { mode, user, checking: checkingAuth } = useAuth();
   const demoMode = mode === "demo";
   const [workspaces, setWorkspaces] = useState<Workspace[]>(() =>
     demoMode ? cloneSeed() : [],
@@ -346,7 +345,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
             version: 1,
             memberId: member.id,
             gitlabUserId: member.gitlabUserId,
-            username: member.username,
+            username: member.displayName,
             date: session.folder,
             sessionRevision: session.revision,
             sessionType: session.type,
@@ -398,7 +397,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         replaceWorkspace(updated);
         notify(
           current ? "일정을 수정했습니다" : "새 일정을 만들었습니다",
-          `${nextSession.folder}/session.yml · ${nextSession.lastCommitId.slice(0, 8)} · revision ${nextSession.revision}`,
+		  `${getWorkspaceRepositoryPath(updatedWorkspace.repositoryBasePath, `${nextSession.folder}/session.yml`)} · ${nextSession.lastCommitId.slice(0, 8)} · revision ${nextSession.revision}`,
         );
         return;
       }
@@ -416,9 +415,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         deadline: draft.deadline,
         secondaryDeadline: draft.secondaryDeadline,
         createdAt: current?.createdAt ?? now,
-        createdBy: current?.createdBy ?? actor.username,
+		createdBy: current?.createdBy ?? actor.displayName,
         updatedAt: now,
-        updatedBy: actor.username,
+		updatedBy: actor.displayName,
         change: current
           ? {
               changed: true,
@@ -441,7 +440,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       await new Promise((resolve) => setTimeout(resolve, 350));
       notify(
         current ? "일정을 수정했습니다" : "새 일정을 만들었습니다",
-        `${nextSession.folder}/session.yml · revision ${nextSession.revision}`,
+		`${getWorkspaceRepositoryPath(workspace.repositoryBasePath, `${nextSession.folder}/session.yml`)} · revision ${nextSession.revision}`,
       );
     },
     [backendConnected, currentUserId, notify, replaceWorkspace, updateCurrentWorkspace, workspace],
@@ -533,8 +532,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     dismissToast: () => setToast(null),
   };
 
-  if (loading) {
-    return <AppLoadingScreen phase="workspace" />;
+  if (loading || checkingAuth) {
+    return null;
   }
 
   if (loadError) {

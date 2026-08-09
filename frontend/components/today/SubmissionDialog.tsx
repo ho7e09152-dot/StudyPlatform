@@ -12,6 +12,7 @@ import {
 import { Modal } from "@/components/ui/Modal";
 import { SUBMISSION_TYPE_LABEL } from "@/lib/domain/constants";
 import { getSubmissionKey } from "@/lib/domain/metrics";
+import { getWorkspaceRepositoryPath } from "@/lib/domain/format";
 import type {
   SessionItem,
   StudySession,
@@ -28,11 +29,11 @@ const typeIcon = {
 
 function getDefaultCommitMessage(
   updating: boolean,
-  memberId: string,
+  memberName: string,
   folder: string,
   itemId: string,
 ) {
-  return `${updating ? "update" : "submit"}: ${memberId} ${folder} ${itemId}`;
+  return `${updating ? "update" : "submit"}: ${memberName} ${folder} ${itemId}`;
 }
 
 export function SubmissionDialog({
@@ -57,6 +58,7 @@ export function SubmissionDialog({
   const items = session.items.filter((item) => item.status === "active");
   const submissionFile =
     workspace.submissions[getSubmissionKey(session.folder, currentUserId)];
+  const me = workspace.members.find((member) => member.id === currentUserId)!;
   const [selectedItemId, setSelectedItemId] = useState(initialItemId);
   const selectedItem =
     items.find((item) => item.id === selectedItemId) ?? items[0];
@@ -68,7 +70,7 @@ export function SubmissionDialog({
   const [commitMessage, setCommitMessage] = useState(
     getDefaultCommitMessage(
       Boolean(existing),
-      currentUserId,
+      me.displayName,
       session.folder,
       selectedItem.id,
     ),
@@ -92,7 +94,7 @@ export function SubmissionDialog({
     setCommitMessage(
       getDefaultCommitMessage(
         Boolean(next),
-        currentUserId,
+        me.displayName,
         session.folder,
         item.id,
       ),
@@ -150,7 +152,6 @@ export function SubmissionDialog({
   }
 
   const TypeIcon = typeIcon[selectedItem.submitType];
-  const me = workspace.members.find((member) => member.id === currentUserId)!;
 
   return (
     <Modal
@@ -281,11 +282,11 @@ export function SubmissionDialog({
             <dl>
               <div>
                 <dt>파일</dt>
-                <dd>{session.folder}/{me.fileName}</dd>
+                <dd>{getWorkspaceRepositoryPath(workspace.repositoryBasePath, `${session.folder}/${me.fileName}`)}</dd>
               </div>
               <div>
                 <dt>작성자</dt>
-                <dd>{me.username}</dd>
+                <dd>{me.displayName}</dd>
               </div>
               <div>
                 <dt>메시지</dt>

@@ -25,7 +25,7 @@ import {
   SESSION_TYPE_META,
   SUBMISSION_TYPE_LABEL,
 } from "@/lib/domain/constants";
-import { formatDate, formatDateTime, formatTime } from "@/lib/domain/format";
+import { formatDate, formatDateTime, formatTime, getWorkspaceRepositoryPath } from "@/lib/domain/format";
 import {
   getActiveRequiredItems,
   getDashboardMetrics,
@@ -174,7 +174,7 @@ function TodaySession({ session }: { session: StudySession }) {
               ) : (
                 <span><Clock3 size={15} /> {formatTime(session.deadline)} 마감</span>
               )}
-              <span><FileCode2 size={15} /> {session.folder}/session.yml</span>
+              <span><FileCode2 size={15} /> {getWorkspaceRepositoryPath(workspace.repositoryBasePath, `${session.folder}/session.yml`)}</span>
             </div>
           </header>
 

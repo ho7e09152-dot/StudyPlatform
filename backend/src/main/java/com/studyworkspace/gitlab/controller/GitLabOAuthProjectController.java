@@ -16,6 +16,8 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import com.studyworkspace.workspace.dto.RepositoryImportAnalysis;
+import com.studyworkspace.workspace.service.RepositoryImportAnalysisService;
 
 @RestController
 @RequestMapping("/api/v1/gitlab/projects")
@@ -24,15 +26,24 @@ public class GitLabOAuthProjectController {
 	private final GitLabOAuthTokenProvider tokenProvider;
 	private final GitLabOAuthProjectService projectService;
 	private final RepositoryPathPolicy pathPolicy;
+	private final RepositoryImportAnalysisService importAnalysisService;
 
 	public GitLabOAuthProjectController(
 		GitLabOAuthTokenProvider tokenProvider,
 		GitLabOAuthProjectService projectService,
-		RepositoryPathPolicy pathPolicy
+		RepositoryPathPolicy pathPolicy,
+		RepositoryImportAnalysisService importAnalysisService
 	) {
 		this.tokenProvider = tokenProvider;
 		this.projectService = projectService;
 		this.pathPolicy = pathPolicy;
+		this.importAnalysisService = importAnalysisService;
+	}
+
+	@GetMapping("/{projectId}/import-analysis")
+	public RepositoryImportAnalysis importAnalysis(@PathVariable long projectId, HttpServletRequest request) {
+		GitLabOAuthSession oauth = tokenProvider.requireValidSession(request);
+		return importAnalysisService.analyze(oauth.accessToken(), projectId);
 	}
 
 	@GetMapping

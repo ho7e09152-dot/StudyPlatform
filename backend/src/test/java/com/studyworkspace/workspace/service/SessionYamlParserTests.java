@@ -49,6 +49,26 @@ class SessionYamlParserTests {
 			.hasMessageContaining("문법");
 	}
 
+	@Test
+	void preservesIndependentItemTypesAndFallsBackForLegacyFiles() {
+		StudySession mixed = new StudySession(
+			"2026-08-09", "260809", 1, "algorithm", "혼합 학습", "", "active",
+			"2026-08-09T23:59:00+09:00", null,
+			"2026-08-09T00:00:00Z", "owner", "2026-08-09T00:00:00Z", "owner", null,
+			List.of(new SessionItem("item-1", 1, "영어 읽기", "english", null, null, "text", true, "active", null, null)),
+			List.of(), null
+		);
+
+		String yaml = serializer.serialize(mixed);
+		StudySession parsed = parser.parse("260809/session.yml", yaml, "sha");
+		StudySession legacyParsed = parser.parse(
+			"260809/session.yml", yaml.replace("    type: \"english\"\n", ""), "sha"
+		);
+
+		assertThat(parsed.items().getFirst().type()).isEqualTo("english");
+		assertThat(legacyParsed.items().getFirst().type()).isEqualTo("algorithm");
+	}
+
 	static StudySession validSession() {
 		return new StudySession(
 			"2026-08-09", "260809", 1, "cs", "제목", "", "active",

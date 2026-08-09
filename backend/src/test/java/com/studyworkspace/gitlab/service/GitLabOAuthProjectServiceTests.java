@@ -87,18 +87,18 @@ class GitLabOAuthProjectServiceTests {
 	@Test
 	void createsAndUpdatesRepositoryFilesWithBearerToken() {
 		var created = service.createRepositoryFile(
-			"oauth-user-token", 48213, "260809/session.yml", "main", "version: 1\n", "study: create session"
+			"oauth-user-token", 48213, "260809/session.yml", "main", "version: 1\n", "study: create session", "김서연"
 		);
 		var updated = service.updateRepositoryFile(
-			"oauth-user-token", 48213, "260809/session.yml", "main", "version: 2\n", "study: update session", "commit-1"
+			"oauth-user-token", 48213, "260809/session.yml", "main", "version: 2\n", "study: update session", "commit-1", "김서연"
 		);
 
 		assertThat(created.lastCommitId()).isEqualTo("commit-1");
 		assertThat(updated.lastCommitId()).isEqualTo("commit-1");
 		assertThat(requests).containsSubsequence("POST /api/v4/projects/48213/repository/files/260809/session.yml", "GET /api/v4/projects/48213/repository/files/260809/session.yml");
 		assertThat(requests).containsSubsequence("PUT /api/v4/projects/48213/repository/files/260809/session.yml", "GET /api/v4/projects/48213/repository/files/260809/session.yml");
-		assertThat(requestBodies).anySatisfy(body -> assertThat(body).contains("study: create session", "version: 1"));
-		assertThat(requestBodies).anySatisfy(body -> assertThat(body).contains("study: update session", "last_commit_id", "commit-1"));
+		assertThat(requestBodies).anySatisfy(body -> assertThat(body).contains("study: create session", "version: 1", "author_name", "김서연"));
+		assertThat(requestBodies).anySatisfy(body -> assertThat(body).contains("study: update session", "last_commit_id", "commit-1", "author_name", "김서연"));
 		assertThat(authorization).hasValue("Bearer oauth-user-token");
 	}
 

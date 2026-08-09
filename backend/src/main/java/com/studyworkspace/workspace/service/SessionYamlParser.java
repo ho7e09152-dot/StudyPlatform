@@ -68,9 +68,9 @@ public class SessionYamlParser {
 			throw invalid("2차 마감은 1차 마감보다 늦어야 합니다.");
 		}
 
-		List<SessionItem> items = items(root.get("items"), "items", false);
+		List<SessionItem> items = items(root.get("items"), "items", false, type);
 		if (items.isEmpty()) throw invalid("items에는 하나 이상의 학습 항목이 필요합니다.");
-		List<SessionItem> archivedItems = items(root.get("archivedItems"), "archivedItems", true);
+		List<SessionItem> archivedItems = items(root.get("archivedItems"), "archivedItems", true, type);
 		Set<String> allIds = new HashSet<>();
 		for (SessionItem item : items) {
 			if (!allIds.add(item.id())) throw invalid("학습 항목 ID가 중복되었습니다: " + item.id());
@@ -103,7 +103,7 @@ public class SessionYamlParser {
 		}
 	}
 
-	private static List<SessionItem> items(Object value, String field, boolean optional) {
+	private static List<SessionItem> items(Object value, String field, boolean optional, String fallbackType) {
 		if (value == null && optional) return List.of();
 		if (!(value instanceof List<?> list)) throw invalid(field + "는 배열이어야 합니다.");
 		List<SessionItem> result = new ArrayList<>();
@@ -113,12 +113,15 @@ public class SessionYamlParser {
 			Map<String, Object> item = stringMap(raw, field);
 			String submitType = text(item, "submitType", true);
 			if (!SUBMISSION_TYPES.contains(submitType)) throw invalid("지원하지 않는 제출 방식입니다.");
+			String itemType = text(item, "type", false);
+			if (itemType == null) itemType = fallbackType;
+			if (!SESSION_TYPES.contains(itemType)) throw invalid("지원하지 않는 학습 유형입니다.");
 			String status = text(item, "status", true);
 			if (!ITEM_STATUSES.contains(status)) throw invalid("지원하지 않는 학습 항목 상태입니다.");
 			int order = integer(item, "order", true);
 			if (order < 1 || !orders.add(order)) throw invalid(field + "의 order는 중복 없는 양수여야 합니다.");
 			result.add(new SessionItem(
-				text(item, "id", true), order, text(item, "title", true), text(item, "source", false),
+				text(item, "id", true), order, text(item, "title", true), itemType, text(item, "source", false),
 				text(item, "url", false), submitType, bool(item, "required"), status,
 				text(item, "replaces", false), text(item, "replacedBy", false)
 			));

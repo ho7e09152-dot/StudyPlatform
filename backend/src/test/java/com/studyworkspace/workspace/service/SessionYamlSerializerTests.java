@@ -33,6 +33,7 @@ class SessionYamlSerializerTests {
 			.contains("revision: 1")
 			.contains("title: \"제목: 큐 #1\"")
 			.contains("description: \"첫 줄\\n둘째 줄\"")
+			.contains("    type: \"algorithm\"")
 			.contains("source: \"SWEA #1\"")
 			.contains("url: \"https://example.com/a?b=1\"")
 			.contains("updatedBy:\n  username: \"lhc0688\"")

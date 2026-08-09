@@ -59,8 +59,8 @@ Study Workspace는 이 과정을 `일정 생성 → 항목별 제출 → GitLab 
 | 화면 | 구현 내용 |
 |---|---|
 | 랜딩 | 서비스 소개, GitLab 기반 워크플로, 자동 전환 제품 미리보기, 스크롤 애니메이션 |
-| 로그인 | GitLab OAuth 진입, 보안 원칙 안내, 운영 모드와 명시적 데모 모드 분리 |
-| 온보딩 | OAuth 사용자의 프로젝트 검색·접근 확인·첫 Workspace 생성 |
+| 로그인 | GitLab OAuth 진입, 최초 프로필·표시 이름·GitLab 기록 이름·약관 동의, 운영 모드와 명시적 데모 모드 분리 |
+| 온보딩 | OAuth 사용자의 프로젝트 검색·접근 확인, 기존 저장소 읽기 전용 분석, 충돌 방지, 전용 `.study-workspace` 경로와 첫 Workspace 생성 |
 | 오늘 | 오늘의 학습 항목, 팀 진행률, 개인 진행률, 멤버 현황, 저장소 미리보기 |
 | 일정 | 일정 검색·필터, 여러 학습 항목, 1차·2차 마감, 실제 GitLab `session.yml` 생성·수정·취소·재동기화, revision·commit SHA 표시 |
 | 제출 | 항목별 링크·텍스트·코드 제출, 커밋 메시지, OAuth 기반 GitLab 멤버 Markdown 생성·수정과 commit SHA 표시 |
@@ -181,7 +181,7 @@ AI 도구는 디자인과 구현을 구체화하는 협업 도구로 사용했�
 → 테스트 브랜치에 임시 파일 커밋
 ```
 
-초기 GitLab 연결 진단과 쓰기 스파이크만 `dev`/`local` 프로필에서 서버 Personal Access Token을 선택적으로 사용합니다. 사용자 인증과 프로젝트 검색·검증은 `api` scope의 GitLab OAuth Bearer token으로 동작하며 브라우저에 토큰을 저장하지 않습니다. 실제 파일 읽기·쓰기 API의 OAuth 전환은 운영 연동 단계에 남아 있습니다.
+초기 GitLab 연결 진단 스파이크만 `dev`/`local` 프로필에서 서버 Personal Access Token을 선택적으로 사용합니다. 사용자 인증, 프로젝트 검색·검증과 실제 일정·제출 파일 읽기·쓰기는 `api` scope의 GitLab OAuth Bearer token으로 동작하며 브라우저에 토큰을 저장하지 않습니다. GitLab 커밋에는 사용자가 최초 프로필에서 지정한 표시 이름을 `author_name`으로 전달합니다.
 
 ## 백엔드 역할 분담
 

@@ -43,3 +43,17 @@ export interface GitLabFileContent {
   commitId: string;
   lastCommitId: string;
 }
+
+export interface RepositoryImportAnalysis {
+  projectId: number;
+  projectPath: string;
+  defaultBranch: string;
+  classification: "EMPTY" | "COMPATIBLE" | "LEGACY" | "PARTIALLY_COMPATIBLE" | "CONFLICTED";
+  repositoryBasePath: string;
+  treeFingerprint: string;
+  totalFiles: number;
+  compatibleSessions: number;
+  compatibleSubmissions: number;
+  ignoredFiles: number;
+  issues: Array<{ path: string; code: string; message: string }>;
+}

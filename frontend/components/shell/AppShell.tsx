@@ -11,18 +11,19 @@ import {
   ChevronDown,
   FolderGit2,
   LayoutDashboard,
-  LogOut,
   Menu,
   RefreshCw,
   Settings,
   X,
   Plus,
 } from "lucide-react";
+import { AccountMenu } from "@/components/account/AccountMenu";
+import { ProfileSettingsDialog } from "@/components/account/ProfileSettingsDialog";
+import { AppThemeProvider, useAppTheme } from "@/components/providers/AppThemeProvider";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { Toast } from "@/components/ui/Toast";
 import { useGitLabConnection } from "@/lib/api/hooks/useGitLabConnection";
-import { logout } from "@/lib/api/services/authApi";
 
 const navigation = [
   { href: "/today", label: "오늘", icon: LayoutDashboard },
@@ -37,7 +38,12 @@ function isActive(pathname: string, href: string) {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
+  return <AppThemeProvider><ThemedAppShell>{children}</ThemedAppShell></AppThemeProvider>;
+}
+
+function ThemedAppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const { themeMode, accentColor } = useAppTheme();
   const {
     workspaces,
     workspace,
@@ -49,6 +55,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const connection = useGitLabConnection();
   const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
   const currentMember = workspace.members.find(
     (member) => member.id === currentUserId,
@@ -83,7 +90,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [workspaceMenuOpen]);
 
   return (
-    <div className="app-frame">
+    <div className="app-frame" data-theme={themeMode.toLowerCase()} data-accent={accentColor.toLowerCase()}>
       <aside className="sidebar" aria-label="주요 메뉴">
         <Link className="brand-block" href="/" aria-label="STUDY 랜딩 페이지로 이동">
           <Image
@@ -193,26 +200,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               {connection.state === "loading" ? "확인 중" : "연결 다시 확인"}
             </button>
           </div>
-          <div className="account-row">
-            <Avatar member={currentMember} />
-            <span>
-              <strong>{currentMember.displayName}</strong>
-              <small>@{currentMember.username}</small>
-            </span>
-            <button
-              type="button"
-              className="icon-button"
-              aria-label="로그아웃"
-              title="로그아웃"
-              onClick={() => {
-                void logout().finally(() => {
-                  window.location.href = "/login";
-                });
-              }}
-            >
-              <LogOut size={18} />
-            </button>
-          </div>
+          <AccountMenu member={currentMember} onOpenProfile={() => setProfileOpen(true)} />
         </div>
       </aside>
 
@@ -237,7 +225,9 @@ export function AppShell({ children }: { children: ReactNode }) {
           <strong>{workspace.name}</strong>
           <small>{workspace.defaultBranch}</small>
         </span>
-        <Avatar member={currentMember} size="small" />
+        <button className="mobile-profile-button" type="button" aria-label="프로필 메뉴 열기" onClick={() => setDrawerOpen(true)}>
+          <Avatar member={currentMember} size="small" />
+        </button>
       </header>
 
       {drawerOpen ? (
@@ -287,6 +277,12 @@ export function AppShell({ children }: { children: ReactNode }) {
                 </Link>
               );
             })}
+            <div className="mobile-drawer__account">
+              <AccountMenu member={currentMember} onOpenProfile={() => {
+                setDrawerOpen(false);
+                setProfileOpen(true);
+              }} />
+            </div>
           </nav>
         </div>
       ) : null}
@@ -300,6 +296,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           onClose={dismissToast}
         />
       ) : null}
+      {profileOpen ? <ProfileSettingsDialog onClose={() => setProfileOpen(false)} /> : null}
     </div>
   );
 }

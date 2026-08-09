@@ -2,12 +2,14 @@
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { ApiError } from "@/lib/api/client/http";
-import { getAuthSession, type AuthenticatedGitLabUser } from "@/lib/api/services/authApi";
-import { AppLoadingScreen } from "@/components/ui/AppLoadingScreen";
+import { getAuthSession, updateAccountProfile, type AuthenticatedGitLabUser } from "@/lib/api/services/authApi";
+import { ProfileSetupPage } from "@/components/auth/ProfileSetupPage";
 
 interface AuthContextValue {
   mode: "gitlab-oauth" | "demo";
   user: AuthenticatedGitLabUser | null;
+  checking: boolean;
+  setUser: (user: AuthenticatedGitLabUser) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -45,13 +47,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ mode: demoMode ? "demo" : "gitlab-oauth", user }),
-    [user],
+    () => ({ mode: demoMode ? "demo" : "gitlab-oauth", user, checking: state === "loading", setUser }),
+    [state, user],
   );
-
-  if (state === "loading") {
-    return <AppLoadingScreen phase="auth" />;
-  }
 
   if (state === "error") {
     return (
@@ -61,6 +59,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         <button type="button" className="button" onClick={() => window.location.reload()}>다시 시도</button>
       </main>
     );
+  }
+
+  if (!demoMode && state === "ready" && user && !user.profileCompleted) {
+    return <ProfileSetupPage user={user} onSubmit={async (input) => setUser(await updateAccountProfile(input))} />;
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

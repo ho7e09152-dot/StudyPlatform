@@ -26,6 +26,7 @@ public final class WorkspaceModels {
 		String id,
 		int order,
 		String title,
+		String type,
 		String source,
 		String url,
 		String submitType,
@@ -34,6 +35,12 @@ public final class WorkspaceModels {
 		String replaces,
 		String replacedBy
 	) {
+		public SessionItem(
+			String id, int order, String title, String source, String url, String submitType,
+			boolean required, String status, String replaces, String replacedBy
+		) {
+			this(id, order, title, "algorithm", source, url, submitType, required, status, replaces, replacedBy);
+		}
 	}
 
 	public record SessionChange(boolean changed, String message, String reason) {
@@ -106,6 +113,9 @@ public final class WorkspaceModels {
 		long gitlabProjectId,
 		String gitlabProjectPath,
 		String defaultBranch,
+		String repositoryBasePath,
+		Integer repositorySchemaVersion,
+		String importMode,
 		String status,
 		String lastSyncedAt,
 		List<StudyMember> members,
@@ -113,6 +123,14 @@ public final class WorkspaceModels {
 		Map<String, MemberSubmissionFile> submissions,
 		WorkspaceSettings settings
 	) {
+		public WorkspaceState(
+			String id, String name, long gitlabProjectId, String gitlabProjectPath, String defaultBranch,
+			String status, String lastSyncedAt, List<StudyMember> members, Map<String, StudySession> sessions,
+			Map<String, MemberSubmissionFile> submissions, WorkspaceSettings settings
+		) {
+			this(id, name, gitlabProjectId, gitlabProjectPath, defaultBranch, "", 1, "COMPATIBLE",
+				status, lastSyncedAt, members, sessions, submissions, settings);
+		}
 	}
 
 	public record SessionDraft(
@@ -142,8 +160,17 @@ public final class WorkspaceModels {
 		long gitlabProjectId,
 		String gitlabProjectPath,
 		String defaultBranch,
-		String timezone
+		String timezone,
+		String repositoryBasePath,
+		String importMode,
+		String expectedTreeFingerprint,
+		String ownerRepositoryFileName
 	) {
+		public CreateWorkspaceRequest(
+			String name, long gitlabProjectId, String gitlabProjectPath, String defaultBranch, String timezone
+		) {
+			this(name, gitlabProjectId, gitlabProjectPath, defaultBranch, timezone, "", "COMPATIBLE", null, null);
+		}
 	}
 
 	public record UpdateWorkspaceRequest(

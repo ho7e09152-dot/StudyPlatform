@@ -1,6 +1,7 @@
 package com.studyworkspace.auth.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
 
@@ -53,5 +54,46 @@ class OAuthAccountPersistenceTests {
 
 		assertThat(ciphertext).doesNotContain("plain-access-token");
 		assertThat(tokenCipher.decrypt(ciphertext)).isEqualTo("plain-access-token");
+	}
+
+	@Test
+	void completedProfileUsesCustomNameAndIsNotOverwrittenByOAuthRefresh() {
+		GitLabOAuthSession first = new GitLabOAuthSession(
+			new GitLabUser(123456789L, "gitlab-id", "GitLab Default", null, null),
+			"access-1", "refresh-1", Instant.now().plusSeconds(3600), "api"
+		);
+		accountService.upsert(first);
+		var profile = accountService.updateProfile(123456789L, new OAuthAccountService.UpdateProfileRequest(
+			"김서연", "서연-학습", "Asia/Seoul", true
+		));
+		assertThat(profile.profileCompleted()).isTrue();
+		assertThat(profile.repositoryFileName()).isEqualTo("서연-학습.md");
+
+		accountService.upsert(new GitLabOAuthSession(
+			new GitLabUser(123456789L, "gitlab-id", "Changed GitLab Name", null, null),
+			"access-2", "refresh-2", Instant.now().plusSeconds(7200), "api"
+		));
+
+		assertThat(accountService.requireProfile(123456789L).name()).isEqualTo("김서연");
+		assertThat(accountService.findOAuthSession(123456789L).orElseThrow().user().name()).isEqualTo("김서연");
+	}
+
+	@Test
+	void persistsValidatedAccountThemePreferences() {
+		long gitLabUserId = 246813579L;
+		accountService.upsert(new GitLabOAuthSession(
+			new GitLabUser(gitLabUserId, "theme-user", "Theme User", null, null),
+			"access", "refresh", Instant.now().plusSeconds(3600), "api"
+		));
+
+		var updated = accountService.updatePreferences(gitLabUserId,
+			new OAuthAccountService.UpdatePreferencesRequest("dark", "teal"));
+
+		assertThat(updated.themeMode()).isEqualTo("DARK");
+		assertThat(updated.accentColor()).isEqualTo("TEAL");
+		assertThat(accountService.requireProfile(gitLabUserId).themeMode()).isEqualTo("DARK");
+		assertThatThrownBy(() -> accountService.updatePreferences(gitLabUserId,
+			new OAuthAccountService.UpdatePreferencesRequest("MIDNIGHT", "TEAL")))
+			.hasMessageContaining("지원하지 않는 테마");
 	}
 }

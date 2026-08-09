@@ -149,3 +149,186 @@ API 목록 응답은 커서 기반 페이지네이션을 사용한다. 메시지
 - 활성 멤버 및 역할별 권한이 백엔드에서 검증된다.
 - 공지 알림이 기존 알림함에 정상적으로 표시된다.
 - 데스크톱과 모바일에서 피드를 사용할 수 있다.
+
+## 업데이트 항목 2 — 기존 GitLab 저장소 가져오기와 안전한 초기화
+
+상태: `P0 완료 · P1/P2 TODO`
+
+### 배경
+
+현재 Workspace 생성 후 저장소를 동기화하지만, 서비스가 인식하는 `YYMMDD/session.yml`과 `YYMMDD/{member-file}.md` 형식만 가져온다. 기존에 GitLab에서 직접 관리하던 Markdown, 코드, 임의 폴더 구조는 삭제하거나 덮어쓰지 않지만 일정과 제출 데이터로도 인식되지 않는다.
+
+빈 프로젝트뿐 아니라 이미 운영 중인 GitLab 프로젝트에도 서비스를 안전하게 도입할 수 있도록 `기존 저장소 가져오기` 온보딩 흐름을 추가한다.
+
+### 핵심 원칙
+
+- 프로젝트를 선택한 직후에는 읽기 전용 분석만 수행한다.
+- 사용자가 최종 확인하기 전에는 GitLab에 파일이나 커밋을 생성하지 않는다.
+- 기존 파일을 자동으로 수정하거나 덮어쓰지 않는다.
+- 가져오기 결과, 무시되는 파일, 충돌 가능 파일과 생성 예정 파일을 커밋 전에 보여준다.
+- 임의 형식의 기존 자료를 불확실하게 자동 변환하지 않는다.
+- 기존 저장소의 HEAD가 분석 시점 이후 변경되면 초기화를 중단하고 다시 분석한다.
+- 초기화가 실패한 Workspace는 일반 사용 화면에 진입시키지 않고 재시도하거나 안전하게 정리할 수 있게 한다.
+
+### 저장소 분석 결과 분류
+
+프로젝트 선택 후 저장소를 다음 상태 중 하나로 분류한다.
+
+1. `EMPTY`
+   - 커밋 또는 파일이 없는 저장소
+   - 새 Workspace 형식으로 바로 시작할 수 있다.
+2. `COMPATIBLE`
+   - 서비스 형식의 `session.yml`과 제출 Markdown이 존재한다.
+   - 기존 데이터 개수와 검증 결과를 보여주고 읽기 전용으로 가져온다.
+3. `LEGACY`
+   - 일반 파일은 존재하지만 서비스 형식 데이터는 없다.
+   - 기존 파일을 유지하면서 전용 경로에서 앞으로의 일정만 관리하거나, 지원 가능한 파일을 선택해 변환한다.
+4. `PARTIALLY_COMPATIBLE`
+   - 정상 파일과 잘못된 서비스 형식 파일이 함께 존재한다.
+   - 정상 데이터, 변환 가능 데이터, 오류 데이터를 나눠 미리 보여준다.
+5. `CONFLICTED`
+   - 서비스가 생성할 경로와 기존 파일이 충돌한다.
+   - 사용자가 경로를 변경하거나 충돌을 해결하기 전에는 초기화하지 않는다.
+
+### 온보딩 UI
+
+GitLab 프로젝트 선택 뒤 `저장소 분석` 단계를 추가한다.
+
+1. 프로젝트와 기본 브랜치 확인
+2. 읽기 전용 저장소 분석
+3. 분석 결과 요약
+   - 기존 파일 수
+   - 인식 가능한 일정과 제출 수
+   - 변환 가능 파일 수
+   - 무시되는 파일 수
+   - 오류와 경로 충돌
+4. 시작 방식 선택
+   - `기존 Workspace 데이터 가져오기`
+   - `기존 자료는 유지하고 앞으로의 일정만 관리하기`
+   - `연결할 프로젝트 다시 선택`
+5. 멤버 파일과 GitLab 사용자 매핑 확인
+6. 생성·변환될 파일과 커밋 메시지 미리보기
+7. 최종 확인 후 Workspace 활성화
+
+기존 자료의 날짜, 마감, 일정 유형, 제출 항목을 확실하게 추론할 수 없는 경우 사용자에게 매핑 입력을 요구한다. 오류가 있는 파일은 경로와 해결 방법을 쉬운 문장으로 표시한다.
+
+### 저장소 격리 구조
+
+기존 프로젝트 파일과 서비스 관리 파일의 충돌을 피하기 위해 Workspace별 `repositoryBasePath`를 지원한다.
+
+```text
+기존 프로젝트 파일/
+src/
+README.md
+docs/
+
+.study-workspace/
+  config.yml
+  260810/
+    session.yml
+    member-a.md
+```
+
+- 신규 또는 기존 일반 저장소의 기본 경로는 `.study-workspace`로 한다.
+- 현재 루트 경로 형식으로 연결된 기존 Workspace는 `repositoryBasePath=""`로 유지해 호환성을 보장한다.
+- 세션, 제출, 저장소 조회, 경로 정책과 동기화 로직이 모두 `repositoryBasePath`를 사용하도록 변경한다.
+- `.study-workspace/config.yml`에는 스키마 버전과 데이터 루트만 저장하고 OAuth 토큰이나 사용자 비밀정보는 저장하지 않는다.
+
+### 데이터 모델
+
+Workspace 연결 정보에 다음 필드를 추가한다.
+
+- `repository_base_path` — 기존 Workspace는 빈 문자열
+- `repository_schema_version`
+- `onboarding_status` — `ANALYZING`, `READY`, `INITIALIZING`, `ACTIVE`, `FAILED`
+- `initial_head_commit_id` — 분석과 초기화 사이 변경 감지
+- `import_mode` — `EMPTY`, `COMPATIBLE`, `LEGACY`, `PARTIAL`
+- `initialized_at` — nullable
+
+분석 결과는 짧은 만료 시간을 둔 별도 import draft로 저장한다.
+
+#### `workspace_import_drafts`
+
+- `id`
+- `user_id`
+- `gitlab_project_id`
+- `default_branch`
+- `head_commit_id`
+- `classification`
+- `repository_base_path`
+- `analysis_json`
+- `expires_at`
+- `created_at`
+
+### 백엔드 API
+
+- `POST /api/v1/gitlab/projects/{projectId}/import-analysis`
+  - 저장소를 변경하지 않고 구조, 호환 파일, 오류와 충돌을 분석한다.
+- `GET /api/v1/workspace-imports/{importId}`
+  - 분석 결과와 만료 여부를 조회한다.
+- `POST /api/v1/workspace-imports/{importId}/preview`
+  - 선택한 모드와 멤버 매핑을 기준으로 생성 예정 파일을 반환한다.
+- `POST /api/v1/workspace-imports/{importId}/initialize`
+  - HEAD를 재검증하고 Workspace 생성 및 초기 커밋을 수행한다.
+- `POST /api/v1/workspace-imports/{importId}/retry`
+  - 실패한 초기화를 동일한 입력으로 안전하게 재시도한다.
+
+분석 API는 OAuth 사용자의 프로젝트 접근 권한을 검증하고 파일 개수, 전체 읽기 크기와 처리 시간을 제한한다. 심볼릭 링크, 비정상 경로, 과도하게 큰 YAML·Markdown과 YAML alias 공격을 차단한다.
+
+### 가져오기 동작
+
+#### 기존 서비스 형식
+
+- GitLab 파일을 원본으로 유지하고 DB에 파싱한 읽기 모델을 저장한다.
+- 가져오기만으로 GitLab 커밋을 생성하지 않는다.
+- 먼저 프로젝트 멤버를 동기화한 뒤 제출 파일과 사용자를 매핑한다.
+- 매핑되지 않은 제출 파일은 버리지 않고 사용자에게 별도 표시한다.
+
+#### 일반 수동 관리 형식
+
+- 기존 파일은 그대로 보존한다.
+- 기본적으로 `.study-workspace` 아래에서 신규 일정부터 관리한다.
+- 자동 감지가 확실한 날짜 폴더와 Markdown만 변환 후보로 제시한다.
+- 변환은 반드시 미리보기와 사용자 확인 후 별도 커밋으로 수행한다.
+- 대량 변환은 기본 브랜치 직접 커밋 대신 별도 브랜치와 Merge Request 생성을 우선한다.
+
+### 단계별 구현
+
+#### P0
+
+- [x] 읽기 전용 저장소 분석 API
+- [x] `EMPTY`, `COMPATIBLE`, `LEGACY`, `PARTIALLY_COMPATIBLE`, `CONFLICTED` 분류
+- [x] 온보딩 분석 결과 및 시작 방식 선택 UI
+- [x] `repositoryBasePath` DB 필드와 전체 GitLab 경로 처리 적용
+- [x] 기존 서비스 형식 데이터의 무커밋 가져오기
+- [x] 프로젝트 멤버 선동기화 후 제출 파일 매핑
+- [x] repository tree fingerprint 기반 동시 변경 검사
+- [x] `.study-workspace/config.yml` 명시적 초기화, 실패 롤백과 idempotent 재시도 처리
+
+#### P1
+
+- 기존 날짜 폴더와 Markdown 변환 후보 자동 감지
+- 날짜, 멤버, 일정, 제출 항목 매핑 UI
+- 생성 파일과 변경 diff 미리보기
+- `.study-workspace` 초기화 커밋
+- 별도 브랜치와 Merge Request 방식 초기화
+- 매핑되지 않은 파일 관리 화면
+
+#### P2
+
+- 저장소별 사용자 정의 import adapter
+- 대규모 저장소 비동기 분석과 진행 상태 표시
+- 가져오기 보고서 다운로드
+- 관리자가 승인하는 조직 단위 일괄 도입
+
+### 완료 조건
+
+- 빈 저장소와 기존 저장소가 온보딩에서 명확히 구분된다.
+- 분석 단계에서는 GitLab 저장소가 변경되지 않는다.
+- 기존 프로젝트 파일이 삭제되거나 덮어써지지 않는다.
+- 호환되는 기존 일정과 제출을 커밋 없이 가져올 수 있다.
+- 일반 저장소는 기존 파일을 유지한 채 전용 경로에서 서비스를 시작할 수 있다.
+- 사용자는 커밋 전에 생성·변환될 파일과 충돌을 확인할 수 있다.
+- 분석 이후 저장소가 변경되면 오래된 결과로 초기화할 수 없다.
+- 기존 루트 경로 Workspace의 동작이 깨지지 않는다.
+- 가져오기 실패 후 중복 Workspace나 중복 커밋 없이 재시도할 수 있다.

@@ -3,11 +3,19 @@ import type {
   GitLabConnection,
   GitLabFileContent,
   GitLabProject,
+  RepositoryImportAnalysis,
 } from "@/lib/api/types/gitlab";
 
 export function getGitLabConnection(projectId: number, signal?: AbortSignal) {
   return apiGet<GitLabConnection>(
     `/api/v1/gitlab/projects/${projectId}/connection-check`,
+    signal,
+  );
+}
+
+export function analyzeGitLabRepository(projectId: number, signal?: AbortSignal) {
+  return apiGet<RepositoryImportAnalysis>(
+    `/api/v1/gitlab/projects/${projectId}/import-analysis`,
     signal,
   );
 }

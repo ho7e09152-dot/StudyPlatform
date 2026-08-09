@@ -45,7 +45,7 @@ public class GitLabWorkspaceMemberService {
 		if (fileNameConflict) {
 			candidate = new StudyMember(
 				candidate.id(), candidate.gitlabUserId(), candidate.username(), candidate.displayName(), candidate.avatar(), candidate.color(),
-				candidate.username().toLowerCase().replaceAll("[^a-z0-9._-]", "-") + "-" + candidate.gitlabUserId() + ".md",
+				uniqueFileName(workspace, candidate.fileName()),
 				candidate.role(), candidate.status(), candidate.accessLevel()
 			);
 		}
@@ -66,12 +66,32 @@ public class GitLabWorkspaceMemberService {
 				));
 			} else {
 				members.add(new StudyMember(
-					current.id(), match.id(), match.username(), displayName(match), avatar(match), current.color(), current.fileName(),
+					current.id(), match.id(), match.username(), current.displayName(), current.avatar(), current.color(), current.fileName(),
 					current.role(), "ACTIVE", match.accessLevel()
 				));
 			}
 		}
 		return workspaces.replaceMembers(workspaceId, members);
+	}
+
+	public WorkspaceState addAllVerified(String accessToken, String workspaceId) {
+		WorkspaceState workspace = workspaces.get(workspaceId);
+		for (GitLabProjectMember remote : gitLab.getAllProjectMembers(accessToken, workspace.gitlabProjectId())) {
+			if (!"active".equalsIgnoreCase(remote.state()) || remote.id() <= 0) continue;
+			WorkspaceState current = workspaces.get(workspaceId);
+			if (current.members().stream().anyMatch(member -> member.gitlabUserId() == remote.id())) continue;
+			StudyMember candidate = mapped(remote, "MEMBER", "ACTIVE");
+			String candidateFileName = candidate.fileName();
+			if (current.members().stream().anyMatch(member -> member.fileName().equalsIgnoreCase(candidateFileName))) {
+				candidate = new StudyMember(
+					candidate.id(), candidate.gitlabUserId(), candidate.username(), candidate.displayName(), candidate.avatar(), candidate.color(),
+					uniqueFileName(current, candidate.fileName()),
+					candidate.role(), candidate.status(), candidate.accessLevel()
+				);
+			}
+			workspaces.addMember(workspaceId, candidate);
+		}
+		return workspaces.get(workspaceId);
 	}
 
 	private static StudyMember mapped(GitLabProjectMember member, String role, String status) {
@@ -88,5 +108,14 @@ public class GitLabWorkspaceMemberService {
 	private static String avatar(GitLabProjectMember member) {
 		String displayName = displayName(member);
 		return displayName.isBlank() ? "?" : displayName.substring(0, 1).toUpperCase();
+	}
+
+	private static String uniqueFileName(WorkspaceState workspace, String requested) {
+		String base = requested.toLowerCase().endsWith(".md") ? requested.substring(0, requested.length() - 3) : requested;
+		for (int suffix = 2; suffix <= 999; suffix++) {
+			String candidate = base + "-" + suffix + ".md";
+			if (workspace.members().stream().noneMatch(member -> member.fileName().equalsIgnoreCase(candidate))) return candidate;
+		}
+		throw new WorkspaceException("MEMBER_FILE_NAME_CONFLICT", "멤버 제출 파일명을 안전하게 만들지 못했습니다.", 409);
 	}
 }

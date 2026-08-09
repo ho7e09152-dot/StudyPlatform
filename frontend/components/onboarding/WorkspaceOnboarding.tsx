@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { CheckCircle2, Gitlab, LoaderCircle, RotateCcw, Search } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Database, FileCheck2, Gitlab, LoaderCircle, RotateCcw, Search } from "lucide-react";
 import { createWorkspace, listDeletedWorkspaces, restoreWorkspace, syncWorkspace, type DeletedWorkspace } from "@/lib/api/services/workspaceApi";
 import {
   getGitLabConnection,
+  analyzeGitLabRepository,
   listGitLabProjects,
 } from "@/lib/api/services/gitlabApi";
-import type { GitLabProject } from "@/lib/api/types/gitlab";
+import type { GitLabProject, RepositoryImportAnalysis } from "@/lib/api/types/gitlab";
 import type { Workspace } from "@/lib/domain/types";
 
 export function WorkspaceOnboarding({
@@ -23,6 +24,7 @@ export function WorkspaceOnboarding({
   const [workspaceName, setWorkspaceName] = useState("");
   const [state, setState] = useState<"loading" | "ready" | "checking" | "saving">("loading");
   const [connectionReady, setConnectionReady] = useState(false);
+  const [analysis, setAnalysis] = useState<RepositoryImportAnalysis | null>(null);
   const [error, setError] = useState("");
   const [deleted, setDeleted] = useState<DeletedWorkspace[]>([]);
 
@@ -41,6 +43,7 @@ export function WorkspaceOnboarding({
       setProjects(loaded);
       setSelectedId(null);
       setConnectionReady(false);
+      setAnalysis(null);
       setState("ready");
     } catch (requestError) {
       if (signal?.aborted) return;
@@ -79,10 +82,15 @@ export function WorkspaceOnboarding({
     setSelectedId(project.id);
     setWorkspaceName(project.name);
     setConnectionReady(false);
+    setAnalysis(null);
     setError("");
     setState("checking");
     try {
-      await getGitLabConnection(project.id);
+      const [, repositoryAnalysis] = await Promise.all([
+        getGitLabConnection(project.id),
+        analyzeGitLabRepository(project.id),
+      ]);
+      setAnalysis(repositoryAnalysis);
       setConnectionReady(true);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : "프로젝트 연결을 확인하지 못했습니다.");
@@ -93,7 +101,7 @@ export function WorkspaceOnboarding({
 
   async function handleCreate(event: FormEvent) {
     event.preventDefault();
-    if (!selected || !connectionReady || !workspaceName.trim()) return;
+    if (!selected || !connectionReady || !analysis || analysis.classification === "CONFLICTED" || !workspaceName.trim()) return;
     setState("saving");
     setError("");
     try {
@@ -103,6 +111,9 @@ export function WorkspaceOnboarding({
         gitlabProjectPath: selected.pathWithNamespace,
         defaultBranch: selected.defaultBranch ?? "main",
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Seoul",
+        repositoryBasePath: analysis.repositoryBasePath,
+        importMode: analysis.classification,
+        expectedTreeFingerprint: analysis.treeFingerprint,
       });
       try {
         const initialSync = await syncWorkspace(workspace.id);
@@ -170,8 +181,15 @@ export function WorkspaceOnboarding({
                 <small>{selected.defaultBranch ? `기본 브랜치: ${selected.defaultBranch}` : "빈 저장소 · 첫 기본 브랜치는 main으로 설정됩니다."}</small>
               </span>
             </div>
-            <button className="button" type="submit" disabled={!connectionReady || !workspaceName.trim() || state === "saving"}>
-              {state === "saving" ? "Workspace 생성·초기 동기화 중…" : "이 프로젝트로 Workspace 만들기"}
+
+            {analysis ? <RepositoryAnalysisCard analysis={analysis} /> : null}
+
+            <button className="button" type="submit" disabled={!connectionReady || !analysis || analysis.classification === "CONFLICTED" || !workspaceName.trim() || state === "saving"}>
+              {state === "saving"
+                ? "Workspace 생성·초기 동기화 중…"
+                : analysis?.classification === "COMPATIBLE" || analysis?.classification === "PARTIALLY_COMPATIBLE"
+                  ? "기존 데이터 가져와서 시작하기"
+                  : "기존 파일 유지하고 시작하기"}
             </button>
           </form>
         ) : null}
@@ -193,5 +211,32 @@ export function WorkspaceOnboarding({
         ) : null}
       </section>
     </main>
+  );
+}
+
+function RepositoryAnalysisCard({ analysis }: { analysis: RepositoryImportAnalysis }) {
+  const compatible = analysis.classification === "COMPATIBLE" || analysis.classification === "PARTIALLY_COMPATIBLE";
+  const conflicted = analysis.classification === "CONFLICTED";
+  return (
+    <section className={`repository-analysis ${conflicted ? "is-conflicted" : ""}`} aria-label="저장소 분석 결과">
+      <header>
+        <span>{conflicted ? <AlertTriangle size={18} /> : compatible ? <FileCheck2 size={18} /> : <Database size={18} />}</span>
+        <div>
+          <strong>{conflicted ? "전용 경로 충돌을 해결해야 합니다" : compatible ? "기존 학습 데이터를 찾았습니다" : analysis.classification === "EMPTY" ? "빈 저장소에서 새로 시작합니다" : "기존 파일을 그대로 유지합니다"}</strong>
+          <small>{analysis.repositoryBasePath ? `${analysis.repositoryBasePath}/ 아래에서만 학습 데이터를 관리합니다.` : "현재 루트의 서비스 형식을 그대로 가져옵니다."}</small>
+        </div>
+      </header>
+      <dl>
+        <div><dt>전체 파일</dt><dd>{analysis.totalFiles}</dd></div>
+        <div><dt>일정</dt><dd>{analysis.compatibleSessions}</dd></div>
+        <div><dt>제출</dt><dd>{analysis.compatibleSubmissions}</dd></div>
+        <div><dt>유지되는 기타 파일</dt><dd>{analysis.ignoredFiles}</dd></div>
+      </dl>
+      {analysis.issues.length ? (
+        <div className="repository-analysis__issues">
+          {analysis.issues.slice(0, 4).map((issue) => <span key={`${issue.path}-${issue.code}`}><code>{issue.path}</code>{issue.message}</span>)}
+        </div>
+      ) : null}
+    </section>
   );
 }

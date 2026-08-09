@@ -30,6 +30,7 @@ public class GitLabOAuthTokenProvider {
 		if (oauth.expiresWithinSeconds(60)) {
 			oauth = oauthService.refresh(oauth);
 			accountService.upsert(oauth);
+			oauth = accountService.findOAuthSession(user.id()).orElse(oauth);
 			session.setAttribute(AuthSessionAttributes.GITLAB_USER, oauth.user());
 		}
 		return oauth;

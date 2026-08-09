@@ -4,6 +4,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Instant;
 import java.util.Map;
+import java.util.LinkedHashMap;
 
 import com.studyworkspace.auth.config.GitLabOAuthProperties;
 import com.studyworkspace.auth.dto.GitLabOAuthSession;
@@ -22,6 +23,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -64,8 +68,35 @@ public class AuthController {
 		return ResponseEntity.ok(Map.of(
 			"authenticated", true,
 			"mode", "gitlab-oauth",
-			"user", oauth.user()
+			"user", profileResponse(accountService.requireProfile(oauth.user().id()))
 		));
+	}
+
+	@PutMapping("/profile")
+	public Map<String, Object> updateProfile(
+		@RequestBody OAuthAccountService.UpdateProfileRequest profileRequest,
+		HttpServletRequest request
+	) {
+		GitLabUser current = getGitLabUser(request);
+		if (current == null) throw new WorkspaceException("AUTH_REQUIRED", "GitLab 로그인이 필요합니다.", 401);
+		OAuthAccountService.AccountProfile profile = accountService.updateProfile(current.id(), profileRequest);
+		GitLabUser updatedUser = new GitLabUser(
+			profile.id(), profile.username(), profile.name(), profile.avatarUrl(), profile.webUrl()
+		);
+		HttpSession session = request.getSession(false);
+		if (session != null) session.setAttribute(AuthSessionAttributes.GITLAB_USER, updatedUser);
+		workspaceService.updateUserProfile(profile.id(), profile.name(), profile.repositoryFileName());
+		return profileResponse(profile);
+	}
+
+	@PatchMapping("/preferences")
+	public Map<String, Object> updatePreferences(
+		@RequestBody OAuthAccountService.UpdatePreferencesRequest preferencesRequest,
+		HttpServletRequest request
+	) {
+		GitLabUser current = getGitLabUser(request);
+		if (current == null) throw new WorkspaceException("AUTH_REQUIRED", "GitLab 로그인이 필요합니다.", 401);
+		return profileResponse(accountService.updatePreferences(current.id(), preferencesRequest));
 	}
 
 	@GetMapping("/gitlab/login")
@@ -197,5 +228,22 @@ public class AuthController {
 
 	private static ResponseEntity<Void> redirect(String location) {
 		return ResponseEntity.status(HttpStatus.FOUND).header(HttpHeaders.LOCATION, location).build();
+	}
+
+	private static Map<String, Object> profileResponse(OAuthAccountService.AccountProfile profile) {
+		Map<String, Object> response = new LinkedHashMap<>();
+		response.put("id", profile.id());
+		response.put("username", profile.username());
+		response.put("name", profile.name());
+		response.put("avatarUrl", profile.avatarUrl());
+		response.put("webUrl", profile.webUrl());
+		response.put("profileCompleted", profile.profileCompleted());
+		response.put("repositoryFileName", profile.repositoryFileName());
+		response.put("timezone", profile.timezone());
+		response.put("termsVersion", profile.termsVersion());
+		response.put("termsAcceptedAt", profile.termsAcceptedAt());
+		response.put("themeMode", profile.themeMode());
+		response.put("accentColor", profile.accentColor());
+		return response;
 	}
 }

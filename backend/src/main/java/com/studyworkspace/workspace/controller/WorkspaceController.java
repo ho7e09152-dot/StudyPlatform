@@ -15,6 +15,7 @@ import com.studyworkspace.gitlab.dto.GitLabProject;
 import com.studyworkspace.gitlab.service.GitLabOAuthProjectService;
 import com.studyworkspace.auth.dto.GitLabOAuthSession;
 import com.studyworkspace.auth.service.GitLabOAuthTokenProvider;
+import com.studyworkspace.auth.service.OAuthAccountService;
 import com.studyworkspace.workspace.domain.WorkspaceException;
 import com.studyworkspace.workspace.service.GitLabSessionFileService;
 import com.studyworkspace.workspace.service.GitLabSessionSyncService;
@@ -29,6 +30,9 @@ import com.studyworkspace.workspace.service.AuditEventService;
 import com.studyworkspace.workspace.service.InAppNotificationService;
 import com.studyworkspace.common.exception.GitLabApiException;
 import com.studyworkspace.workspace.dto.WorkspaceSyncResponse;
+import com.studyworkspace.workspace.dto.RepositoryImportAnalysis;
+import com.studyworkspace.workspace.service.RepositoryImportAnalysisService;
+import com.studyworkspace.workspace.service.RepositoryInitializationService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -62,6 +66,9 @@ public class WorkspaceController {
 	private final SyncJobService syncJobService;
 	private final AuditEventService auditEventService;
 	private final InAppNotificationService notificationService;
+	private final RepositoryImportAnalysisService importAnalysisService;
+	private final OAuthAccountService accountService;
+	private final RepositoryInitializationService repositoryInitializationService;
 
 	public WorkspaceController(
 		WorkspaceService service,
@@ -76,7 +83,10 @@ public class WorkspaceController {
 		WorkspaceAccessService accessService,
 		SyncJobService syncJobService,
 		AuditEventService auditEventService,
-		InAppNotificationService notificationService
+		InAppNotificationService notificationService,
+		RepositoryImportAnalysisService importAnalysisService,
+		OAuthAccountService accountService,
+		RepositoryInitializationService repositoryInitializationService
 	) {
 		this.service = service;
 		this.tokenProvider = tokenProvider;
@@ -91,6 +101,9 @@ public class WorkspaceController {
 		this.syncJobService = syncJobService;
 		this.auditEventService = auditEventService;
 		this.notificationService = notificationService;
+		this.importAnalysisService = importAnalysisService;
+		this.accountService = accountService;
+		this.repositoryInitializationService = repositoryInitializationService;
 	}
 
 	@GetMapping
@@ -115,14 +128,37 @@ public class WorkspaceController {
 		}
 		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
 		GitLabProject project = projectService.getProject(oauth.accessToken(), request.gitlabProjectId());
+		OAuthAccountService.AccountProfile profile = accountService.requireProfile(oauth.user().id());
+		if (!profile.profileCompleted()) {
+			throw new WorkspaceException("PROFILE_REQUIRED", "Workspace를 만들기 전에 프로필을 설정해 주세요.", 409);
+		}
+		RepositoryImportAnalysis analysis = importAnalysisService.analyze(oauth.accessToken(), project.id());
+		if (!StringUtils.hasText(request.expectedTreeFingerprint())
+			|| !request.expectedTreeFingerprint().equals(analysis.treeFingerprint())) {
+			throw new WorkspaceException("REPOSITORY_CHANGED", "저장소가 분석 이후 변경되었습니다. 다시 분석해 주세요.", 409);
+		}
+		if ("CONFLICTED".equals(analysis.classification())) {
+			throw new WorkspaceException("REPOSITORY_PATH_CONFLICT", "서비스 전용 저장 경로가 기존 파일과 충돌합니다.", 409);
+		}
 		CreateWorkspaceRequest verified = new CreateWorkspaceRequest(
 			request.name(),
 			project.id(),
 			project.pathWithNamespace(),
 			StringUtils.hasText(project.defaultBranch()) ? project.defaultBranch() : "main",
-			request.timezone()
+			profile.timezone(),
+			analysis.repositoryBasePath(),
+			analysis.classification(),
+			analysis.treeFingerprint(),
+			profile.repositoryFileName()
 		);
-		WorkspaceState created = service.create(verified, user);
+		WorkspaceState created = service.create(verified, oauth.user());
+		try {
+			created = memberService.addAllVerified(oauth.accessToken(), created.id());
+			repositoryInitializationService.initialize(oauth.accessToken(), created, profile.name());
+		} catch (RuntimeException exception) {
+			service.rollbackCreate(created.id());
+			throw exception;
+		}
 		auditEventService.record(created.id(), user, "WORKSPACE_CREATED", "WORKSPACE", created.id(), Map.of("projectPath", created.gitlabProjectPath()));
 		return created;
 	}
@@ -310,7 +346,7 @@ public class WorkspaceController {
 			workspaceId,
 			null,
 			draft,
-			user.username(),
+			oauth.user().name(),
 			(workspace, current, next) -> sessionFileService.write(oauth.accessToken(), workspace, current, next)
 		);
 		auditEventService.record(workspaceId, user, "SESSION_CREATED", "SESSION", draft.date(), Map.of("revision", updated.sessions().get(draft.date()).revision()));
@@ -337,7 +373,7 @@ public class WorkspaceController {
 			workspaceId,
 			date,
 			draft,
-			user.username(),
+			oauth.user().name(),
 			(workspace, current, next) -> sessionFileService.write(oauth.accessToken(), workspace, current, next)
 		);
 		auditEventService.record(workspaceId, user, "SESSION_UPDATED", "SESSION", date, Map.of("revision", updated.sessions().get(date).revision()));
@@ -357,7 +393,7 @@ public class WorkspaceController {
 			workspaceId,
 			date,
 			expectedRevision,
-			user.username(),
+			oauth.user().name(),
 			(workspace, current, next) -> sessionFileService.write(oauth.accessToken(), workspace, current, next)
 		);
 		auditEventService.record(workspaceId, user, "SESSION_CANCELLED", "SESSION", date, Map.of("revision", updated.sessions().get(date).revision()));
@@ -475,11 +511,12 @@ public class WorkspaceController {
 		WorkspaceState workspace = service.get(workspaceId);
 		List<Map<String, Object>> tree = new ArrayList<>();
 		workspace.sessions().values().stream().sorted(Comparator.comparing(StudySession::folder)).forEach(session -> {
-			tree.add(treeItem(session.folder(), session.folder(), "tree"));
-			tree.add(treeItem(session.folder() + "/session.yml", "session.yml", "blob"));
+			String folderPath = com.studyworkspace.workspace.service.WorkspaceRepositoryPath.join(workspace.repositoryBasePath(), session.folder());
+			tree.add(treeItem(folderPath, session.folder(), "tree"));
+			tree.add(treeItem(folderPath + "/session.yml", "session.yml", "blob"));
 			workspace.members().forEach(member -> {
 				if (workspace.submissions().containsKey(session.folder() + "/" + member.id())) {
-					tree.add(treeItem(session.folder() + "/" + member.fileName(), member.fileName(), "blob"));
+					tree.add(treeItem(folderPath + "/" + member.fileName(), member.fileName(), "blob"));
 				}
 			});
 		});
@@ -489,10 +526,11 @@ public class WorkspaceController {
 	@GetMapping("/{workspaceId}/repository/file")
 	public Map<String, Object> repositoryFile(@PathVariable String workspaceId, @RequestParam String path) {
 		WorkspaceState workspace = service.get(workspaceId);
-		if (path == null || path.contains("..") || path.startsWith("/") || !path.matches("[0-9]{6}/[A-Za-z0-9._-]+")) {
+		String relativePath = com.studyworkspace.workspace.service.WorkspaceRepositoryPath.relative(workspace.repositoryBasePath(), path);
+		if (relativePath == null || relativePath.contains("..") || !relativePath.matches("[0-9]{6}/[\\p{L}\\p{N}._-]+")) {
 			throw new WorkspaceException("FILE_PATH_NOT_ALLOWED", "허용되지 않은 저장소 경로입니다.", 400);
 		}
-		String[] parts = path.split("/", 2);
+		String[] parts = relativePath.split("/", 2);
 		StudySession session = workspace.sessions().values().stream().filter(candidate -> candidate.folder().equals(parts[0])).findFirst()
 			.orElseThrow(() -> new WorkspaceException("FILE_NOT_FOUND", "파일을 찾을 수 없습니다.", 404));
 		String content;

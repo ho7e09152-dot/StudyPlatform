@@ -26,7 +26,7 @@ class GitLabSubmissionFileServiceTests {
 
 	@Test
 	void createsAUserMappedMarkdownFile() {
-		when(gitLab.createRepositoryFile(anyString(), anyLong(), anyString(), anyString(), anyString(), anyString()))
+		when(gitLab.createRepositoryFile(anyString(), anyLong(), anyString(), anyString(), anyString(), anyString(), anyString()))
 			.thenReturn(file("new-sha"));
 
 		String sha = service.write(
@@ -37,7 +37,7 @@ class GitLabSubmissionFileServiceTests {
 		assertThat(sha).isEqualTo("new-sha");
 		verify(gitLab).createRepositoryFile(
 			eq("token"), eq(42L), eq("260809/owner.md"), eq("main"),
-			contains("memberId: \"member-7\""), eq("submit: code")
+			contains("memberId: \"member-7\""), eq("submit: code"), eq("Owner")
 		);
 	}
 

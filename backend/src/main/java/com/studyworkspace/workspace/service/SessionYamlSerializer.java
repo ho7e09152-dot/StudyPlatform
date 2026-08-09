@@ -51,7 +51,8 @@ public class SessionYamlSerializer {
 		for (SessionItem item : items) {
 			yaml.append("  - id: ").append(quoted(item.id())).append('\n')
 				.append("    order: ").append(item.order()).append('\n')
-				.append("    title: ").append(quoted(item.title())).append('\n');
+				.append("    title: ").append(quoted(item.title())).append('\n')
+				.append("    type: ").append(quoted(item.type())).append('\n');
 			appendOptional(yaml, "source", item.source());
 			appendOptional(yaml, "url", item.url());
 			yaml.append("    submitType: ").append(quoted(item.submitType())).append('\n')

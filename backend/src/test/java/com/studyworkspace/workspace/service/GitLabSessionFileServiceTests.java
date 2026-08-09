@@ -28,7 +28,7 @@ class GitLabSessionFileServiceTests {
 	@Test
 	void createsTheFirstSessionFileAndReturnsTheRealCommitSha() {
 		StudySession next = session(1, null, "active");
-		when(gitLab.createRepositoryFile(anyString(), eq(42L), eq("260809/session.yml"), eq("main"), anyString(), anyString()))
+		when(gitLab.createRepositoryFile(anyString(), eq(42L), eq("260809/session.yml"), eq("main"), anyString(), anyString(), anyString()))
 			.thenReturn(file("new-sha"));
 
 		String commitId = service.write("oauth-token", workspace(), null, next);
@@ -36,7 +36,7 @@ class GitLabSessionFileServiceTests {
 		assertThat(commitId).isEqualTo("new-sha");
 		verify(gitLab).createRepositoryFile(
 			eq("oauth-token"), eq(42L), eq("260809/session.yml"), eq("main"),
-			contains("title: \"OAuth session\""), eq("study: create session 2026-08-09")
+			contains("title: \"OAuth session\""), eq("study: create session 2026-08-09"), eq("lhc0688")
 		);
 	}
 
@@ -59,7 +59,7 @@ class GitLabSessionFileServiceTests {
 		StudySession next = session(2, null, "cancelled");
 		when(gitLab.getRepositoryFile("oauth-token", 42L, "260809/session.yml", "main"))
 			.thenReturn(file("known-sha"));
-		when(gitLab.updateRepositoryFile(anyString(), anyLong(), anyString(), anyString(), anyString(), anyString(), anyString()))
+		when(gitLab.updateRepositoryFile(anyString(), anyLong(), anyString(), anyString(), anyString(), anyString(), anyString(), anyString()))
 			.thenReturn(file("cancel-sha"));
 
 		String commitId = service.write("oauth-token", workspace(), current, next);
@@ -67,7 +67,7 @@ class GitLabSessionFileServiceTests {
 		assertThat(commitId).isEqualTo("cancel-sha");
 		verify(gitLab).updateRepositoryFile(
 			eq("oauth-token"), eq(42L), eq("260809/session.yml"), eq("main"),
-			contains("status: \"cancelled\""), eq("study: cancel session 2026-08-09"), eq("known-sha")
+			contains("status: \"cancelled\""), eq("study: cancel session 2026-08-09"), eq("known-sha"), eq("lhc0688")
 		);
 	}
 

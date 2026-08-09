@@ -4,7 +4,7 @@ import { ExternalLink } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Modal } from "@/components/ui/Modal";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { formatDateTime } from "@/lib/domain/format";
+import { formatDateTime, getWorkspaceRepositoryPath } from "@/lib/domain/format";
 import { getSubmissionKey } from "@/lib/domain/metrics";
 import type { StudyMember, StudySession, Workspace } from "@/lib/domain/types";
 
@@ -31,7 +31,7 @@ export function MemberDetailDialog({
   return (
     <Modal
       title={`${member.displayName}의 제출`}
-      description={`${session.folder}/${member.fileName} · 읽기 전용`}
+      description={`${getWorkspaceRepositoryPath(workspace.repositoryBasePath, `${session.folder}/${member.fileName}`)} · 읽기 전용`}
       onClose={onClose}
     >
       <div className="member-dialog-summary">

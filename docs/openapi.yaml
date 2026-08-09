@@ -151,6 +151,50 @@ paths:
         "204":
           description: 로그아웃 완료
 
+  /auth/profile:
+    put:
+      tags: [Auth]
+      summary: 가입 프로필 저장 또는 수정
+      operationId: updateAccountProfile
+      x-implementation-status: implemented
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAccountProfileRequest"
+      responses:
+        "200":
+          description: 저장된 서비스 프로필
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthenticatedGitLabUser"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+
+  /auth/preferences:
+    patch:
+      tags: [Auth]
+      summary: 개인 화면 테마 설정 저장
+      operationId: updateAccountPreferences
+      x-implementation-status: implemented
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateAccountPreferencesRequest"
+      responses:
+        "200":
+          description: 변경된 사용자 프로필과 테마 설정
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthenticatedGitLabUser"
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
+
   /auth/account:
     delete:
       tags: [Auth]
@@ -270,6 +314,26 @@ paths:
           $ref: "#/components/responses/GitLabAccessDenied"
         "502":
           $ref: "#/components/responses/GitLabError"
+
+  /gitlab/projects/{projectId}/import-analysis:
+    get:
+      tags: [GitLab Projects]
+      summary: 기존 저장소를 변경하지 않고 가져오기 가능 여부 분석
+      operationId: analyzeGitLabRepository
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+      responses:
+        "200":
+          description: 저장소 분류, 호환 파일 수, 전용 경로 충돌과 tree fingerprint
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepositoryImportAnalysis"
+        "403":
+          $ref: "#/components/responses/GitLabAccessDenied"
+        "413":
+          $ref: "#/components/responses/InvalidRequest"
 
   /gitlab/connection:
     get:
@@ -1282,7 +1346,7 @@ components:
           const: false
     AuthenticatedGitLabUser:
       type: object
-      required: [id, username, name]
+      required: [id, username, name, profileCompleted, timezone, themeMode, accentColor]
       properties:
         id:
           type: integer
@@ -1297,6 +1361,73 @@ components:
         webUrl:
           type: [string, "null"]
           format: uri
+        profileCompleted:
+          type: boolean
+        repositoryFileName:
+          type: [string, "null"]
+        timezone:
+          type: string
+        termsVersion:
+          type: [string, "null"]
+        termsAcceptedAt:
+          type: [string, "null"]
+          format: date-time
+        themeMode:
+          type: string
+          enum: [LIGHT, DARK]
+        accentColor:
+          type: string
+          enum: [PURPLE, BLUE, TEAL, ORANGE, ROSE]
+    UpdateAccountProfileRequest:
+      type: object
+      required: [displayName, repositoryFileName, timezone, acceptTerms]
+      properties:
+        displayName:
+          type: string
+          minLength: 2
+          maxLength: 40
+        repositoryFileName:
+          type: string
+          maxLength: 80
+        timezone:
+          type: string
+        acceptTerms:
+          const: true
+    UpdateAccountPreferencesRequest:
+      type: object
+      required: [themeMode, accentColor]
+      properties:
+        themeMode:
+          type: string
+          enum: [LIGHT, DARK]
+        accentColor:
+          type: string
+          enum: [PURPLE, BLUE, TEAL, ORANGE, ROSE]
+
+    RepositoryImportAnalysis:
+      type: object
+      required: [projectId, classification, repositoryBasePath, treeFingerprint, totalFiles, compatibleSessions, compatibleSubmissions, ignoredFiles, issues]
+      properties:
+        projectId: { type: integer, format: int64 }
+        projectPath: { type: string }
+        defaultBranch: { type: string }
+        classification:
+          type: string
+          enum: [EMPTY, COMPATIBLE, LEGACY, PARTIALLY_COMPATIBLE, CONFLICTED]
+        repositoryBasePath: { type: string }
+        treeFingerprint: { type: string, minLength: 64, maxLength: 64 }
+        totalFiles: { type: integer, minimum: 0 }
+        compatibleSessions: { type: integer, minimum: 0 }
+        compatibleSubmissions: { type: integer, minimum: 0 }
+        ignoredFiles: { type: integer, minimum: 0 }
+        issues:
+          type: array
+          items:
+            type: object
+            properties:
+              path: { type: string }
+              code: { type: string }
+              message: { type: string }
 
     GitLabProject:
       type: object
@@ -1374,6 +1505,13 @@ components:
           type: string
         defaultBranch:
           type: string
+        repositoryBasePath:
+          type: string
+        repositorySchemaVersion:
+          type: integer
+        importMode:
+          type: string
+          enum: [EMPTY, COMPATIBLE, LEGACY, PARTIALLY_COMPATIBLE]
         deletedAt:
           type: [string, "null"]
           format: date-time
@@ -1413,7 +1551,7 @@ components:
     CreateWorkspaceRequest:
       type: object
       required:
-        [name, gitlabProjectId, defaultBranch, selectedGitlabUserIds]
+        [name, gitlabProjectId, repositoryBasePath, importMode, expectedTreeFingerprint]
       properties:
         name:
           type: string
@@ -1422,19 +1560,16 @@ components:
         gitlabProjectId:
           type: integer
           format: int64
-        defaultBranch:
+        repositoryBasePath:
           type: string
-          minLength: 1
-        selectedGitlabUserIds:
-          type: array
-          minItems: 1
-          uniqueItems: true
-          items:
-            type: integer
-            format: int64
-        initializeRepository:
-          type: boolean
-          default: true
+          enum: ["", ".study-workspace"]
+        importMode:
+          type: string
+          enum: [EMPTY, COMPATIBLE, LEGACY, PARTIALLY_COMPATIBLE]
+        expectedTreeFingerprint:
+          type: string
+          minLength: 64
+          maxLength: 64
     UpdateWorkspaceRequest:
       type: object
       minProperties: 1
@@ -1575,7 +1710,7 @@ components:
       enum: [link, text, code, mixed]
     StudyItem:
       type: object
-      required: [id, order, title, submitType, required, status]
+      required: [id, order, title, type, submitType, required, status]
       properties:
         id:
           type: string
@@ -1585,6 +1720,8 @@ components:
           minimum: 1
         title:
           type: string
+        type:
+          $ref: "#/components/schemas/SessionType"
         source:
           type: [string, "null"]
         url:
@@ -1639,7 +1776,7 @@ components:
           $ref: "#/components/schemas/StudySession"
     SessionItemDraft:
       type: object
-      required: [title, submitType, required]
+      required: [title, type, submitType, required]
       properties:
         id:
           type: string
@@ -1648,6 +1785,8 @@ components:
           type: string
           minLength: 1
           maxLength: 120
+        type:
+          $ref: "#/components/schemas/SessionType"
         source:
           type: string
           maxLength: 80

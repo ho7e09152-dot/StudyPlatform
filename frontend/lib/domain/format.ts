@@ -55,3 +55,6 @@ export function newStableItemId() {
 export function percent(value: number) {
   return `${Math.round(value)}%`;
 }
+export function getWorkspaceRepositoryPath(basePath: string | undefined, relativePath: string) {
+  return basePath ? `${basePath.replace(/\/+$/, "")}/${relativePath}` : relativePath;
+}

@@ -103,6 +103,9 @@ export interface CreateWorkspaceInput {
   gitlabProjectPath: string;
   defaultBranch: string;
   timezone: string;
+  repositoryBasePath: string;
+  importMode: string;
+  expectedTreeFingerprint: string;
 }
 
 export interface WorkspaceSyncResult {

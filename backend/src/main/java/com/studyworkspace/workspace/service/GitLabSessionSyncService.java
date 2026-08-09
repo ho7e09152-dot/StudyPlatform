@@ -24,7 +24,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class GitLabSessionSyncService {
 	private static final Pattern SESSION_PATH = Pattern.compile("^(\\d{6})/session\\.yml$");
-	private static final Pattern SUBMISSION_PATH = Pattern.compile("^(\\d{6})/([A-Za-z0-9._-]+\\.md)$");
+	private static final Pattern SUBMISSION_PATH = Pattern.compile("^(\\d{6})/([^/]+\\.md)$");
 
 	private final GitLabOAuthProjectService gitLab;
 	private final SessionYamlParser parser;
@@ -54,14 +54,15 @@ public class GitLabSessionSyncService {
 		int validSessionCount = 0;
 
 		for (GitLabTreeItem item : tree) {
-			Matcher matcher = SESSION_PATH.matcher(item.path() == null ? "" : item.path());
+			String relativePath = WorkspaceRepositoryPath.relative(current.repositoryBasePath(), item.path());
+			Matcher matcher = SESSION_PATH.matcher(relativePath == null ? "" : relativePath);
 			if (!"blob".equals(item.type()) || !matcher.matches()) continue;
 			String date = folderDate(matcher.group(1));
 			try {
 				GitLabFileContent file = gitLab.getRepositoryFile(
 					accessToken, current.gitlabProjectId(), item.path(), current.defaultBranch()
 				);
-				StudySession session = parser.parse(item.path(), file.content(), file.lastCommitId());
+				StudySession session = parser.parse(relativePath, file.content(), file.lastCommitId());
 				imported.put(session.date(), session);
 				validSessionCount++;
 			} catch (WorkspaceException exception) {
@@ -86,7 +87,8 @@ public class GitLabSessionSyncService {
 		Set<String> failedSubmissionKeys = new java.util.HashSet<>();
 		int validSubmissionCount = 0;
 		for (GitLabTreeItem item : tree) {
-			Matcher matcher = SUBMISSION_PATH.matcher(item.path() == null ? "" : item.path());
+			String relativePath = WorkspaceRepositoryPath.relative(current.repositoryBasePath(), item.path());
+			Matcher matcher = SUBMISSION_PATH.matcher(relativePath == null ? "" : relativePath);
 			if (!"blob".equals(item.type()) || !matcher.matches()) continue;
 			StudyMember member = memberByFileName(current, matcher.group(2));
 			if (member == null) continue;
@@ -136,7 +138,8 @@ public class GitLabSessionSyncService {
 	}
 
 	private static void validateSubmissionFile(MemberSubmissionFile file, StudySession session, StudyMember member) {
-		if (!member.id().equals(file.memberId()) || member.gitlabUserId() != file.gitlabUserId() || !member.username().equals(file.username())) {
+		if (!member.id().equals(file.memberId()) || member.gitlabUserId() != file.gitlabUserId()
+			|| (!member.displayName().equals(file.username()) && !member.username().equals(file.username()))) {
 			throw invalidSubmission("제출 파일의 멤버 정보가 Workspace 매핑과 다릅니다.");
 		}
 		if (!session.folder().equals(file.date()) || !session.type().equals(file.sessionType())) {

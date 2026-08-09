@@ -16,7 +16,7 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SubmissionDialog } from "@/components/today/SubmissionDialog";
 import { SessionEditorDialog } from "./SessionEditorDialog";
 import { SESSION_TYPE_META } from "@/lib/domain/constants";
-import { formatDate, formatTime } from "@/lib/domain/format";
+import { formatDate, formatTime, getWorkspaceRepositoryPath } from "@/lib/domain/format";
 import { getDashboardMetrics } from "@/lib/domain/metrics";
 import type { SessionType, StudySession } from "@/lib/domain/types";
 
@@ -38,7 +38,9 @@ export function ScheduleWorkspace() {
     () =>
       Object.values(workspace.sessions)
         .filter(
-          (session) => filter === "all" || session.type === filter,
+          (session) =>
+            filter === "all" ||
+            session.items.some((item) => (item.type ?? session.type) === filter),
         )
         .filter((session) => {
           if (statusFilter === "all") return true;
@@ -125,7 +127,9 @@ export function ScheduleWorkspace() {
 
       <section className="schedule-grid" aria-label="학습 일정 목록">
         {sessions.map((session) => {
-          const meta = SESSION_TYPE_META[session.type];
+          const sessionTypes = Array.from(
+            new Set(session.items.map((item) => item.type ?? session.type)),
+          );
           const metrics = getDashboardMetrics(workspace, session);
           return (
             <article
@@ -141,7 +145,12 @@ export function ScheduleWorkspace() {
                   <span>{formatDate(session.date, true)}</span>
                   {session.date === referenceDate ? <em>오늘</em> : null}
                 </div>
-                <span className={`type-chip type-chip--${meta.tone}`}>{meta.short}</span>
+                <span className="schedule-card__types" aria-label="학습 유형">
+                  {sessionTypes.map((type) => {
+                    const meta = SESSION_TYPE_META[type];
+                    return <span key={type} className={`type-chip type-chip--${meta.tone}`}>{meta.short}</span>;
+                  })}
+                </span>
               </header>
               <div className="schedule-card__body">
                 <h2>{session.title}</h2>
@@ -168,7 +177,7 @@ export function ScheduleWorkspace() {
                 <ProgressBar value={metrics.submissionRate} />
               </div>
               <footer>
-                <code>{session.folder}/session.yml</code>
+                <code>{getWorkspaceRepositoryPath(workspace.repositoryBasePath, `${session.folder}/session.yml`)}</code>
                 <div className="schedule-card__actions">
                   <button
                     type="button"

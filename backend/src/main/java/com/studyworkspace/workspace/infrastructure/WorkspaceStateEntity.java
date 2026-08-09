@@ -29,6 +29,15 @@ public class WorkspaceStateEntity {
 	@Column(name = "default_branch", nullable = false)
 	private String defaultBranch;
 
+	@Column(name = "repository_base_path", nullable = false, length = 255)
+	private String repositoryBasePath;
+
+	@Column(name = "repository_schema_version", nullable = false)
+	private int repositorySchemaVersion;
+
+	@Column(name = "import_mode", nullable = false, length = 32)
+	private String importMode;
+
 	@Column(nullable = false, length = 100)
 	private String timezone;
 
@@ -69,6 +78,9 @@ public class WorkspaceStateEntity {
 			entity.gitLabProjectId = state.gitlabProjectId();
 			entity.gitLabProjectPath = state.gitlabProjectPath();
 			entity.defaultBranch = state.defaultBranch();
+			entity.repositoryBasePath = state.repositoryBasePath() == null ? "" : state.repositoryBasePath();
+			entity.repositorySchemaVersion = state.repositorySchemaVersion() == null || state.repositorySchemaVersion() < 1 ? 1 : state.repositorySchemaVersion();
+			entity.importMode = state.importMode() == null ? "COMPATIBLE" : state.importMode();
 			entity.timezone = state.settings().timezone();
 			entity.status = state.status();
 			entity.createdAt = previous == null ? now : previous.createdAt;

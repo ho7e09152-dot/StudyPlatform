@@ -20,7 +20,7 @@ import {
   SESSION_TYPE_META,
   SUBMISSION_TYPE_LABEL,
 } from "@/lib/domain/constants";
-import { formatDate, formatDateTime, formatTime } from "@/lib/domain/format";
+import { formatDate, formatDateTime, formatTime, getWorkspaceRepositoryPath } from "@/lib/domain/format";
 import { getSubmissionKey } from "@/lib/domain/metrics";
 import type {
   StudySession,
@@ -147,7 +147,7 @@ export function SessionDetailDialog({
               {session.secondaryDeadline ? (
                 <span><Clock3 size={14} /> 2차 {formatTime(session.secondaryDeadline)}</span>
               ) : null}
-              <span><FileCode2 size={14} /> {session.folder}/session.yml</span>
+              <span><FileCode2 size={14} /> {getWorkspaceRepositoryPath(workspace.repositoryBasePath, `${session.folder}/session.yml`)}</span>
             </div>
           </div>
           <div className="session-detail__progress">

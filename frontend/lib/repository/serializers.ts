@@ -33,6 +33,7 @@ export function serializeSession(session: StudySession) {
       (item) => `  - id: ${item.id}
     order: ${item.order}
     title: ${yamlString(item.title)}
+    type: ${item.type}
 ${item.source ? `    source: ${item.source}\n` : ""}${item.url ? `    url: ${item.url}\n` : ""}    submitType: ${item.submitType}
     required: ${item.required}
     status: ${item.status}`,

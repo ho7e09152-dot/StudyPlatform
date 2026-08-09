@@ -131,11 +131,13 @@ public class WorkspaceService {
 		String avatar = displayName.substring(0, 1).toUpperCase();
 		StudyMember owner = new StudyMember(
 			"member-" + user.id(), user.id(), user.username(), displayName, avatar,
-			"#6d52b5", safeMemberFileName(user.username()), "OWNER", "ACTIVE", 40
+			"#6d52b5", safeMemberFileName(request.ownerRepositoryFileName(), user.username()), "OWNER", "ACTIVE", 40
 		);
 		WorkspaceState workspace = new WorkspaceState(
 			id, request.name().trim(), request.gitlabProjectId(), request.gitlabProjectPath().trim(),
-			StringUtils.hasText(request.defaultBranch()) ? request.defaultBranch().trim() : "main", "ACTIVE", now(),
+			StringUtils.hasText(request.defaultBranch()) ? request.defaultBranch().trim() : "main",
+			WorkspaceRepositoryPath.normalizeBasePath(request.repositoryBasePath()), 1,
+			StringUtils.hasText(request.importMode()) ? request.importMode() : "EMPTY", "ACTIVE", now(),
 			List.of(owner), Map.of(), Map.of(),
 			new WorkspaceSettings(
 				StringUtils.hasText(request.timezone()) ? request.timezone().trim() : "Asia/Seoul",
@@ -148,18 +150,55 @@ public class WorkspaceService {
 		return workspace;
 	}
 
+	public synchronized void rollbackCreate(String workspaceId) {
+		workspaces.remove(workspaceId);
+		dirtyWorkspaceIds.remove(workspaceId);
+		if (stateRepository != null && stateRepository.existsById(workspaceId)) {
+			stateRepository.deleteById(workspaceId);
+			stateRepository.flush();
+		}
+	}
+
 	public synchronized WorkspaceState update(String workspaceId, UpdateWorkspaceRequest request) {
 		WorkspaceState current = get(workspaceId);
 		if (request == null) throw error("INVALID_REQUEST", "수정할 값이 필요합니다.", 400);
 		String name = StringUtils.hasText(request.name()) ? request.name().trim() : current.name();
 		WorkspaceSettings settings = request.settings() == null ? current.settings() : request.settings();
 		WorkspaceState updated = new WorkspaceState(
-			current.id(), name, current.gitlabProjectId(), current.gitlabProjectPath(), current.defaultBranch(), current.status(),
+			current.id(), name, current.gitlabProjectId(), current.gitlabProjectPath(), current.defaultBranch(),
+			current.repositoryBasePath(), current.repositorySchemaVersion(), current.importMode(), current.status(),
 			current.lastSyncedAt(), current.members(), current.sessions(), current.submissions(), settings
 		);
 		store(updated);
 		persist();
 		return updated;
+	}
+
+	public synchronized void updateUserProfile(long gitLabUserId, String displayName, String repositoryFileName) {
+		refreshAllFromDatabase();
+		for (WorkspaceState workspace : List.copyOf(workspaces.values())) {
+			boolean changed = false;
+			List<StudyMember> members = new ArrayList<>();
+			for (StudyMember member : workspace.members()) {
+				if (member.gitlabUserId() != gitLabUserId) {
+					members.add(member);
+					continue;
+				}
+				boolean hasSubmissionFile = workspace.submissions().keySet().stream()
+					.anyMatch(key -> key.endsWith("/" + member.id()));
+				String nextFileName = hasSubmissionFile
+					? member.fileName()
+					: uniqueMemberFileName(workspace.members(), member.id(), safeMemberFileName(repositoryFileName, displayName));
+				members.add(new StudyMember(
+					member.id(), member.gitlabUserId(), member.username(), displayName,
+					displayName.substring(0, 1).toUpperCase(), member.color(), nextFileName,
+					member.role(), member.status(), member.accessLevel()
+				));
+				changed = true;
+			}
+			if (changed) store(copyMembers(workspace, List.copyOf(members)));
+		}
+		persist();
 	}
 
 	public synchronized WorkspaceState setStatus(String workspaceId, String status) {
@@ -171,7 +210,8 @@ public class WorkspaceService {
 			}
 		}
 		WorkspaceState updated = new WorkspaceState(
-			current.id(), current.name(), current.gitlabProjectId(), current.gitlabProjectPath(), current.defaultBranch(), status,
+			current.id(), current.name(), current.gitlabProjectId(), current.gitlabProjectPath(), current.defaultBranch(),
+			current.repositoryBasePath(), current.repositorySchemaVersion(), current.importMode(), status,
 			current.lastSyncedAt(), current.members(), current.sessions(), current.submissions(), current.settings()
 		);
 		store(updated);
@@ -372,14 +412,14 @@ public class WorkspaceService {
 			Set<String> nextIds = activeItems.stream().map(SessionItem::id).collect(Collectors.toSet());
 			current.items().stream()
 				.filter(item -> !nextIds.contains(item.id()))
-				.map(item -> new SessionItem(item.id(), item.order(), item.title(), item.source(), item.url(), item.submitType(), item.required(), "cancelled", item.replaces(), item.replacedBy()))
+				.map(item -> new SessionItem(item.id(), item.order(), item.title(), item.type(), item.source(), item.url(), item.submitType(), item.required(), "cancelled", item.replaces(), item.replacedBy()))
 				.forEach(archived::add);
 		}
 
 		int revision = current == null ? 1 : current.revision() + 1;
 		String folder = current == null ? date.substring(2).replace("-", "") : current.folder();
 		StudySession candidate = new StudySession(
-			date, folder, revision, draft.type(), draft.title().trim(), nullableTrim(draft.description()), "active",
+			date, folder, revision, activeItems.getFirst().type(), draft.title().trim(), nullableTrim(draft.description()), "active",
 			draft.deadline(), blankToNull(draft.secondaryDeadline()),
 			current == null ? timestamp : current.createdAt(), current == null ? actorUsername : current.createdBy(),
 			timestamp, actorUsername,
@@ -462,7 +502,7 @@ public class WorkspaceService {
 		));
 		entries.sort(Comparator.comparing(SubmissionEntry::itemId));
 		MemberSubmissionFile candidate = new MemberSubmissionFile(
-			1, member.id(), member.gitlabUserId(), member.username(), session.folder(), session.revision(), session.type(), timestamp,
+			1, member.id(), member.gitlabUserId(), member.displayName(), session.folder(), session.revision(), session.type(), timestamp,
 			List.copyOf(entries), current == null ? null : current.reflection(),
 			null, request.commitMessage().trim()
 		);
@@ -594,8 +634,8 @@ public class WorkspaceService {
 		if (draft == null || !StringUtils.hasText(draft.date()) || !StringUtils.hasText(draft.title()) || !StringUtils.hasText(draft.deadline())) {
 			throw error("INVALID_REQUEST", "날짜, 제목, 1차 마감은 필수입니다.", 400);
 		}
-		if (!SESSION_TYPES.contains(draft.type()) || draft.items() == null || draft.items().isEmpty()) {
-			throw error("INVALID_REQUEST", "일정 유형과 하나 이상의 학습 항목을 확인해 주세요.", 400);
+		if (draft.items() == null || draft.items().isEmpty()) {
+			throw error("INVALID_REQUEST", "하나 이상의 학습 항목을 확인해 주세요.", 400);
 		}
 		try {
 			LocalDate.parse(draft.date());
@@ -608,8 +648,8 @@ public class WorkspaceService {
 		}
 		Set<String> ids = new java.util.HashSet<>();
 		for (SessionItem item : draft.items()) {
-			if (!StringUtils.hasText(item.title()) || !SUBMISSION_TYPES.contains(item.submitType())) {
-				throw error("INVALID_REQUEST", "학습 항목 제목과 제출 방식을 확인해 주세요.", 400);
+			if (!StringUtils.hasText(item.title()) || !SESSION_TYPES.contains(item.type()) || !SUBMISSION_TYPES.contains(item.submitType())) {
+				throw error("INVALID_REQUEST", "학습 항목 제목, 학습 유형과 제출 방식을 확인해 주세요.", 400);
 			}
 			if (StringUtils.hasText(item.id()) && !ids.add(item.id())) {
 				throw error("INVALID_REQUEST", "학습 항목 ID가 중복되었습니다.", 400);
@@ -622,7 +662,7 @@ public class WorkspaceService {
 		for (int index = 0; index < items.size(); index++) {
 			SessionItem item = items.get(index);
 			String id = StringUtils.hasText(item.id()) ? item.id() : "item-" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
-			normalized.add(new SessionItem(id, index + 1, item.title().trim(), blankToNull(item.source()), blankToNull(item.url()), item.submitType(), item.required(), "active", item.replaces(), item.replacedBy()));
+			normalized.add(new SessionItem(id, index + 1, item.title().trim(), item.type(), blankToNull(item.source()), blankToNull(item.url()), item.submitType(), item.required(), "active", item.replaces(), item.replacedBy()));
 		}
 		return List.copyOf(normalized);
 	}
@@ -677,9 +717,30 @@ public class WorkspaceService {
 			.orElseThrow(() -> error("WORKSPACE_ACCESS_DENIED", "Workspace 활성 멤버가 아닙니다.", 403));
 	}
 
-	private static String safeMemberFileName(String username) {
-		String normalized = username.toLowerCase().replaceAll("[^a-z0-9._-]", "-");
-		return normalized + ".md";
+	private static String safeMemberFileName(String requested, String fallback) {
+		String source = StringUtils.hasText(requested) ? requested.trim() : fallback;
+		if (source.toLowerCase().endsWith(".md")) source = source.substring(0, source.length() - 3);
+		String normalized = java.text.Normalizer.normalize(source, java.text.Normalizer.Form.NFKC)
+			.replaceAll("[\\s/\\\\]+", "-")
+			.replaceAll("[^\\p{L}\\p{N}._-]", "-")
+			.replaceAll("-+", "-")
+			.replaceAll("^[.-]+|[.-]+$", "");
+		if (!StringUtils.hasText(normalized)) normalized = "member";
+		return normalized.substring(0, Math.min(normalized.length(), 80)) + ".md";
+	}
+
+	private static String uniqueMemberFileName(List<StudyMember> members, String currentMemberId, String requested) {
+		if (members.stream().noneMatch(member -> !member.id().equals(currentMemberId) && member.fileName().equalsIgnoreCase(requested))) {
+			return requested;
+		}
+		String base = requested.substring(0, requested.length() - 3);
+		for (int suffix = 2; suffix <= 999; suffix++) {
+			String candidate = base + "-" + suffix + ".md";
+			if (members.stream().noneMatch(member -> !member.id().equals(currentMemberId) && member.fileName().equalsIgnoreCase(candidate))) {
+				return candidate;
+			}
+		}
+		throw error("MEMBER_FILE_NAME_CONFLICT", "같은 GitLab 기록 이름을 사용하는 멤버가 너무 많습니다.", 409);
 	}
 
 	private static boolean hasSubmissions(WorkspaceState workspace, StudySession session) {
@@ -715,14 +776,16 @@ public class WorkspaceService {
 
 	private static WorkspaceState copy(WorkspaceState current, Map<String, StudySession> sessions, Map<String, MemberSubmissionFile> submissions, WorkspaceSettings settings, String syncedAt) {
 		return new WorkspaceState(
-			current.id(), current.name(), current.gitlabProjectId(), current.gitlabProjectPath(), current.defaultBranch(), current.status(), syncedAt,
+			current.id(), current.name(), current.gitlabProjectId(), current.gitlabProjectPath(), current.defaultBranch(),
+			current.repositoryBasePath(), current.repositorySchemaVersion(), current.importMode(), current.status(), syncedAt,
 			current.members(), Map.copyOf(sessions), Map.copyOf(submissions), settings
 		);
 	}
 
 	private static WorkspaceState copyMembers(WorkspaceState current, List<StudyMember> members) {
 		return new WorkspaceState(
-			current.id(), current.name(), current.gitlabProjectId(), current.gitlabProjectPath(), current.defaultBranch(), current.status(),
+			current.id(), current.name(), current.gitlabProjectId(), current.gitlabProjectPath(), current.defaultBranch(),
+			current.repositoryBasePath(), current.repositorySchemaVersion(), current.importMode(), current.status(),
 			current.lastSyncedAt(), members, current.sessions(), current.submissions(), current.settings()
 		);
 	}
@@ -806,6 +869,9 @@ public class WorkspaceService {
 		}
 		return new WorkspaceState(
 			workspace.id(), workspace.name(), workspace.gitlabProjectId(), workspace.gitlabProjectPath(), workspace.defaultBranch(),
+			workspace.repositoryBasePath() == null ? "" : workspace.repositoryBasePath(),
+			workspace.repositorySchemaVersion() == null || workspace.repositorySchemaVersion() < 1 ? 1 : workspace.repositorySchemaVersion(),
+			workspace.importMode() == null ? "COMPATIBLE" : workspace.importMode(),
 			workspace.status(), workspace.lastSyncedAt(), List.copyOf(members), workspace.sessions(), workspace.submissions(), workspace.settings()
 		);
 	}

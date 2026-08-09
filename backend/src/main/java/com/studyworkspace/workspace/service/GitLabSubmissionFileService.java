@@ -37,12 +37,12 @@ public class GitLabSubmissionFileService {
 		MemberSubmissionFile next,
 		String commitMessage
 	) {
-		String path = submissionPath(session, member);
+		String path = submissionPath(workspace, session, member);
 		String content = codec.encode(next, session);
 		if (current == null) {
 			try {
 				return commitId(gitLab.createRepositoryFile(
-					accessToken, workspace.gitlabProjectId(), path, workspace.defaultBranch(), content, commitMessage
+					accessToken, workspace.gitlabProjectId(), path, workspace.defaultBranch(), content, commitMessage, member.displayName()
 				));
 			} catch (GitLabApiException exception) {
 				if (exception.upstreamStatus() == 400 || exception.upstreamStatus() == 409) {
@@ -58,7 +58,7 @@ public class GitLabSubmissionFileService {
 		}
 		try {
 			return commitId(gitLab.updateRepositoryFile(
-				accessToken, workspace.gitlabProjectId(), path, workspace.defaultBranch(), content, commitMessage, remote.lastCommitId()
+				accessToken, workspace.gitlabProjectId(), path, workspace.defaultBranch(), content, commitMessage, remote.lastCommitId(), member.displayName()
 			));
 		} catch (GitLabApiException exception) {
 			if (exception.upstreamStatus() == 400 || exception.upstreamStatus() == 409) {
@@ -79,15 +79,15 @@ public class GitLabSubmissionFileService {
 		}
 	}
 
-	private String submissionPath(StudySession session, StudyMember member) {
+	private String submissionPath(WorkspaceState workspace, StudySession session, StudyMember member) {
 		if (session.folder() == null || !session.folder().matches("\\d{6}")) {
 			throw new WorkspaceException("INVALID_SUBMISSION_PATH", "일정 폴더 형식이 올바르지 않습니다.", 400);
 		}
 		String fileName = member.fileName();
-		if (!StringUtils.hasText(fileName) || !fileName.matches("[A-Za-z0-9._-]+\\.md") || fileName.contains("..")) {
+		if (!StringUtils.hasText(fileName) || !fileName.matches("[\\p{L}\\p{N}._-]+\\.md") || fileName.contains("..")) {
 			throw new WorkspaceException("INVALID_SUBMISSION_PATH", "멤버 제출 파일명이 올바르지 않습니다.", 400);
 		}
-		return pathPolicy.validate(session.folder() + "/" + fileName);
+		return pathPolicy.validate(WorkspaceRepositoryPath.join(workspace.repositoryBasePath(), session.folder() + "/" + fileName));
 	}
 
 	private static String commitId(GitLabFileContent file) {

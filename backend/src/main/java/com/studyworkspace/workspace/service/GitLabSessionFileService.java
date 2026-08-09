@@ -29,7 +29,7 @@ public class GitLabSessionFileService {
 		StudySession current,
 		StudySession next
 	) {
-		String path = next.folder() + "/session.yml";
+		String path = WorkspaceRepositoryPath.join(workspace.repositoryBasePath(), next.folder() + "/session.yml");
 		String content = serializer.serialize(next);
 		String commitMessage = commitMessage(current, next);
 		if (current == null) {
@@ -40,7 +40,8 @@ public class GitLabSessionFileService {
 					path,
 					workspace.defaultBranch(),
 					content,
-					commitMessage
+					commitMessage,
+					next.updatedBy()
 				));
 			} catch (GitLabApiException exception) {
 				if (exception.upstreamStatus() == 400 || exception.upstreamStatus() == 409) {
@@ -70,7 +71,8 @@ public class GitLabSessionFileService {
 				workspace.defaultBranch(),
 				content,
 				commitMessage,
-				remote.lastCommitId()
+				remote.lastCommitId(),
+				next.updatedBy()
 			));
 		} catch (GitLabApiException exception) {
 			if (exception.upstreamStatus() == 400 || exception.upstreamStatus() == 409) {

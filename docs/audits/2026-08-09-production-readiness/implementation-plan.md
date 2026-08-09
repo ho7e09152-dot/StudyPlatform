@@ -5,6 +5,9 @@
 - 완료: Spring Security 세션 인증, CSRF, Workspace 활성 멤버 경계
 - 완료: 운영 모드 seed fallback 제거와 명시적 demo mode 분리
 - 완료: OAuth Bearer 기반 프로젝트 검색·접근 재검증·첫 Workspace UI
+- 완료: 최초 가입 프로필, 사용자 지정 표시 이름·GitLab 기록 파일명, 약관 버전·동의 시각 저장
+- 완료: 기존 저장소 읽기 전용 분석, 5단계 분류, tree fingerprint 재검증과 `.study-workspace` 격리 초기화
+- 완료: GitLab 일정·제출 파일명, 문서 작성자와 commit `author_name`에 사용자 지정 이름 적용
 - 완료: Flyway 사용자/credential/Workspace 메타데이터 스키마, AES-GCM token 암호화, Spring Session JDBC
 - 완료: Workspace/member/settings/cache 상태의 PostgreSQL repository 전환과 기존 로컬 JSON 자동 1회 migration
 - 완료: 저장소 tree·텍스트 파일 읽기의 OAuth Bearer 전환

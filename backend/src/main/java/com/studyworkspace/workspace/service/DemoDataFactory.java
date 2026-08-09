@@ -80,7 +80,7 @@ final class DemoDataFactory {
 		));
 
 		WorkspaceState evening = new WorkspaceState(
-			"workspace-evening", "저녁 스터디", 48213, "study-team/evening-workspace", "main", "ACTIVE",
+			"workspace-evening", "저녁 스터디", 48213, "study-team/evening-workspace", "main", "", 1, "COMPATIBLE", "ACTIVE",
 			"2026-07-23T21:58:00+09:00", members, sessions, submissions, settings(true)
 		);
 
@@ -98,7 +98,7 @@ final class DemoDataFactory {
 			entry("item-ddia-summary", "mixed", "## 관계형 모델\n\n데이터를 튜플의 집합으로 표현한다.", "2026-07-23T20:40:00+09:00")
 		));
 		WorkspaceState reading = new WorkspaceState(
-			"workspace-reading", "CS 원서 읽기", 50117, "study-team/cs-book-club", "main", "ACTIVE",
+			"workspace-reading", "CS 원서 읽기", 50117, "study-team/cs-book-club", "main", "", 1, "COMPATIBLE", "ACTIVE",
 			"2026-07-23T21:12:00+09:00", readingMembers, Map.of(readingSession.date(), readingSession),
 			readingSubmissions, settings(false)
 		);
@@ -117,10 +117,16 @@ final class DemoDataFactory {
 
 	private static StudySession session(String date, int revision, String type, String title, String description, String deadline, List<SessionItem> items) {
 		String folder = date.substring(2).replace("-", "");
+		List<SessionItem> typedItems = items.stream()
+			.map(item -> new SessionItem(
+				item.id(), item.order(), item.title(), type, item.source(), item.url(), item.submitType(),
+				item.required(), item.status(), item.replaces(), item.replacedBy()
+			))
+			.toList();
 		return new StudySession(
 			date, folder, revision, type, title, description, "active", deadline, null,
 			date + "T09:00:00+09:00", "gitlab-user-a", date + "T09:00:00+09:00", "gitlab-user-a",
-			null, items, List.of(), "demo-" + folder + "-r" + revision
+			null, typedItems, List.of(), "demo-" + folder + "-r" + revision
 		);
 	}
 
