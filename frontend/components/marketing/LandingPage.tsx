@@ -167,7 +167,6 @@ export function LandingPage() {
             alt="SSAFY"
             width={684}
             height={354}
-            priority
             unoptimized
           />
           <span>

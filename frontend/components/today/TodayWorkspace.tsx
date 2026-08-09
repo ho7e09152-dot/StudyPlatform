@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import {
   ArrowRight,
+  CalendarDays,
   Check,
   Clock3,
   ExternalLink,
@@ -15,12 +16,12 @@ import {
   Users,
 } from "lucide-react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
+import { SessionDetailDialog } from "@/components/session/SessionDetailDialog";
 import { Avatar } from "@/components/ui/Avatar";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { MemberDetailDialog } from "./MemberDetailDialog";
 import { SubmissionDialog } from "./SubmissionDialog";
 import {
-  REFERENCE_DATE,
   SESSION_TYPE_META,
   SUBMISSION_TYPE_LABEL,
 } from "@/lib/domain/constants";
@@ -31,17 +32,42 @@ import {
   getMemberProgress,
   getSubmissionKey,
 } from "@/lib/domain/metrics";
-import type { StudyMember } from "@/lib/domain/types";
+import type { StudyMember, StudySession } from "@/lib/domain/types";
 
 export function TodayWorkspace() {
+  const { workspace, referenceDate } = useWorkspace();
+  const session = workspace.sessions[referenceDate];
+
+  if (!session) {
+    return (
+      <div className="page-stack">
+        <header className="page-heading page-heading--today">
+          <div>
+            <p className="eyebrow">{formatDate(referenceDate, true)} · TODAY</p>
+            <h1>오늘의 학습</h1>
+            <p>오늘 등록된 학습 일정을 확인하고 제출을 시작합니다.</p>
+          </div>
+        </header>
+        <section className="surface schedule-empty today-empty" aria-labelledby="today-empty-title">
+          <CalendarDays size={30} aria-hidden="true" />
+          <strong id="today-empty-title">오늘 등록된 학습 일정이 없습니다</strong>
+          <p>첫 일정을 만들면 학습 항목, 제출 현황, 팀 진행률이 이곳에 표시됩니다.</p>
+          <Link href="/schedule" className="button button--primary">
+            <CalendarDays size={16} /> 첫 일정 만들기
+          </Link>
+        </section>
+      </div>
+    );
+  }
+
+  return <TodaySession session={session} />;
+}
+
+function TodaySession({ session }: { session: StudySession }) {
   const { workspace, currentUserId, submitItem } = useWorkspace();
-  const session =
-    workspace.sessions[REFERENCE_DATE] ??
-    Object.values(workspace.sessions)
-      .filter((candidate) => candidate.status === "active")
-      .sort((a, b) => b.date.localeCompare(a.date))[0];
   const [submissionItemId, setSubmissionItemId] = useState<string | null>(null);
   const [selectedMember, setSelectedMember] = useState<StudyMember | null>(null);
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   const requiredItems = useMemo(() => getActiveRequiredItems(session), [session]);
   const metrics = useMemo(
@@ -126,7 +152,14 @@ export function TodayWorkspace() {
       </section>
 
       <div className="today-columns">
-        <section className="surface session-card" aria-labelledby="session-title">
+        <section
+          className="surface session-card session-card--clickable"
+          aria-labelledby="session-title"
+          onClick={(event) => {
+            if ((event.target as HTMLElement).closest("button, a")) return;
+            setDetailsOpen(true);
+          }}
+        >
           <header className="section-heading">
             <div>
               <span className={`type-chip type-chip--${meta.tone}`}>{meta.short} · {meta.label}</span>
@@ -279,6 +312,18 @@ export function TodayWorkspace() {
           initialItemId={submissionItemId}
           onSubmit={submitItem}
           onClose={() => setSubmissionItemId(null)}
+        />
+      ) : null}
+      {detailsOpen ? (
+        <SessionDetailDialog
+          workspace={workspace}
+          session={session}
+          currentUserId={currentUserId}
+          onOpenSubmission={(itemId) => {
+            setDetailsOpen(false);
+            setSubmissionItemId(itemId);
+          }}
+          onClose={() => setDetailsOpen(false)}
         />
       ) : null}
       {selectedMember ? (

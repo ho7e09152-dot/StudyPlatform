@@ -113,6 +113,7 @@ replay_pid*
 *.sqlite3
 docker-data/
 .data/
+backups/
 
 # ==============================
 # Local verification artifacts

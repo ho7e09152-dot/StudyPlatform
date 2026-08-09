@@ -4,15 +4,18 @@ import { useMemo, useState } from "react";
 import {
   CalendarDays,
   Clock3,
+  Eye,
   FilePenLine,
   GitCommitHorizontal,
   Plus,
   Search,
 } from "lucide-react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
+import { SessionDetailDialog } from "@/components/session/SessionDetailDialog";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { SubmissionDialog } from "@/components/today/SubmissionDialog";
 import { SessionEditorDialog } from "./SessionEditorDialog";
-import { REFERENCE_DATE, SESSION_TYPE_META } from "@/lib/domain/constants";
+import { SESSION_TYPE_META } from "@/lib/domain/constants";
 import { formatDate, formatTime } from "@/lib/domain/format";
 import { getDashboardMetrics } from "@/lib/domain/metrics";
 import type { SessionType, StudySession } from "@/lib/domain/types";
@@ -21,11 +24,16 @@ type Filter = "all" | SessionType;
 type StatusFilter = "all" | "upcoming" | "today" | "past" | "cancelled";
 
 export function ScheduleWorkspace() {
-  const { workspace, saveSession } = useWorkspace();
+  const { workspace, referenceDate, currentUserId, saveSession, submitItem } = useWorkspace();
   const [filter, setFilter] = useState<Filter>("all");
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [editing, setEditing] = useState<StudySession | "new" | null>(null);
+  const [selectedSession, setSelectedSession] = useState<StudySession | null>(null);
+  const [submissionTarget, setSubmissionTarget] = useState<{
+    session: StudySession;
+    itemId: string;
+  } | null>(null);
   const sessions = useMemo(
     () =>
       Object.values(workspace.sessions)
@@ -36,9 +44,9 @@ export function ScheduleWorkspace() {
           if (statusFilter === "all") return true;
           if (statusFilter === "cancelled") return session.status === "cancelled";
           if (session.status === "cancelled") return false;
-          if (statusFilter === "today") return session.date === REFERENCE_DATE;
-          if (statusFilter === "upcoming") return session.date > REFERENCE_DATE;
-          return session.date < REFERENCE_DATE;
+          if (statusFilter === "today") return session.date === referenceDate;
+          if (statusFilter === "upcoming") return session.date > referenceDate;
+          return session.date < referenceDate;
         })
         .filter((session) => {
           const query = searchQuery.trim().toLocaleLowerCase("ko");
@@ -50,7 +58,7 @@ export function ScheduleWorkspace() {
           ].some((value) => value.toLocaleLowerCase("ko").includes(query));
         })
         .sort((a, b) => b.date.localeCompare(a.date)),
-    [filter, searchQuery, statusFilter, workspace.sessions],
+    [filter, referenceDate, searchQuery, statusFilter, workspace.sessions],
   );
 
   return (
@@ -122,12 +130,16 @@ export function ScheduleWorkspace() {
           return (
             <article
               key={session.date}
-              className={`schedule-card ${session.date === REFERENCE_DATE ? "schedule-card--today" : ""} ${session.status === "cancelled" ? "schedule-card--cancelled" : ""}`}
+              className={`schedule-card schedule-card--clickable ${session.date === referenceDate ? "schedule-card--today" : ""} ${session.status === "cancelled" ? "schedule-card--cancelled" : ""}`}
+              onClick={(event) => {
+                if ((event.target as HTMLElement).closest("button, a")) return;
+                setSelectedSession(session);
+              }}
             >
               <header>
                 <div>
                   <span>{formatDate(session.date, true)}</span>
-                  {session.date === REFERENCE_DATE ? <em>오늘</em> : null}
+                  {session.date === referenceDate ? <em>오늘</em> : null}
                 </div>
                 <span className={`type-chip type-chip--${meta.tone}`}>{meta.short}</span>
               </header>
@@ -144,7 +156,7 @@ export function ScheduleWorkspace() {
                   ) : (
                     <span><Clock3 size={14} /> {formatTime(session.deadline)}</span>
                   )}
-                  <span><GitCommitHorizontal size={14} /> rev.{session.revision}</span>
+                  <span><GitCommitHorizontal size={14} /> {session.lastCommitId.slice(0, 8)} · rev.{session.revision}</span>
                 </div>
               </div>
               {session.change?.changed ? (
@@ -157,14 +169,23 @@ export function ScheduleWorkspace() {
               </div>
               <footer>
                 <code>{session.folder}/session.yml</code>
-                <button
-                  type="button"
-                  className="button button--secondary button--small"
-                  disabled={session.status === "cancelled"}
-                  onClick={() => setEditing(session)}
-                >
-                  <FilePenLine size={15} /> 편집
-                </button>
+                <div className="schedule-card__actions">
+                  <button
+                    type="button"
+                    className="button button--ghost button--small"
+                    onClick={() => setSelectedSession(session)}
+                  >
+                    <Eye size={15} /> 상세
+                  </button>
+                  <button
+                    type="button"
+                    className="button button--secondary button--small"
+                    disabled={session.status === "cancelled"}
+                    onClick={() => setEditing(session)}
+                  >
+                    <FilePenLine size={15} /> 편집
+                  </button>
+                </div>
               </footer>
             </article>
           );
@@ -172,18 +193,22 @@ export function ScheduleWorkspace() {
         {!sessions.length ? (
           <div className="schedule-empty">
             <CalendarDays size={24} aria-hidden="true" />
-            <strong>조건에 맞는 일정이 없습니다</strong>
-            <p>검색어를 지우거나 상태·유형 필터를 변경해 보세요.</p>
+            <strong>{Object.keys(workspace.sessions).length ? "조건에 맞는 일정이 없습니다" : "아직 등록된 학습 일정이 없습니다"}</strong>
+            <p>{Object.keys(workspace.sessions).length ? "검색어를 지우거나 상태·유형 필터를 변경해 보세요." : "첫 일정을 만들고 팀의 학습 항목과 마감 시간을 설정해 보세요."}</p>
             <button
               type="button"
               className="button button--secondary button--small"
               onClick={() => {
-                setSearchQuery("");
-                setStatusFilter("all");
-                setFilter("all");
+                if (Object.keys(workspace.sessions).length) {
+                  setSearchQuery("");
+                  setStatusFilter("all");
+                  setFilter("all");
+                } else {
+                  setEditing("new");
+                }
               }}
             >
-              필터 초기화
+              {Object.keys(workspace.sessions).length ? "필터 초기화" : "첫 일정 만들기"}
             </button>
           </div>
         ) : null}
@@ -192,9 +217,32 @@ export function ScheduleWorkspace() {
       {editing ? (
         <SessionEditorDialog
           workspace={workspace}
+          referenceDate={referenceDate}
           session={editing === "new" ? undefined : editing}
           onSave={saveSession}
           onClose={() => setEditing(null)}
+        />
+      ) : null}
+      {selectedSession ? (
+        <SessionDetailDialog
+          workspace={workspace}
+          session={selectedSession}
+          currentUserId={currentUserId}
+          onOpenSubmission={(itemId) => {
+            setSubmissionTarget({ session: selectedSession, itemId });
+            setSelectedSession(null);
+          }}
+          onClose={() => setSelectedSession(null)}
+        />
+      ) : null}
+      {submissionTarget ? (
+        <SubmissionDialog
+          workspace={workspace}
+          session={submissionTarget.session}
+          currentUserId={currentUserId}
+          initialItemId={submissionTarget.itemId}
+          onSubmit={submitItem}
+          onClose={() => setSubmissionTarget(null)}
         />
       ) : null}
     </div>

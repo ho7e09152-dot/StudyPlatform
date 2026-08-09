@@ -92,7 +92,7 @@ export function RepositoryWorkspace() {
     const controller = new AbortController();
     const requestedPath = selected.path;
 
-    void getGitLabFile(requestedPath, controller.signal)
+    void getGitLabFile(workspace.gitlabProjectId, requestedPath, controller.signal)
       .then((file) => {
         setFileRequest({
           path: requestedPath,
@@ -115,7 +115,7 @@ export function RepositoryWorkspace() {
       });
 
     return () => controller.abort();
-  }, [isLive, selected?.path]);
+  }, [isLive, selected?.path, workspace.gitlabProjectId]);
 
   const activeFileRequest =
     isLive && selected && fileRequest?.path === selected.path
@@ -269,10 +269,10 @@ export function RepositoryWorkspace() {
       </div>
       {connection.state === "error" ? (
         <p className="repository-source-note">
-          {connection.error} 기존 데모 데이터를 표시합니다.
+          {connection.error} 저장소를 불러오지 못했습니다.
         </p>
       ) : !isLive && connection.data?.message ? (
-        <p className="repository-source-note">{connection.data.message} 현재는 데모 데이터를 표시합니다.</p>
+        <p className="repository-source-note">{connection.data.message}</p>
       ) : null}
 
       <div className="repository-layout">

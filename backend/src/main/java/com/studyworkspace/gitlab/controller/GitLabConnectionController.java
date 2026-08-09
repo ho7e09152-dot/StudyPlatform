@@ -3,13 +3,16 @@ package com.studyworkspace.gitlab.controller;
 import com.studyworkspace.gitlab.dto.GitLabConnectionResponse;
 import com.studyworkspace.gitlab.dto.GitLabFileContent;
 import com.studyworkspace.gitlab.service.GitLabConnectionService;
+import org.springframework.context.annotation.Profile;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/v1/gitlab")
+@Profile({"dev", "local"})
 public class GitLabConnectionController {
 
 	private final GitLabConnectionService gitLabConnectionService;
@@ -27,4 +30,5 @@ public class GitLabConnectionController {
 	public GitLabFileContent repositoryFile(@RequestParam String path) {
 		return gitLabConnectionService.getFile(path);
 	}
+
 }

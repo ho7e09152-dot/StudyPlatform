@@ -24,7 +24,8 @@ npm test
 ```text
 app/                         App Router 페이지와 메타데이터
 components/marketing/        공개 랜딩·GitLab OAuth 로그인
-components/providers/        Workspace 상태와 목업 API 동작
+components/onboarding/       OAuth 프로젝트 검색·검증·첫 Workspace 생성
+components/providers/        백엔드 Workspace 상태 수화와 API mutation
 components/shell/            공개/인증 라우트 분리와 반응형 앱 셸
 components/today/            오늘의 학습과 항목별 제출
 components/schedule/         일정 생성·수정과 revision 처리
@@ -61,7 +62,7 @@ lib/repository/              YAML·Markdown 직렬화
 - 완료율은 필수 활성 항목과 실제 멤버 제출로 계산합니다.
 - 공개 라우트에서는 Workspace 상태와 GitLab 연결 API를 불러오지 않습니다.
 
-일정·제출·기록은 아직 메모리 기반 목업 어댑터를 사용합니다. 저장소와 설정 화면의 연결 정보는 Spring Boot의 GitLab 연결 API를 먼저 호출하며, 실제 연결 전에는 상태를 표시한 뒤 목업 저장소를 유지합니다.
+앱 진입 시 로그인 세션과 Workspace API를 순서대로 확인합니다. 운영 모드에서는 백엔드 오류를 데모 데이터로 숨기지 않으며, Workspace가 없는 사용자는 OAuth 계정의 GitLab 프로젝트를 검색·검증해 첫 Workspace를 생성합니다. 데모 데이터는 `NEXT_PUBLIC_APP_MODE=demo`를 명시한 경우에만 사용합니다.
 
 백엔드 주소는 다음 환경변수로 지정합니다.
 
@@ -71,6 +72,7 @@ cp .env.example .env.local
 
 ```dotenv
 NEXT_PUBLIC_API_BASE_URL=http://localhost:8080
+NEXT_PUBLIC_APP_MODE=production
 ```
 
 GitLab 연결에 성공하면 저장소 화면이 실제 프로젝트 경로, 기본 브랜치, repository tree와 파일 내용으로 전환됩니다. GitLab 토큰은 프론트 환경변수나 브라우저 저장소에 두지 않습니다.

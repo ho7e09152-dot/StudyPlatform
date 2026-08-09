@@ -41,7 +41,7 @@ paths:
       summary: GitLab OAuth 로그인 시작
       operationId: startGitLabLogin
       x-owner: member-1
-      x-implementation-status: planned
+      x-implementation-status: implemented
       security: []
       parameters:
         - name: returnUrl
@@ -66,10 +66,10 @@ paths:
   /auth/gitlab/callback:
     get:
       tags: [Auth]
-      summary: GitLab OAuth callback 처리
-      operationId: completeGitLabLogin
+      summary: GitLab OAuth callback 검증과 프론트 전환 화면 이동
+      operationId: stageGitLabLogin
       x-owner: member-1
-      x-implementation-status: planned
+      x-implementation-status: implemented
       security: []
       parameters:
         - name: code
@@ -84,16 +84,40 @@ paths:
             type: string
       responses:
         "302":
-          description: 앱으로 이동하고 HttpOnly 세션 쿠키 설정
+          description: 승인 코드를 서버 세션에 일회성으로 보관하고 프론트 `/auth/callback`으로 이동
           headers:
             Location:
               schema:
                 type: string
-            Set-Cookie:
+
+  /auth/gitlab/complete:
+    post:
+      tags: [Auth]
+      summary: 대기 중인 GitLab OAuth 승인 완료
+      description: 서버 세션의 일회성 승인 코드를 소비해 token 교환, 사용자 저장, 세션 ID 회전을 완료합니다.
+      operationId: completeGitLabLogin
+      x-owner: member-1
+      x-implementation-status: implemented
+      parameters:
+        - name: X-CSRF-TOKEN
+          in: header
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 로그인 완료 후 이동할 앱 내부 경로
+          content:
+            application/json:
               schema:
-                type: string
-        "401":
-          $ref: "#/components/responses/AuthRequired"
+                type: object
+                required: [returnUrl]
+                properties:
+                  returnUrl:
+                    type: string
+                    pattern: ^/
+        "400":
+          $ref: "#/components/responses/InvalidRequest"
 
   /auth/me:
     get:
@@ -101,16 +125,20 @@ paths:
       summary: 현재 로그인 사용자 조회
       operationId: getCurrentUser
       x-owner: member-1
-      x-implementation-status: planned
+      x-implementation-status: implemented
       responses:
         "200":
-          description: 현재 사용자와 접근 가능한 Workspace
+          description: 현재 GitLab 로그인 사용자
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/CurrentUserResponse"
         "401":
-          $ref: "#/components/responses/AuthRequired"
+          description: 로그인 세션 없음
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnauthenticatedResponse"
 
   /auth/logout:
     post:
@@ -118,10 +146,45 @@ paths:
       summary: 앱 세션 종료
       operationId: logout
       x-owner: member-1
-      x-implementation-status: planned
+      x-implementation-status: implemented
       responses:
         "204":
           description: 로그아웃 완료
+
+  /auth/account:
+    delete:
+      tags: [Auth]
+      summary: 계정과 암호화 OAuth credential 삭제
+      description: 활성 Workspace의 Owner는 먼저 해당 Workspace를 삭제해야 합니다. GitLab의 기존 파일과 commit은 삭제하지 않습니다.
+      operationId: deleteAccount
+      x-implementation-status: implemented
+      responses:
+        "204":
+          description: 계정 삭제와 세션 종료 완료
+        "409":
+          $ref: "#/components/responses/Conflict"
+
+  /auth/csrf:
+    get:
+      tags: [Auth]
+      summary: 세션 기반 변경 요청용 CSRF token 조회
+      operationId: getCsrfToken
+      x-owner: member-1
+      x-implementation-status: implemented
+      security: []
+      responses:
+        "200":
+          description: CSRF header 이름과 token
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [token, headerName]
+                properties:
+                  token:
+                    type: string
+                  headerName:
+                    const: X-CSRF-TOKEN
 
   /gitlab/projects:
     get:
@@ -129,7 +192,7 @@ paths:
       summary: 현재 사용자가 접근 가능한 GitLab 프로젝트 목록
       operationId: listGitLabProjects
       x-owner: member-1
-      x-implementation-status: planned
+      x-implementation-status: implemented
       parameters:
         - name: search
           in: query
@@ -144,7 +207,9 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/GitLabProjectPageResponse"
+                type: array
+                items:
+                  $ref: "#/components/schemas/GitLabProject"
         "401":
           $ref: "#/components/responses/AuthRequired"
         "502":
@@ -156,16 +221,51 @@ paths:
       summary: 프로젝트 연결 가능 여부 확인
       operationId: checkGitLabProjectConnection
       x-owner: member-1
-      x-implementation-status: planned
+      x-implementation-status: implemented
       parameters:
         - $ref: "#/components/parameters/ProjectId"
       responses:
         "200":
-          description: 프로젝트·브랜치·멤버·Repository API 검사 결과
+          description: OAuth 사용자의 프로젝트 조회 성공 결과
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ConnectionCheckResponse"
+                $ref: "#/components/schemas/GitLabConnectionSpike"
+        "403":
+          $ref: "#/components/responses/GitLabAccessDenied"
+        "502":
+          $ref: "#/components/responses/GitLabError"
+
+  /gitlab/projects/{projectId}/repository/file:
+    get:
+      tags: [GitLab Projects]
+      summary: OAuth 사용자 권한으로 프로젝트 파일 조회
+      operationId: getOAuthGitLabProjectFile
+      x-owner: member-1
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/ProjectId"
+        - name: path
+          in: query
+          required: true
+          schema:
+            type: string
+            minLength: 1
+            maxLength: 512
+        - name: ref
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Base64를 서버에서 디코딩한 텍스트 파일
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GitLabFileContent"
+        "400":
+          $ref: "#/components/responses/InvalidPath"
         "403":
           $ref: "#/components/responses/GitLabAccessDenied"
         "502":
@@ -174,11 +274,11 @@ paths:
   /gitlab/connection:
     get:
       tags: [Connection Spike]
-      summary: 환경변수 기반 GitLab 읽기 연결 진단
+      summary: dev/local 환경변수 기반 GitLab 읽기 연결 진단
       operationId: getGitLabConnectionSpike
       x-owner: shared
       x-implementation-status: implemented
-      security: []
+      description: 운영 프로필에는 등록되지 않는 PAT 연결 스파이크입니다.
       responses:
         "200":
           description: 현재 사용자·프로젝트·repository tree
@@ -192,11 +292,11 @@ paths:
   /gitlab/repository/file:
     get:
       tags: [Connection Spike]
-      summary: 환경변수 프로젝트의 텍스트 파일 읽기
+      summary: dev/local 환경변수 프로젝트의 텍스트 파일 읽기
       operationId: getGitLabFileSpike
       x-owner: shared
       x-implementation-status: implemented
-      security: []
+      description: 운영 프로필에는 등록되지 않는 PAT 연결 스파이크입니다.
       parameters:
         - name: path
           in: query
@@ -223,20 +323,16 @@ paths:
       summary: 내 Workspace 목록
       operationId: listMyWorkspaces
       x-owner: member-1
-      x-implementation-status: planned
+      x-implementation-status: implemented-db-cache
       responses:
         "200":
           description: 활성 및 복구 가능한 Workspace 목록
           content:
             application/json:
               schema:
-                type: object
-                required: [data]
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: "#/components/schemas/WorkspaceSummary"
+                type: array
+                items:
+                  $ref: "#/components/schemas/Workspace"
         "401":
           $ref: "#/components/responses/AuthRequired"
     post:
@@ -244,7 +340,7 @@ paths:
       summary: GitLab 프로젝트와 Workspace 연결
       operationId: createWorkspace
       x-owner: member-1
-      x-implementation-status: planned
+      x-implementation-status: implemented-db-cache
       requestBody:
         required: true
         content:
@@ -257,11 +353,37 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/WorkspaceResponse"
+                $ref: "#/components/schemas/Workspace"
         "400":
           $ref: "#/components/responses/InvalidRequest"
         "409":
           $ref: "#/components/responses/Conflict"
+
+  /workspaces/deleted:
+    get:
+      tags: [Workspaces]
+      summary: 현재 사용자가 복원할 수 있는 삭제 Workspace 목록
+      operationId: listDeletedWorkspaces
+      x-implementation-status: implemented
+      responses:
+        "200":
+          description: 삭제 시각과 7일 복원 만료 시각을 포함한 목록
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [workspace, deletedAt, deletionExpiresAt]
+                  properties:
+                    workspace:
+                      $ref: "#/components/schemas/Workspace"
+                    deletedAt:
+                      type: string
+                      format: date-time
+                    deletionExpiresAt:
+                      type: string
+                      format: date-time
 
   /workspaces/{workspaceId}:
     parameters:
@@ -271,7 +393,7 @@ paths:
       summary: Workspace 상세
       operationId: getWorkspace
       x-owner: member-1
-      x-implementation-status: planned
+      x-implementation-status: implemented
       responses:
         "200":
           description: Workspace 상세
@@ -288,7 +410,7 @@ paths:
       summary: Workspace 이름과 설정 수정
       operationId: updateWorkspace
       x-owner: member-1
-      x-implementation-status: planned
+      x-implementation-status: implemented
       requestBody:
         required: true
         content:
@@ -309,7 +431,7 @@ paths:
       summary: Workspace 소프트 삭제
       operationId: softDeleteWorkspace
       x-owner: member-1
-      x-implementation-status: planned
+      x-implementation-status: implemented
       requestBody:
         required: true
         content:
@@ -332,7 +454,7 @@ paths:
       summary: 삭제 후 7일 이내 Workspace 복원
       operationId: restoreWorkspace
       x-owner: member-1
-      x-implementation-status: planned
+      x-implementation-status: implemented
       parameters:
         - $ref: "#/components/parameters/WorkspaceId"
       responses:
@@ -351,7 +473,7 @@ paths:
       summary: GitLab 프로젝트 멤버 후보
       operationId: listWorkspaceMemberCandidates
       x-owner: member-1
-      x-implementation-status: planned
+      x-implementation-status: implemented
       parameters:
         - $ref: "#/components/parameters/WorkspaceId"
       responses:
@@ -374,7 +496,7 @@ paths:
       summary: Workspace 멤버 목록
       operationId: listWorkspaceMembers
       x-owner: member-1
-      x-implementation-status: planned
+      x-implementation-status: implemented
       parameters:
         - $ref: "#/components/parameters/WorkspaceId"
       responses:
@@ -395,7 +517,7 @@ paths:
       summary: Workspace 멤버 추가
       operationId: addWorkspaceMember
       x-owner: member-1
-      x-implementation-status: planned
+      x-implementation-status: implemented
       parameters:
         - $ref: "#/components/parameters/WorkspaceId"
       requestBody:
@@ -424,7 +546,7 @@ paths:
       summary: Workspace 멤버 비활성화
       operationId: deactivateWorkspaceMember
       x-owner: member-1
-      x-implementation-status: planned
+      x-implementation-status: implemented
       parameters:
         - $ref: "#/components/parameters/WorkspaceId"
         - name: userId
@@ -437,13 +559,48 @@ paths:
         "204":
           description: 비활성화 완료, 과거 제출은 유지
 
+  /workspaces/{workspaceId}/members/{userId}/role:
+    patch:
+      tags: [Workspaces]
+      summary: Owner가 Workspace 역할 변경
+      description: 마지막 활성 Owner는 강등할 수 없습니다.
+      operationId: updateWorkspaceMemberRole
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role:
+                  type: string
+                  enum: [OWNER, MANAGER, MEMBER]
+      responses:
+        "200":
+          description: 역할이 변경된 Workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspace"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
   /workspaces/{workspaceId}/members/sync:
     post:
       tags: [Workspaces]
       summary: GitLab 프로젝트 멤버와 동기화
       operationId: syncWorkspaceMembers
       x-owner: member-1
-      x-implementation-status: planned
+      x-implementation-status: implemented
       parameters:
         - $ref: "#/components/parameters/WorkspaceId"
       responses:
@@ -454,13 +611,92 @@ paths:
               schema:
                 $ref: "#/components/schemas/MemberSyncResponse"
 
+  /workspaces/{workspaceId}/sync:
+    post:
+      tags: [Workspaces, Sessions]
+      summary: GitLab 원본에서 일정 파일 동기화
+      description: YYMMDD/session.yml 파일을 안전하게 검증해 반영하며, 잘못된 파일은 이전 정상 상태를 보존하고 failures에 반환합니다.
+      operationId: syncWorkspaceSessions
+      x-owner: member-2
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      responses:
+        "200":
+          description: 일정 동기화 결과
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/WorkspaceSyncResponse"
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+        "403":
+          $ref: "#/components/responses/WorkspaceAccessDenied"
+        "429":
+          description: GitLab 요청 제한
+
+  /workspaces/{workspaceId}/sync-jobs:
+    get:
+      tags: [Workspaces]
+      summary: 최근 GitLab 동기화 작업 이력
+      operationId: listWorkspaceSyncJobs
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      responses:
+        "200":
+          description: 최근 20개 동기화 상태와 오류
+
+  /workspaces/{workspaceId}/audit-events:
+    get:
+      tags: [Workspaces]
+      summary: Owner와 Manager용 Workspace 감사 로그
+      operationId: listWorkspaceAuditEvents
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      responses:
+        "200":
+          description: 최근 100개 중요 변경 이벤트
+        "403":
+          $ref: "#/components/responses/WorkspaceAccessDenied"
+
+  /notifications:
+    get:
+      tags: [Workspaces]
+      summary: 현재 사용자의 인앱 알림 수신함
+      operationId: listNotifications
+      x-implementation-status: implemented
+      responses:
+        "200":
+          description: 최근 50개 알림
+
+  /notifications/{notificationId}/read:
+    patch:
+      tags: [Workspaces]
+      summary: 본인 알림 읽음 처리
+      operationId: markNotificationRead
+      x-implementation-status: implemented
+      parameters:
+        - name: notificationId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: 읽음 처리된 알림
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /workspaces/{workspaceId}/sessions:
     get:
       tags: [Sessions]
       summary: 기간·유형·상태별 일정 목록
       operationId: listSessions
       x-owner: member-2
-      x-implementation-status: planned
+      x-implementation-status: implemented
       parameters:
         - $ref: "#/components/parameters/WorkspaceId"
         - name: from
@@ -499,7 +735,7 @@ paths:
       summary: 일정과 session.yml 생성
       operationId: createSession
       x-owner: member-2
-      x-implementation-status: planned
+      x-implementation-status: implemented
       parameters:
         - $ref: "#/components/parameters/WorkspaceId"
       requestBody:
@@ -527,7 +763,7 @@ paths:
       summary: 특정 날짜 일정
       operationId: getSession
       x-owner: member-2
-      x-implementation-status: planned
+      x-implementation-status: implemented
       responses:
         "200":
           description: 일정 상세
@@ -542,7 +778,7 @@ paths:
       summary: revision과 lastCommitId를 확인하고 일정 수정
       operationId: updateSession
       x-owner: member-2
-      x-implementation-status: planned
+      x-implementation-status: implemented
       requestBody:
         required: true
         content:
@@ -563,7 +799,7 @@ paths:
       summary: session.yml을 삭제하지 않고 cancelled 처리
       operationId: cancelSession
       x-owner: member-2
-      x-implementation-status: planned
+      x-implementation-status: implemented
       requestBody:
         required: true
         content:
@@ -597,7 +833,7 @@ paths:
       summary: 연결 프로젝트의 repository tree
       operationId: getRepositoryTree
       x-owner: member-2
-      x-implementation-status: planned
+      x-implementation-status: implemented
       parameters:
         - $ref: "#/components/parameters/WorkspaceId"
         - name: path
@@ -628,7 +864,7 @@ paths:
       summary: 허용된 텍스트 파일과 커밋 정보
       operationId: getRepositoryFile
       x-owner: member-2
-      x-implementation-status: planned
+      x-implementation-status: implemented
       parameters:
         - $ref: "#/components/parameters/WorkspaceId"
         - name: path
@@ -658,7 +894,7 @@ paths:
       summary: 내 제출 파일과 항목별 상태
       operationId: getMySubmissions
       x-owner: member-3
-      x-implementation-status: planned
+      x-implementation-status: implemented
       parameters:
         - $ref: "#/components/parameters/WorkspaceId"
         - $ref: "#/components/parameters/SessionDate"
@@ -680,7 +916,7 @@ paths:
       summary: 내 특정 항목 제출 조회
       operationId: getMyItemSubmission
       x-owner: member-3
-      x-implementation-status: planned
+      x-implementation-status: implemented
       responses:
         "200":
           description: 항목 제출
@@ -695,7 +931,7 @@ paths:
       summary: 항목 제출 생성 또는 수정
       operationId: upsertItemSubmission
       x-owner: member-3
-      x-implementation-status: planned
+      x-implementation-status: implemented
       requestBody:
         required: true
         content:
@@ -708,7 +944,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/SubmissionMutationResponse"
+                $ref: "#/components/schemas/Workspace"
         "409":
           $ref: "#/components/responses/Conflict"
         "422":
@@ -718,24 +954,14 @@ paths:
       summary: 파일에서 해당 항목 제출만 제거
       operationId: deleteItemSubmission
       x-owner: member-3
-      x-implementation-status: planned
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [expectedFileCommitId, commitMessage]
-              properties:
-                expectedFileCommitId:
-                  type: string
-                commitMessage:
-                  type: string
-                  minLength: 1
-                  maxLength: 200
+      x-implementation-status: implemented
       responses:
-        "204":
-          description: 항목 제출 제거 완료
+        "200":
+          description: 항목 제출 제거 후 Workspace 상태
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspace"
         "409":
           $ref: "#/components/responses/Conflict"
 
@@ -745,7 +971,7 @@ paths:
       summary: 다른 멤버의 제출 파일 읽기
       operationId: getMemberSubmission
       x-owner: member-3
-      x-implementation-status: planned
+      x-implementation-status: implemented
       parameters:
         - $ref: "#/components/parameters/WorkspaceId"
         - $ref: "#/components/parameters/SessionDate"
@@ -771,7 +997,7 @@ paths:
       summary: 선택 날짜의 팀·개인 진행률
       operationId: getDashboard
       x-owner: member-3
-      x-implementation-status: planned
+      x-implementation-status: implemented
       parameters:
         - $ref: "#/components/parameters/WorkspaceId"
         - name: date
@@ -794,7 +1020,7 @@ paths:
       summary: 일별 또는 월별 기록
       operationId: getRecords
       x-owner: member-3
-      x-implementation-status: planned
+      x-implementation-status: implemented
       parameters:
         - $ref: "#/components/parameters/WorkspaceId"
         - name: view
@@ -831,7 +1057,7 @@ paths:
       summary: 기간별 내 점수와 멤버 순위
       operationId: getScores
       x-owner: member-3
-      x-implementation-status: planned
+      x-implementation-status: implemented
       parameters:
         - $ref: "#/components/parameters/WorkspaceId"
         - name: from
@@ -1040,36 +1266,41 @@ components:
 
     CurrentUserResponse:
       type: object
-      required: [data]
+      required: [authenticated, mode, user]
       properties:
-        data:
-          $ref: "#/components/schemas/CurrentUser"
-    CurrentUser:
+        authenticated:
+          const: true
+        mode:
+          const: gitlab-oauth
+        user:
+          $ref: "#/components/schemas/AuthenticatedGitLabUser"
+    UnauthenticatedResponse:
       type: object
-      required: [id, gitlabUserId, username, displayName, workspaces]
+      required: [authenticated]
+      properties:
+        authenticated:
+          const: false
+    AuthenticatedGitLabUser:
+      type: object
+      required: [id, username, name]
       properties:
         id:
-          type: string
-          format: uuid
-        gitlabUserId:
           type: integer
           format: int64
         username:
           type: string
-        displayName:
+        name:
           type: string
         avatarUrl:
           type: [string, "null"]
           format: uri
-        workspaces:
-          type: array
-          items:
-            $ref: "#/components/schemas/WorkspaceSummary"
+        webUrl:
+          type: [string, "null"]
+          format: uri
 
     GitLabProject:
       type: object
-      required:
-        [id, name, pathWithNamespace, visibility, effectiveAccessLevel]
+      required: [id, name, pathWithNamespace, visibility]
       properties:
         id:
           type: integer
@@ -1295,6 +1526,44 @@ components:
             newCandidates:
               type: integer
 
+    WorkspaceSyncFailure:
+      type: object
+      required: [path, code, message]
+      properties:
+        path:
+          type: string
+          pattern: ^\d{6}/[A-Za-z0-9._-]+$
+        code:
+          type: string
+          example: INVALID_SESSION_FILE
+        message:
+          type: string
+    WorkspaceSyncResponse:
+      type: object
+      required: [workspace, importedSessions, removedSessions, importedSubmissions, removedSubmissions, failures, syncedAt]
+      properties:
+        workspace:
+          $ref: "#/components/schemas/Workspace"
+        importedSessions:
+          type: integer
+          minimum: 0
+        removedSessions:
+          type: integer
+          minimum: 0
+        importedSubmissions:
+          type: integer
+          minimum: 0
+        removedSubmissions:
+          type: integer
+          minimum: 0
+        failures:
+          type: array
+          items:
+            $ref: "#/components/schemas/WorkspaceSyncFailure"
+        syncedAt:
+          type: string
+          format: date-time
+
     SessionType:
       type: string
       enum: [algorithm, english, cs, free]
@@ -1303,7 +1572,7 @@ components:
       enum: [active, cancelled]
     SubmitType:
       type: string
-      enum: [link, text, code]
+      enum: [link, text, code, mixed]
     StudyItem:
       type: object
       required: [id, order, title, submitType, required, status]

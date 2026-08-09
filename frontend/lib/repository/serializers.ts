@@ -1,11 +1,29 @@
 import type {
   MemberSubmissionFile,
   StudySession,
+  SubmissionEntry,
   Workspace,
 } from "../domain/types";
 
 function yamlString(value: string) {
   return /[:#\n]/.test(value) ? JSON.stringify(value) : value;
+}
+
+function markdownSubmissionValue(entry: SubmissionEntry) {
+  if (entry.type !== "code") return entry.value;
+
+  const normalized = entry.value.replace(/\r\n?/g, "\n");
+  const longestBacktickRun = Math.max(
+    0,
+    ...(normalized.match(/`+/g) ?? []).map((run) => run.length),
+  );
+  const fence = "`".repeat(Math.max(3, longestBacktickRun + 1));
+  const language = /^[A-Za-z0-9_+.#-]{1,32}$/.test(entry.language ?? "")
+    ? entry.language
+    : "";
+  const trailingNewline = normalized.endsWith("\n") ? "" : "\n";
+
+  return `${fence}${language}\n${normalized}${trailingNewline}${fence}`;
 }
 
 export function serializeSession(session: StudySession) {
@@ -65,7 +83,7 @@ ${entry.language ? `    language: ${entry.language}\n` : ""}    value: ${yamlStr
       const entry = file.submissions.find(
         (submission) => submission.itemId === item.id,
       );
-      return `## ${item.title}\n\n${entry?.value ?? "(미제출)"}`;
+      return `## ${item.title}\n\n${entry ? markdownSubmissionValue(entry) : "(미제출)"}`;
     })
     .join("\n\n");
 

@@ -1,0 +1,527 @@
+package com.studyworkspace.workspace.controller;
+
+import static com.studyworkspace.workspace.domain.WorkspaceModels.*;
+
+import java.nio.charset.StandardCharsets;
+import java.time.OffsetDateTime;
+import java.util.ArrayList;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+
+import com.studyworkspace.gitlab.dto.GitLabUser;
+import com.studyworkspace.gitlab.dto.GitLabProject;
+import com.studyworkspace.gitlab.service.GitLabOAuthProjectService;
+import com.studyworkspace.auth.dto.GitLabOAuthSession;
+import com.studyworkspace.auth.service.GitLabOAuthTokenProvider;
+import com.studyworkspace.workspace.domain.WorkspaceException;
+import com.studyworkspace.workspace.service.GitLabSessionFileService;
+import com.studyworkspace.workspace.service.GitLabSessionSyncService;
+import com.studyworkspace.workspace.service.GitLabSubmissionFileService;
+import com.studyworkspace.workspace.service.WorkspaceService;
+import com.studyworkspace.workspace.service.SessionYamlSerializer;
+import com.studyworkspace.workspace.service.SubmissionMarkdownCodec;
+import com.studyworkspace.workspace.service.GitLabWorkspaceMemberService;
+import com.studyworkspace.workspace.security.WorkspaceAccessService;
+import com.studyworkspace.workspace.service.SyncJobService;
+import com.studyworkspace.workspace.service.AuditEventService;
+import com.studyworkspace.workspace.service.InAppNotificationService;
+import com.studyworkspace.common.exception.GitLabApiException;
+import com.studyworkspace.workspace.dto.WorkspaceSyncResponse;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.util.StringUtils;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+
+@RestController
+@RequestMapping("/api/v1/workspaces")
+public class WorkspaceController {
+
+	private final WorkspaceService service;
+	private final GitLabOAuthTokenProvider tokenProvider;
+	private final GitLabOAuthProjectService projectService;
+	private final GitLabSessionFileService sessionFileService;
+	private final GitLabSessionSyncService sessionSyncService;
+	private final GitLabSubmissionFileService submissionFileService;
+	private final SessionYamlSerializer sessionYamlSerializer;
+	private final SubmissionMarkdownCodec submissionMarkdownCodec;
+	private final GitLabWorkspaceMemberService memberService;
+	private final WorkspaceAccessService accessService;
+	private final SyncJobService syncJobService;
+	private final AuditEventService auditEventService;
+	private final InAppNotificationService notificationService;
+
+	public WorkspaceController(
+		WorkspaceService service,
+		GitLabOAuthTokenProvider tokenProvider,
+		GitLabOAuthProjectService projectService,
+		GitLabSessionFileService sessionFileService,
+		GitLabSessionSyncService sessionSyncService,
+		GitLabSubmissionFileService submissionFileService,
+		SessionYamlSerializer sessionYamlSerializer,
+		SubmissionMarkdownCodec submissionMarkdownCodec,
+		GitLabWorkspaceMemberService memberService,
+		WorkspaceAccessService accessService,
+		SyncJobService syncJobService,
+		AuditEventService auditEventService,
+		InAppNotificationService notificationService
+	) {
+		this.service = service;
+		this.tokenProvider = tokenProvider;
+		this.projectService = projectService;
+		this.sessionFileService = sessionFileService;
+		this.sessionSyncService = sessionSyncService;
+		this.submissionFileService = submissionFileService;
+		this.sessionYamlSerializer = sessionYamlSerializer;
+		this.submissionMarkdownCodec = submissionMarkdownCodec;
+		this.memberService = memberService;
+		this.accessService = accessService;
+		this.syncJobService = syncJobService;
+		this.auditEventService = auditEventService;
+		this.notificationService = notificationService;
+	}
+
+	@GetMapping
+	public List<WorkspaceState> listWorkspaces(@AuthenticationPrincipal GitLabUser user) {
+		return service.list(user.id());
+	}
+
+	@GetMapping("/deleted")
+	public List<Map<String, Object>> listDeletedWorkspaces(@AuthenticationPrincipal GitLabUser user) {
+		return service.listDeleted(user.id());
+	}
+
+	@PostMapping
+	@ResponseStatus(HttpStatus.CREATED)
+	public WorkspaceState createWorkspace(
+		@RequestBody CreateWorkspaceRequest request,
+		@AuthenticationPrincipal GitLabUser user,
+		HttpServletRequest servletRequest
+	) {
+		if (request == null || request.gitlabProjectId() <= 0 || !StringUtils.hasText(request.name())) {
+			throw new WorkspaceException("INVALID_REQUEST", "Workspace 이름과 GitLab 프로젝트가 필요합니다.", 400);
+		}
+		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
+		GitLabProject project = projectService.getProject(oauth.accessToken(), request.gitlabProjectId());
+		CreateWorkspaceRequest verified = new CreateWorkspaceRequest(
+			request.name(),
+			project.id(),
+			project.pathWithNamespace(),
+			StringUtils.hasText(project.defaultBranch()) ? project.defaultBranch() : "main",
+			request.timezone()
+		);
+		WorkspaceState created = service.create(verified, user);
+		auditEventService.record(created.id(), user, "WORKSPACE_CREATED", "WORKSPACE", created.id(), Map.of("projectPath", created.gitlabProjectPath()));
+		return created;
+	}
+
+	@GetMapping("/{workspaceId}")
+	public WorkspaceState getWorkspace(@PathVariable String workspaceId) {
+		return service.get(workspaceId);
+	}
+
+	@PatchMapping("/{workspaceId}")
+	public WorkspaceState updateWorkspace(
+		@PathVariable String workspaceId,
+		@RequestBody UpdateWorkspaceRequest request,
+		@AuthenticationPrincipal GitLabUser user
+	) {
+		accessService.requireManager(workspaceId, user.id(), false);
+		WorkspaceState updated = service.update(workspaceId, request);
+		auditEventService.record(workspaceId, user, "WORKSPACE_UPDATED", "WORKSPACE", workspaceId, Map.of());
+		return updated;
+	}
+
+	@DeleteMapping("/{workspaceId}")
+	public WorkspaceState softDeleteWorkspace(@PathVariable String workspaceId, @AuthenticationPrincipal GitLabUser user) {
+		accessService.requireOwner(workspaceId, user.id(), false);
+		WorkspaceState deleted = service.setStatus(workspaceId, "SOFT_DELETED");
+		auditEventService.record(workspaceId, user, "WORKSPACE_SOFT_DELETED", "WORKSPACE", workspaceId, Map.of("retentionDays", 7));
+		return deleted;
+	}
+
+	@PostMapping("/{workspaceId}/restore")
+	public WorkspaceState restoreWorkspace(@PathVariable String workspaceId, @AuthenticationPrincipal GitLabUser user) {
+		accessService.requireOwner(workspaceId, user.id(), true);
+		WorkspaceState restored = service.setStatus(workspaceId, "ACTIVE");
+		auditEventService.record(workspaceId, user, "WORKSPACE_RESTORED", "WORKSPACE", workspaceId, Map.of());
+		return restored;
+	}
+
+	@GetMapping("/{workspaceId}/members")
+	public List<StudyMember> listMembers(@PathVariable String workspaceId) {
+		return service.get(workspaceId).members();
+	}
+
+	@GetMapping("/{workspaceId}/member-candidates")
+	public List<StudyMember> listMemberCandidates(@PathVariable String workspaceId, HttpServletRequest servletRequest) {
+		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
+		return memberService.candidates(oauth.accessToken(), workspaceId);
+	}
+
+	@PostMapping("/{workspaceId}/members")
+	public WorkspaceState addMember(
+		@PathVariable String workspaceId,
+		@RequestBody StudyMember member,
+		@AuthenticationPrincipal GitLabUser user,
+		HttpServletRequest servletRequest
+	) {
+		accessService.requireManager(workspaceId, user.id(), false);
+		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
+		WorkspaceState updated = memberService.addVerified(oauth.accessToken(), workspaceId, member.gitlabUserId());
+		auditEventService.record(workspaceId, user, "MEMBER_ADDED", "MEMBER", Long.toString(member.gitlabUserId()), Map.of());
+		return updated;
+	}
+
+	@DeleteMapping("/{workspaceId}/members/{memberId}")
+	public WorkspaceState deactivateMember(
+		@PathVariable String workspaceId,
+		@PathVariable String memberId,
+		@AuthenticationPrincipal GitLabUser user
+	) {
+		accessService.requireOwner(workspaceId, user.id(), false);
+		WorkspaceState updated = service.deactivateMember(workspaceId, memberId, user.id());
+		auditEventService.record(workspaceId, user, "MEMBER_DEACTIVATED", "MEMBER", memberId, Map.of());
+		return updated;
+	}
+
+	@PatchMapping("/{workspaceId}/members/{memberId}/role")
+	public WorkspaceState updateMemberRole(
+		@PathVariable String workspaceId,
+		@PathVariable String memberId,
+		@RequestBody Map<String, String> request,
+		@AuthenticationPrincipal GitLabUser user
+	) {
+		accessService.requireOwner(workspaceId, user.id(), false);
+		String role = request == null ? null : request.get("role");
+		WorkspaceState updated = service.updateMemberRole(workspaceId, memberId, role);
+		auditEventService.record(workspaceId, user, "MEMBER_ROLE_UPDATED", "MEMBER", memberId, Map.of("role", role));
+		return updated;
+	}
+
+	@PostMapping("/{workspaceId}/members/sync")
+	public WorkspaceState syncMembers(
+		@PathVariable String workspaceId,
+		@AuthenticationPrincipal GitLabUser user,
+		HttpServletRequest servletRequest
+	) {
+		accessService.requireManager(workspaceId, user.id(), false);
+		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
+		WorkspaceState updated = memberService.sync(oauth.accessToken(), workspaceId);
+		auditEventService.record(workspaceId, user, "MEMBERS_SYNCED", "WORKSPACE", workspaceId, Map.of("memberCount", updated.members().size()));
+		return updated;
+	}
+
+	@PostMapping("/{workspaceId}/sync")
+	public WorkspaceSyncResponse syncWorkspace(
+		@PathVariable String workspaceId,
+		@AuthenticationPrincipal GitLabUser user,
+		HttpServletRequest servletRequest
+	) {
+		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
+		String jobId = syncJobService.start(workspaceId, "REPOSITORY_SYNC");
+		try {
+			WorkspaceSyncResponse result = sessionSyncService.sync(oauth.accessToken(), workspaceId);
+			syncJobService.complete(jobId, !result.failures().isEmpty());
+			auditEventService.record(workspaceId, user, result.failures().isEmpty() ? "REPOSITORY_SYNCED" : "REPOSITORY_SYNC_PARTIAL", "SYNC_JOB", jobId, Map.of("failures", result.failures().size()));
+			if (!result.failures().isEmpty()) {
+				notificationService.create(user.id(), workspaceId, "SYNC_PARTIAL", "일부 GitLab 파일을 동기화하지 못했습니다.", result.failures().size() + "개 파일을 확인해 주세요.", "/settings");
+			}
+			return result;
+		} catch (WorkspaceException exception) {
+			syncJobService.fail(jobId, exception.code(), exception.getMessage());
+			recordSyncFailure(workspaceId, user, jobId, exception.code(), exception.getMessage());
+			throw exception;
+		} catch (GitLabApiException exception) {
+			syncJobService.fail(jobId, exception.code(), exception.getMessage());
+			recordSyncFailure(workspaceId, user, jobId, exception.code(), exception.getMessage());
+			throw exception;
+		} catch (RuntimeException exception) {
+			syncJobService.fail(jobId, "SYNC_FAILED", exception.getMessage());
+			recordSyncFailure(workspaceId, user, jobId, "SYNC_FAILED", exception.getMessage());
+			throw exception;
+		}
+	}
+
+	@GetMapping("/{workspaceId}/sync-jobs")
+	public List<SyncJobService.SyncJobView> listSyncJobs(@PathVariable String workspaceId) {
+		return syncJobService.list(workspaceId);
+	}
+
+	@GetMapping("/{workspaceId}/audit-events")
+	public List<AuditEventService.AuditEventView> listAuditEvents(
+		@PathVariable String workspaceId,
+		@AuthenticationPrincipal GitLabUser user
+	) {
+		accessService.requireManager(workspaceId, user.id(), false);
+		return auditEventService.list(workspaceId);
+	}
+
+	@PatchMapping("/{workspaceId}/notifications")
+	public WorkspaceState updateNotifications(
+		@PathVariable String workspaceId,
+		@RequestBody Notifications notifications,
+		@AuthenticationPrincipal GitLabUser user
+	) {
+		WorkspaceState updated = service.updateNotifications(workspaceId, notifications);
+		auditEventService.record(workspaceId, user, "NOTIFICATION_SETTINGS_UPDATED", "WORKSPACE", workspaceId, Map.of());
+		return updated;
+	}
+
+	@GetMapping("/{workspaceId}/sessions")
+	public List<StudySession> listSessions(
+		@PathVariable String workspaceId,
+		@RequestParam(required = false) String from,
+		@RequestParam(required = false) String to,
+		@RequestParam(required = false) String type,
+		@RequestParam(required = false) String status
+	) {
+		return service.get(workspaceId).sessions().values().stream()
+			.filter(session -> from == null || session.date().compareTo(from) >= 0)
+			.filter(session -> to == null || session.date().compareTo(to) <= 0)
+			.filter(session -> type == null || type.equals(session.type()))
+			.filter(session -> status == null || status.equals(session.status()))
+			.sorted(Comparator.comparing(StudySession::date))
+			.toList();
+	}
+
+	@PostMapping("/{workspaceId}/sessions")
+	@ResponseStatus(HttpStatus.CREATED)
+	public WorkspaceState createSession(
+		@PathVariable String workspaceId,
+		@RequestBody SessionDraft draft,
+		@AuthenticationPrincipal GitLabUser user,
+		HttpServletRequest servletRequest
+	) {
+		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
+		WorkspaceState updated = service.saveSession(
+			workspaceId,
+			null,
+			draft,
+			user.username(),
+			(workspace, current, next) -> sessionFileService.write(oauth.accessToken(), workspace, current, next)
+		);
+		auditEventService.record(workspaceId, user, "SESSION_CREATED", "SESSION", draft.date(), Map.of("revision", updated.sessions().get(draft.date()).revision()));
+		return updated;
+	}
+
+	@GetMapping("/{workspaceId}/sessions/{date}")
+	public StudySession getSession(@PathVariable String workspaceId, @PathVariable String date) {
+		StudySession session = service.get(workspaceId).sessions().get(date);
+		if (session == null) throw new WorkspaceException("SESSION_NOT_FOUND", "해당 날짜의 일정을 찾을 수 없습니다.", 404);
+		return session;
+	}
+
+	@PutMapping("/{workspaceId}/sessions/{date}")
+	public WorkspaceState updateSession(
+		@PathVariable String workspaceId,
+		@PathVariable String date,
+		@RequestBody SessionDraft draft,
+		@AuthenticationPrincipal GitLabUser user,
+		HttpServletRequest servletRequest
+	) {
+		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
+		WorkspaceState updated = service.saveSession(
+			workspaceId,
+			date,
+			draft,
+			user.username(),
+			(workspace, current, next) -> sessionFileService.write(oauth.accessToken(), workspace, current, next)
+		);
+		auditEventService.record(workspaceId, user, "SESSION_UPDATED", "SESSION", date, Map.of("revision", updated.sessions().get(date).revision()));
+		return updated;
+	}
+
+	@DeleteMapping("/{workspaceId}/sessions/{date}")
+	public WorkspaceState cancelSession(
+		@PathVariable String workspaceId,
+		@PathVariable String date,
+		@RequestParam(required = false) Integer expectedRevision,
+		@AuthenticationPrincipal GitLabUser user,
+		HttpServletRequest servletRequest
+	) {
+		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
+		WorkspaceState updated = service.cancelSession(
+			workspaceId,
+			date,
+			expectedRevision,
+			user.username(),
+			(workspace, current, next) -> sessionFileService.write(oauth.accessToken(), workspace, current, next)
+		);
+		auditEventService.record(workspaceId, user, "SESSION_CANCELLED", "SESSION", date, Map.of("revision", updated.sessions().get(date).revision()));
+		return updated;
+	}
+
+	@GetMapping("/{workspaceId}/sessions/{date}/submissions/me")
+	public MemberSubmissionFile getMySubmissions(
+		@PathVariable String workspaceId,
+		@PathVariable String date,
+		@AuthenticationPrincipal GitLabUser user
+	) {
+		WorkspaceState workspace = service.get(workspaceId);
+		StudySession session = workspace.sessions().get(date);
+		if (session == null) throw new WorkspaceException("SESSION_NOT_FOUND", "해당 날짜의 일정을 찾을 수 없습니다.", 404);
+		StudyMember member = WorkspaceService.currentMember(workspace, user.id());
+		return workspace.submissions().get(session.folder() + "/" + member.id());
+	}
+
+	@GetMapping("/{workspaceId}/sessions/{date}/items/{itemId}/submission")
+	public SubmissionEntry getMyItemSubmission(
+		@PathVariable String workspaceId,
+		@PathVariable String date,
+		@PathVariable String itemId,
+		@AuthenticationPrincipal GitLabUser user
+	) {
+		MemberSubmissionFile file = getMySubmissions(workspaceId, date, user);
+		if (file == null) return null;
+		return file.submissions().stream().filter(entry -> entry.itemId().equals(itemId)).findFirst().orElse(null);
+	}
+
+	@GetMapping("/{workspaceId}/sessions/{date}/members/{memberId}/submission")
+	public MemberSubmissionFile getMemberSubmission(
+		@PathVariable String workspaceId,
+		@PathVariable String date,
+		@PathVariable String memberId
+	) {
+		WorkspaceState workspace = service.get(workspaceId);
+		StudySession session = workspace.sessions().get(date);
+		if (session == null) throw new WorkspaceException("SESSION_NOT_FOUND", "해당 날짜의 일정을 찾을 수 없습니다.", 404);
+		return workspace.submissions().get(session.folder() + "/" + memberId);
+	}
+
+	@PutMapping("/{workspaceId}/sessions/{date}/items/{itemId}/submission")
+	public WorkspaceState upsertSubmission(
+		@PathVariable String workspaceId,
+		@PathVariable String date,
+		@PathVariable String itemId,
+		@RequestBody SubmissionRequest request,
+		@AuthenticationPrincipal GitLabUser user,
+		HttpServletRequest servletRequest
+	) {
+		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
+		WorkspaceState updated = service.upsertSubmission(
+			workspaceId, date, itemId, request, user.id(),
+			(workspace, session, member, current, next, commitMessage) -> submissionFileService.write(
+				oauth.accessToken(), workspace, session, member, current, next, commitMessage
+			)
+		);
+		auditEventService.record(workspaceId, user, "SUBMISSION_UPSERTED", "SUBMISSION", date + ":" + itemId, Map.of());
+		return updated;
+	}
+
+	@DeleteMapping("/{workspaceId}/sessions/{date}/items/{itemId}/submission")
+	public WorkspaceState deleteSubmission(
+		@PathVariable String workspaceId,
+		@PathVariable String date,
+		@PathVariable String itemId,
+		@AuthenticationPrincipal GitLabUser user,
+		HttpServletRequest servletRequest
+	) {
+		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
+		WorkspaceState updated = service.deleteSubmission(
+			workspaceId, date, itemId, user.id(),
+			(workspace, session, member, current, next, commitMessage) -> submissionFileService.write(
+				oauth.accessToken(), workspace, session, member, current, next, commitMessage
+			)
+		);
+		auditEventService.record(workspaceId, user, "SUBMISSION_DELETED", "SUBMISSION", date + ":" + itemId, Map.of());
+		return updated;
+	}
+
+	@GetMapping("/{workspaceId}/dashboard")
+	public Map<String, Object> dashboard(@PathVariable String workspaceId, @RequestParam String date) {
+		return service.dashboard(workspaceId, date);
+	}
+
+	@GetMapping("/{workspaceId}/records")
+	public Map<String, Object> records(
+		@PathVariable String workspaceId,
+		@RequestParam(required = false) String from,
+		@RequestParam(required = false) String to
+	) {
+		WorkspaceState workspace = service.get(workspaceId);
+		List<Map<String, Object>> days = new ArrayList<>();
+		workspace.sessions().values().stream()
+			.filter(session -> from == null || session.date().compareTo(from) >= 0)
+			.filter(session -> to == null || session.date().compareTo(to) <= 0)
+			.sorted(Comparator.comparing(StudySession::date))
+			.forEach(session -> days.add(service.dashboard(workspaceId, session.date())));
+		return Map.of("from", from == null ? "" : from, "to", to == null ? "" : to, "days", days);
+	}
+
+	@GetMapping("/{workspaceId}/scores")
+	public Map<String, Object> scores(
+		@PathVariable String workspaceId,
+		@RequestParam(required = false) String from,
+		@RequestParam(required = false) String to
+	) {
+		return Map.of("from", from == null ? "" : from, "to", to == null ? "" : to, "scores", service.scores(workspaceId, from, to));
+	}
+
+	@GetMapping("/{workspaceId}/repository/tree")
+	public List<Map<String, Object>> repositoryTree(@PathVariable String workspaceId) {
+		WorkspaceState workspace = service.get(workspaceId);
+		List<Map<String, Object>> tree = new ArrayList<>();
+		workspace.sessions().values().stream().sorted(Comparator.comparing(StudySession::folder)).forEach(session -> {
+			tree.add(treeItem(session.folder(), session.folder(), "tree"));
+			tree.add(treeItem(session.folder() + "/session.yml", "session.yml", "blob"));
+			workspace.members().forEach(member -> {
+				if (workspace.submissions().containsKey(session.folder() + "/" + member.id())) {
+					tree.add(treeItem(session.folder() + "/" + member.fileName(), member.fileName(), "blob"));
+				}
+			});
+		});
+		return tree;
+	}
+
+	@GetMapping("/{workspaceId}/repository/file")
+	public Map<String, Object> repositoryFile(@PathVariable String workspaceId, @RequestParam String path) {
+		WorkspaceState workspace = service.get(workspaceId);
+		if (path == null || path.contains("..") || path.startsWith("/") || !path.matches("[0-9]{6}/[A-Za-z0-9._-]+")) {
+			throw new WorkspaceException("FILE_PATH_NOT_ALLOWED", "허용되지 않은 저장소 경로입니다.", 400);
+		}
+		String[] parts = path.split("/", 2);
+		StudySession session = workspace.sessions().values().stream().filter(candidate -> candidate.folder().equals(parts[0])).findFirst()
+			.orElseThrow(() -> new WorkspaceException("FILE_NOT_FOUND", "파일을 찾을 수 없습니다.", 404));
+		String content;
+		String commitId;
+		if ("session.yml".equals(parts[1])) {
+			content = sessionYamlSerializer.serialize(session);
+			commitId = session.lastCommitId();
+		} else {
+			StudyMember member = workspace.members().stream().filter(candidate -> candidate.fileName().equals(parts[1])).findFirst()
+				.orElseThrow(() -> new WorkspaceException("FILE_NOT_FOUND", "파일을 찾을 수 없습니다.", 404));
+			MemberSubmissionFile submission = workspace.submissions().get(session.folder() + "/" + member.id());
+			if (submission == null) throw new WorkspaceException("FILE_NOT_FOUND", "파일을 찾을 수 없습니다.", 404);
+			content = submissionMarkdownCodec.encode(submission, session);
+			commitId = submission.lastCommitId();
+		}
+		return Map.of(
+			"fileName", parts[1], "filePath", path, "size", content.getBytes(StandardCharsets.UTF_8).length,
+			"content", content, "ref", workspace.defaultBranch(), "blobId", commitId, "commitId", commitId, "lastCommitId", commitId
+		);
+	}
+
+	private static Map<String, Object> treeItem(String path, String name, String type) {
+		return Map.of("id", "local-" + path, "name", name, "type", type, "path", path, "mode", "blob".equals(type) ? "100644" : "040000");
+	}
+
+	private void recordSyncFailure(String workspaceId, GitLabUser user, String jobId, String code, String message) {
+		String safeMessage = message == null || message.isBlank() ? "GitLab 동기화 중 알 수 없는 오류가 발생했습니다." : message;
+		auditEventService.record(workspaceId, user, "REPOSITORY_SYNC_FAILED", "SYNC_JOB", jobId, Map.of("code", code, "message", safeMessage));
+		notificationService.create(user.id(), workspaceId, "SYNC_FAILED", "GitLab 동기화에 실패했습니다.", safeMessage, "/settings");
+	}
+
+}

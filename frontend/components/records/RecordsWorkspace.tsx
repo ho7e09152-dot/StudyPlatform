@@ -18,7 +18,6 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Modal } from "@/components/ui/Modal";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import {
-  REFERENCE_DATE,
   SESSION_TYPE_META,
   SUBMISSION_TYPE_LABEL,
 } from "@/lib/domain/constants";
@@ -203,7 +202,7 @@ function StatCard({
 }
 
 export function RecordsWorkspace() {
-  const { workspace, currentUserId } = useWorkspace();
+  const { workspace, currentUserId, referenceDate } = useWorkspace();
   const sessions = useMemo(
     () =>
       Object.values(workspace.sessions)
@@ -211,7 +210,7 @@ export function RecordsWorkspace() {
         .sort((a, b) => a.date.localeCompare(b.date)),
     [workspace.sessions],
   );
-  const initialDate = sessions.at(-1)?.date ?? REFERENCE_DATE;
+  const initialDate = sessions.at(-1)?.date ?? referenceDate;
   const [view, setView] = useState<RecordsView>("month");
   const [selectedDate, setSelectedDate] = useState(initialDate);
   const [selectedMonth, setSelectedMonth] = useState(initialDate.slice(0, 7));
@@ -255,8 +254,8 @@ export function RecordsWorkspace() {
   const periodCaption = view === "day" ? "일간 기록" : "월간 요약";
   const isCurrentPeriod =
     view === "day"
-      ? selectedDate === REFERENCE_DATE
-      : selectedMonth === REFERENCE_DATE.slice(0, 7);
+      ? selectedDate === referenceDate
+      : selectedMonth === referenceDate.slice(0, 7);
   const periodKey = view === "day" ? selectedDate : selectedMonth;
   const calendar = getMonthCalendar(selectedMonth);
   const weekDates = getWeekDates(selectedDate);
@@ -306,7 +305,7 @@ export function RecordsWorkspace() {
   };
 
   const goToToday = () => {
-    selectDate(REFERENCE_DATE);
+    selectDate(referenceDate);
   };
 
   return (

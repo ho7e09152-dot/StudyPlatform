@@ -5,22 +5,24 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
-  Bell,
   CalendarDays,
   ChartNoAxesColumnIncreasing,
   Check,
   ChevronDown,
   FolderGit2,
   LayoutDashboard,
+  LogOut,
   Menu,
   RefreshCw,
   Settings,
   X,
+  Plus,
 } from "lucide-react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { Toast } from "@/components/ui/Toast";
 import { useGitLabConnection } from "@/lib/api/hooks/useGitLabConnection";
+import { logout } from "@/lib/api/services/authApi";
 
 const navigation = [
   { href: "/today", label: "오늘", icon: LayoutDashboard },
@@ -90,7 +92,6 @@ export function AppShell({ children }: { children: ReactNode }) {
             alt="SSAFY"
             width={684}
             height={354}
-            priority
             unoptimized
           />
           <div>
@@ -137,6 +138,12 @@ export function AppShell({ children }: { children: ReactNode }) {
                   {candidate.id === workspace.id ? <Check size={17} /> : null}
                 </button>
               ))}
+              <Link
+                className="workspace-menu__create"
+                role="menuitem"
+                href="/workspaces/new"
+                onClick={() => setWorkspaceMenuOpen(false)}
+              ><Plus size={16} /><span><strong>새 Workspace 연결</strong><small>다른 GitLab 프로젝트 선택</small></span></Link>
             </div>
           ) : null}
         </div>
@@ -192,8 +199,18 @@ export function AppShell({ children }: { children: ReactNode }) {
               <strong>{currentMember.displayName}</strong>
               <small>@{currentMember.username}</small>
             </span>
-            <button type="button" className="icon-button" aria-label="알림">
-              <Bell size={18} />
+            <button
+              type="button"
+              className="icon-button"
+              aria-label="로그아웃"
+              title="로그아웃"
+              onClick={() => {
+                void logout().finally(() => {
+                  window.location.href = "/login";
+                });
+              }}
+            >
+              <LogOut size={18} />
             </button>
           </div>
         </div>
@@ -214,7 +231,6 @@ export function AppShell({ children }: { children: ReactNode }) {
           alt="SSAFY"
           width={684}
           height={354}
-          priority
           unoptimized
         />
         <span className="mobile-workspace">

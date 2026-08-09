@@ -1,0 +1,15 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:study-workspace-tests;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  session:
+    jdbc:
+      initialize-schema: always
+
+app:
+  demo:
+    persistence-path: build/test-data/workspaces.json
+    seed-enabled: true
+  security:
+    token-encryption-key: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=

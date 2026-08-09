@@ -1,5 +1,8 @@
+"use client";
+
 import Image from "next/image";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   ArrowLeft,
   ArrowRight,
@@ -16,9 +19,20 @@ const apiBaseUrl = (
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
 ).replace(/\/+$/, "");
 
-const gitLabLoginUrl = `${apiBaseUrl}/api/v1/auth/gitlab/login?returnUrl=%2Ftoday`;
+const demoMode = process.env.NEXT_PUBLIC_APP_MODE === "demo";
 
 export function LoginPage() {
+  const searchParams = useSearchParams();
+  const oauthError = searchParams.get("oauthError");
+  const requestedReturnUrl = searchParams.get("returnUrl");
+  const returnUrl =
+    requestedReturnUrl?.startsWith("/") &&
+    !requestedReturnUrl.startsWith("//") &&
+    !requestedReturnUrl.includes("\\")
+      ? requestedReturnUrl
+      : "/today";
+  const gitLabLoginUrl = `${apiBaseUrl}/api/v1/auth/gitlab/login?returnUrl=${encodeURIComponent(returnUrl)}`;
+
   return (
     <main className="login-page">
       <div className="login-background" aria-hidden="true">
@@ -39,7 +53,6 @@ export function LoginPage() {
               alt="SSAFY"
               width={684}
               height={354}
-              priority
               unoptimized
             />
             <span>
@@ -90,22 +103,38 @@ export function LoginPage() {
             </div>
           </header>
 
-          <a className="gitlab-login-button" href={gitLabLoginUrl}>
+          {oauthError ? (
+            <div className="login-oauth-error" role="alert">
+              {oauthError === "session_expired"
+                ? "로그인 세션이 만료되었습니다. GitLab로 다시 로그인해 주세요."
+                : oauthError === "reconnect_required"
+                  ? "GitLab 연결이 만료되거나 철회되었습니다. 권한을 다시 승인해 주세요."
+                : "GitLab 로그인이 취소되었거나 승인되지 않았습니다. 다시 시도해 주세요."}
+            </div>
+          ) : null}
+
+          <a
+            className="gitlab-login-button"
+            href={gitLabLoginUrl}
+          >
             <Gitlab size={20} />
             GitLab로 계속하기
             <ArrowRight size={17} />
           </a>
 
-          <div className="login-divider"><span>또는</span></div>
-
-          <Link className="demo-login-button" href="/today">
-            <span><FolderGit2 size={18} /></span>
-            <div>
-              <strong>데모 Workspace 둘러보기</strong>
-              <small>로그인 없이 준비된 데이터로 기능 확인</small>
-            </div>
-            <ArrowRight size={17} />
-          </Link>
+          {demoMode ? (
+            <>
+              <div className="login-divider"><span>또는</span></div>
+              <Link className="demo-login-button" href="/today">
+                <span><FolderGit2 size={18} /></span>
+                <div>
+                  <strong>데모 Workspace 둘러보기</strong>
+                  <small>로그인 없이 준비된 데이터로 기능 확인</small>
+                </div>
+                <ArrowRight size={17} />
+              </Link>
+            </>
+          ) : null}
 
           <div className="login-security-note">
             <ShieldCheck size={19} />
@@ -116,7 +145,8 @@ export function LoginPage() {
           </div>
 
           <footer>
-            계속하면 GitLab 계정의 기본 프로필과 접근 가능한 프로젝트를 읽는 데 동의하게 됩니다.
+            계속하면 <Link href="/terms">이용약관</Link>과 <Link href="/privacy">개인정보 처리 안내</Link>에 동의하고,
+            GitLab 계정의 기본 프로필과 접근 가능한 프로젝트를 읽도록 승인하게 됩니다.
           </footer>
         </section>
       </div>

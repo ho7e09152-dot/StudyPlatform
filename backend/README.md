@@ -1,10 +1,10 @@
 # Study Workspace Backend
 
-Spring Boot 기반 Study Workspace 백엔드입니다. 현재는 전체 도메인 구현에 앞서 SSAFY GitLab과의 네트워크·토큰·프로젝트 읽기 권한 및 임시 브랜치 쓰기 권한을 검증하는 연결 스파이크가 구현되어 있습니다.
+Spring Boot 기반 Study Workspace 백엔드입니다. 환경변수 없이 실행되는 로컬 개발 모드와 GitLab OAuth 운영 모드를 함께 제공합니다. 일정과 제출 본문은 연결 프로젝트에 실제 커밋하고, 사용자·암호화 credential·Workspace cache와 운영 상태는 DB에 저장합니다.
 
 ## 현재 구현 범위
 
-- 서버 환경변수에서만 GitLab Personal Access Token 사용
+- `dev`/`local` 연결 스파이크에서만 서버 Personal Access Token 선택 사용
 - 현재 GitLab 사용자 조회
 - 서버에 고정된 GitLab 프로젝트 조회
 - 기본 브랜치의 repository tree 조회
@@ -17,8 +17,27 @@ Spring Boot 기반 Study Workspace 백엔드입니다. 현재는 전체 도메�
 - GitLab 인증·권한·404·요청 제한 오류 변환
 - 프론트엔드 개발 주소 CORS 허용
 - GitLab 응답 없이도 실행 가능한 미설정 상태
+- Workspace 목록·생성·수정·소프트 삭제·복구
+- 멤버 목록·추가·비활성화·동기화 진입점
+- Session 목록·상세·생성·revision 기반 수정·취소
+- OAuth 사용자 권한으로 `session.yml` 생성·수정·취소 커밋
+- 원격 `last_commit_id` 검증과 실제 commit SHA 저장
+- 항목별 제출 생성·수정·삭제와 기존 항목 보존
+- 링크·본문·커밋 메시지 서버 검증
+- Dashboard·기록·1차/2차 마감 점수 계산
+- Workspace 저장소 tree와 YAML·Markdown 파일 표현
+- 알림 설정과 동기화 상태 저장
+- JPA/Flyway 기반 Workspace/member/settings/cache 영속화와 기존 `.data/workspaces-production.json` 최초 1회 자동 이관
+- GitLab Authorization Code 로그인, 일회성 `state` 검증, 토큰 교환·갱신·폐기
+- OAuth access/refresh token의 AES-GCM 암호화 DB 저장
+- JDBC 기반 서버 세션과 HttpOnly·SameSite 쿠키
+- OAuth 사용자의 프로젝트 검색·권한 재검증·첫 Workspace 온보딩
+- Spring Security 인증, CSRF, Workspace 활성 멤버 접근 경계
+- Owner/Manager/Member 역할, GitLab 멤버 후보·동기화와 접근 상실 처리
+- sync job, 인앱 알림, 감사 로그, 7일 삭제·복원·정리
+- request ID, security headers, rate limit, Prometheus metrics와 production Docker/backup runbook
 
-브라우저에 공개하는 파일 쓰기 API와 OAuth 로그인은 아직 구현하지 않았습니다. 공통 클라이언트의 쓰기 능력만 일회성 통합 테스트로 검증했으며, 실제 Session·Submission 저장 정책은 각 기능 담당자가 구현합니다.
+GitLab OAuth Application 환경변수가 있으면 실제 사용자 승인, callback 코드 교환, 사용자와 credential 저장, 접근 가능한 프로젝트 조회를 수행합니다. 운영 모드에서는 API 실패 시 데모 데이터로 대체하지 않습니다. 데모는 프론트의 명시적인 `NEXT_PUBLIC_APP_MODE=demo`에서만 사용합니다.
 
 ## 기술 구성
 
@@ -49,11 +68,19 @@ GITLAB_BASE_URL=https://lab.ssafy.com
 GITLAB_ACCESS_TOKEN=발급받은_토큰
 GITLAB_PROJECT_ID=그룹명/프로젝트명
 GITLAB_DEFAULT_REF=
+GITLAB_OAUTH_CLIENT_ID=GitLab_Application_ID
+GITLAB_OAUTH_CLIENT_SECRET=GitLab_Application_Secret
+GITLAB_OAUTH_REDIRECT_URI=http://localhost:8080/api/v1/auth/gitlab/callback
+OAUTH_TOKEN_ENCRYPTION_KEY=Base64로_인코딩한_32바이트_키
+DATABASE_URL=jdbc:postgresql://localhost:5432/study_workspace
+DATABASE_USERNAME=study
+DATABASE_PASSWORD=안전한_비밀번호
 FRONTEND_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 SERVER_PORT=8080
 ```
 
-- 읽기 연결 검증만 할 때는 `read_api`, 수동 쓰기 스파이크를 실행할 때는 `api` scope가 필요합니다.
+- 일반 사용자는 PAT 없이 GitLab OAuth `api` scope로 프로젝트를 연결합니다.
+- PAT 환경변수는 `dev`/`local` 프로필의 수동 연결 스파이크에서만 사용합니다.
 - `GITLAB_PROJECT_ID`는 숫자 Project ID 또는 URL 인코딩하지 않은 `group/project` 경로를 사용할 수 있습니다.
 - `GITLAB_DEFAULT_REF`가 비어 있으면 프로젝트의 기본 브랜치를 사용합니다.
 - 실제 토큰이 들어 있는 `.env`는 Git에 포함되지 않습니다.
@@ -90,8 +117,21 @@ curl --get \
 | Method | Endpoint | 설명 |
 |---|---|---|
 | `GET` | `/actuator/health` | 백엔드 상태 확인 |
-| `GET` | `/api/v1/gitlab/connection` | 사용자·프로젝트·저장소 트리 연결 확인 |
-| `GET` | `/api/v1/gitlab/repository/file?path=...` | 연결 프로젝트의 텍스트 파일 조회 |
+| `GET` | `/api/v1/auth/csrf` | 변경 요청용 CSRF token 준비 |
+| `GET` | `/api/v1/gitlab/projects` | OAuth 사용자의 접근 가능 프로젝트 검색 |
+| `GET` | `/api/v1/gitlab/projects/{projectId}/connection-check` | 선택 프로젝트 접근 권한 재검증 |
+| `GET` | `/api/v1/gitlab/connection` | dev/local PAT 연결 스파이크 |
+| `GET/POST` | `/api/v1/workspaces` | Workspace 목록·생성 |
+| `GET/PATCH/DELETE` | `/api/v1/workspaces/{workspaceId}` | 상세·설정 변경·소프트 삭제 |
+| `POST` | `/api/v1/workspaces/{workspaceId}/restore` | Workspace 복구 |
+| `GET/POST/DELETE` | `/api/v1/workspaces/{workspaceId}/members...` | 멤버 조회·추가·비활성화·동기화 |
+| `GET/POST/PUT/DELETE` | `/api/v1/workspaces/{workspaceId}/sessions...` | 일정 조회·생성·수정·취소 |
+| `GET/PUT/DELETE` | `/api/v1/workspaces/{workspaceId}/sessions/.../submission` | 항목별 제출 조회·저장·삭제 |
+| `GET` | `/api/v1/workspaces/{workspaceId}/dashboard` | 선택 날짜 진행률 |
+| `GET` | `/api/v1/workspaces/{workspaceId}/records` | 기간별 기록 |
+| `GET` | `/api/v1/workspaces/{workspaceId}/scores` | 기간별 점수와 순위 |
+| `GET` | `/api/v1/workspaces/{workspaceId}/repository/tree` | Workspace 파일 tree |
+| `GET` | `/api/v1/workspaces/{workspaceId}/repository/file?path=...` | 생성된 YAML·Markdown 파일 |
 
 `/connection` 응답 상태:
 
@@ -147,14 +187,9 @@ src/main/java/com/studyworkspace/
     └── service/             # 연결 확인, ref 선택, 파일 검증·디코딩
 ```
 
-## 다음 구현 순서
+## 운영 전 추가 설정
 
-1. ~~실제 SSAFY GitLab에서 `CONNECTED` 확인~~
-2. ~~프로젝트 루트 tree와 파일 미리보기 확인~~
-3. ~~격리된 테스트 브랜치에서 임시 파일 생성·수정·정리 검증~~
-4. PAT 방식을 GitLab OAuth로 교체
-5. Workspace DB 연결 후 프로젝트를 환경변수 대신 Workspace에서 조회
-6. 역할별 Session, Submission, Records API 구현
+사용자, 암호화 credential과 Workspace 운영 상태는 JPA/Flyway DB에 저장하고 세션은 Spring Session JDBC로 유지합니다. 로컬 기본값은 H2 파일 DB이며 `prod` 프로필은 PostgreSQL과 HTTPS secure cookie를 요구합니다. 운영 전에는 고유한 32바이트 암호화 키를 Secret Manager에서 주입하고 [production runbook](../docs/production-runbook.md)의 callback·TLS·backup 설정을 완료해야 합니다.
 
 ## 상세 역할 문서
 

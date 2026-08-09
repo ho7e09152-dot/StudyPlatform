@@ -36,15 +36,25 @@ test("server-renders the public landing page", async () => {
   assert.doesNotMatch(html, /codex-preview|SkeletonPreview|react-loading-skeleton/);
 });
 
-test("login page renders GitLab OAuth and demo entry points", async () => {
+test("login page renders the production GitLab OAuth entry point", async () => {
   const response = await render("/login");
   assert.equal(response.status, 200);
 
   const html = await response.text();
   assert.match(html, /GitLab 계정으로 시작/);
   assert.match(html, /GitLab로 계속하기/);
-  assert.match(html, /데모 Workspace 둘러보기/);
+  assert.doesNotMatch(html, /데모 Workspace 둘러보기/);
   assert.match(html, /\/api\/v1\/auth\/gitlab\/login/);
+});
+
+test("OAuth callback renders the branded transition screen", async () => {
+  const response = await render("/auth/callback");
+  assert.equal(response.status, 200);
+
+  const html = await response.text();
+  assert.match(html, /GitLab 로그인을 확인하고 있어요/);
+  assert.match(html, /SECURE OAUTH CONNECTION/);
+  assert.match(html, /auth-transition__progress/);
 });
 
 test("all authenticated workspace routes render their product heading", async () => {
@@ -74,6 +84,7 @@ test("starter preview infrastructure is removed", async () => {
   assert.match(page, /LandingPage/);
   assert.match(layout, /RootShell/);
   assert.match(rootShell, /WorkspaceProvider/);
+  assert.match(rootShell, /AuthProvider/);
   assert.match(rootShell, /GitLabConnectionProvider/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
   await assert.rejects(access(new URL("../app/_sites-preview", import.meta.url)));

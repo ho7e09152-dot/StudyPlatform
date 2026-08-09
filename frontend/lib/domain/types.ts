@@ -14,6 +14,7 @@ export interface StudyMember {
   avatar: string;
   color: string;
   fileName: string;
+  role: "OWNER" | "MANAGER" | "MEMBER";
   status: "ACTIVE" | "PROJECT_ACCESS_LOST";
   accessLevel: number;
 }
@@ -136,5 +137,6 @@ export interface SubmissionDraft {
   type: SubmissionType;
   value: string;
   language?: string;
+  expectedFileCommitId?: string;
   commitMessage: string;
 }

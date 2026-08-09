@@ -11,6 +11,8 @@ import {
 } from "react";
 import { getGitLabConnection } from "@/lib/api/services/gitlabApi";
 import type { GitLabConnection } from "@/lib/api/types/gitlab";
+import { useWorkspace } from "@/components/providers/WorkspaceProvider";
+import { useAuth } from "@/components/providers/AuthProvider";
 
 export type GitLabConnectionState = "loading" | "ready" | "error";
 
@@ -30,13 +32,37 @@ export function GitLabConnectionProvider({
 }: {
   children: ReactNode;
 }) {
+  const { workspace } = useWorkspace();
+  const { mode, user } = useAuth();
   const [data, setData] = useState<GitLabConnection | null>(null);
   const [state, setState] = useState<GitLabConnectionState>("loading");
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
     try {
-      const connection = await getGitLabConnection(signal);
+      if (mode === "demo") {
+        await Promise.resolve();
+        if (signal?.aborted) return;
+        setData({
+          configured: true,
+          status: "CONNECTED",
+          message: "데모 모드의 가상 GitLab 연결입니다.",
+          checkedAt: new Date().toISOString(),
+          user,
+          project: {
+            id: workspace.gitlabProjectId,
+            name: workspace.name,
+            pathWithNamespace: workspace.gitlabProjectPath,
+            defaultBranch: workspace.defaultBranch,
+            webUrl: null,
+            visibility: "private",
+          },
+          repositoryTree: [],
+        });
+        setState("ready");
+        return;
+      }
+      const connection = await getGitLabConnection(workspace.gitlabProjectId, signal);
       setData(connection);
       setState("ready");
     } catch (requestError) {
@@ -49,27 +75,47 @@ export function GitLabConnectionProvider({
       );
       setState("error");
     }
-  }, []);
+  }, [mode, user, workspace]);
 
   useEffect(() => {
     const controller = new AbortController();
-    void getGitLabConnection(controller.signal)
-      .then((connection) => {
+    if (mode === "demo") {
+      const demoConnection: GitLabConnection = {
+        configured: true,
+        status: "CONNECTED",
+        message: "데모 모드의 가상 GitLab 연결입니다.",
+        checkedAt: new Date().toISOString(),
+        user,
+        project: {
+          id: workspace.gitlabProjectId,
+          name: workspace.name,
+          pathWithNamespace: workspace.gitlabProjectPath,
+          defaultBranch: workspace.defaultBranch,
+          webUrl: null,
+          visibility: "private",
+        },
+        repositoryTree: [],
+      };
+      void Promise.resolve(demoConnection).then((connection) => {
+        if (controller.signal.aborted) return;
         setData(connection);
         setState("ready");
-      })
-      .catch((requestError) => {
-        if (controller.signal.aborted) return;
-        setData(null);
-        setError(
-          requestError instanceof Error
-            ? requestError.message
-            : "GitLab 연결 상태를 확인하지 못했습니다.",
-        );
-        setState("error");
       });
+    } else {
+      void getGitLabConnection(workspace.gitlabProjectId, controller.signal)
+        .then((connection) => {
+          setData(connection);
+          setState("ready");
+        })
+        .catch((requestError) => {
+          if (controller.signal.aborted) return;
+          setData(null);
+          setError(requestError instanceof Error ? requestError.message : "GitLab 연결 상태를 확인하지 못했습니다.");
+          setState("error");
+        });
+    }
     return () => controller.abort();
-  }, []);
+  }, [mode, user, workspace]);
 
   const reload = useCallback(() => {
     setState("loading");

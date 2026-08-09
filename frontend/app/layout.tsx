@@ -7,7 +7,11 @@ export async function generateMetadata(): Promise<Metadata> {
   const headerStore = await headers();
   const host = headerStore.get("host") ?? "localhost:3000";
   const forwardedProto = headerStore.get("x-forwarded-proto");
-  const protocol = forwardedProto ?? (host.startsWith("localhost") ? "http" : "https");
+  const isLoopback =
+    host.startsWith("localhost") ||
+    host.startsWith("127.0.0.1") ||
+    host.startsWith("[::1]");
+  const protocol = forwardedProto ?? (isLoopback ? "http" : "https");
   const origin = `${protocol}://${host}`;
   const socialImage = new URL("/og.png", origin).toString();
 

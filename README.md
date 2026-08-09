@@ -44,9 +44,9 @@ Study Workspace는 이 과정을 `일정 생성 → 항목별 제출 → GitLab 
 
 프론트엔드는 임의의 GitLab 프로젝트 ID나 파일 경로를 직접 조합하지 않습니다. Spring 백엔드가 Workspace에 연결된 프로젝트와 허용된 파일 경로를 확인한 뒤 GitLab API를 호출합니다.
 
-### 모든 활성 멤버는 동등한 앱 권한을 가집니다
+### 위험 작업은 역할로 제한합니다
 
-별도의 팀장 역할을 두지 않고 모든 활성 멤버가 일정과 Workspace를 함께 관리합니다. 실제 파일 읽기·쓰기는 각 사용자의 GitLab 권한과 브랜치 보호 규칙을 따릅니다.
+모든 활성 멤버가 일정과 제출 흐름에 참여하지만 프로젝트 연결, 멤버 역할, Workspace 삭제 같은 위험 작업은 Owner/Manager 정책으로 제한합니다. 실제 파일 읽기·쓰기는 각 사용자의 GitLab 권한과 브랜치 보호 규칙을 따릅니다.
 
 ### 충돌이 발생하면 덮어쓰지 않습니다
 
@@ -54,21 +54,26 @@ Study Workspace는 이 과정을 `일정 생성 → 항목별 제출 → GitLab 
 
 ## 현재 구현된 기능
 
-현재는 프론트엔드 UI와 도메인 동작을 검증하고, Spring Boot를 통한 GitLab 읽기 및 격리 브랜치 쓰기 연결 스파이크까지 구현한 단계입니다. 일정·제출·기록 데이터는 아직 메모리 기반 목업이지만 저장소 화면은 백엔드 연결 성공 시 실제 GitLab 프로젝트와 파일을 표시합니다.
+프론트엔드 UI와 Spring Boot 도메인 API가 연결되어 일정·제출·설정 변경, 대시보드·기록·점수 계산을 HTTP 요청으로 처리합니다. GitLab OAuth 로그인, 사용자별 프로젝트 검색과 첫 Workspace 온보딩, Spring Security/CSRF/멤버십 경계, 암호화 credential과 JDBC 세션 저장을 구현했습니다. 일정은 실제 `session.yml`, 개인 제출은 실제 멤버 Markdown 파일로 OAuth 사용자 권한을 사용해 커밋하며, GitLab 원본 기준의 부분 실패 안전 동기화로 일정과 제출을 다시 가져옵니다.
 
 | 화면 | 구현 내용 |
 |---|---|
 | 랜딩 | 서비스 소개, GitLab 기반 워크플로, 자동 전환 제품 미리보기, 스크롤 애니메이션 |
-| 로그인 | GitLab OAuth 진입, 보안 원칙 안내, 로그인 없는 데모 Workspace 진입 |
+| 로그인 | GitLab OAuth 진입, 보안 원칙 안내, 운영 모드와 명시적 데모 모드 분리 |
+| 온보딩 | OAuth 사용자의 프로젝트 검색·접근 확인·첫 Workspace 생성 |
 | 오늘 | 오늘의 학습 항목, 팀 진행률, 개인 진행률, 멤버 현황, 저장소 미리보기 |
-| 일정 | 일정 검색·필터, 일정 생성·수정, 여러 학습 항목, 1차·2차 마감, revision 표시 |
-| 제출 | 항목별 링크·텍스트·코드 제출, 커밋 메시지, GitLab 반영 대상 미리보기 |
+| 일정 | 일정 검색·필터, 여러 학습 항목, 1차·2차 마감, 실제 GitLab `session.yml` 생성·수정·취소·재동기화, revision·commit SHA 표시 |
+| 제출 | 항목별 링크·텍스트·코드 제출, 커밋 메시지, OAuth 기반 GitLab 멤버 Markdown 생성·수정과 commit SHA 표시 |
 | 기록 | 일별·월별 전환, 날짜·월 이동, 달력, 주간 제출률, 멤버별 평균 |
 | 점수 | 1차 제출 10P, 2차 제출 6P, 개인 점수 카드, 카드 클릭형 멤버 순위 모달 |
 | 저장소 | 날짜 폴더 탐색, 파일 검색, 폴더 접기, YAML 원문·GFM Markdown 미리보기, 커밋 정보 |
 | 설정 | 프로젝트 연결 정보, 멤버와 GitLab 권한, 알림, 보안 원칙 |
 | 반응형 UI | 데스크톱·태블릿·모바일 레이아웃과 모바일 전체 화면 모달 |
 | GitLab 연결 스파이크 | 사용자·프로젝트·tree·파일 조회, 임시 브랜치 파일 생성·수정·삭제와 정리 검증 |
+| Workspace API | Workspace·멤버·일정·제출·Dashboard·기록·점수·저장소 REST API, revision 충돌과 입력 검증 |
+| DB 영속화 | 사용자·암호화 OAuth credential·Workspace 상태/cache·sync job·알림·감사 로그를 Flyway/JPA DB에 저장하고 기존 운영 JSON을 최초 1회 이관 |
+| 인증·데이터 경계 | 비로그인 API 차단, Workspace 활성 멤버 검증, CSRF, 운영 모드 seed fallback 금지 |
+| OAuth 영속화 | JPA/Flyway 사용자 upsert, AES-GCM credential 암호화, Spring Session JDBC |
 
 ## 화면 소개
 
@@ -82,7 +87,7 @@ Study Workspace는 이 과정을 `일정 생성 → 항목별 제출 → GitLab 
 
 ### 로그인
 
-별도의 비밀번호 대신 GitLab OAuth로 인증을 시작합니다. 브라우저에 토큰을 저장하지 않는 구조와 로그인 후 이어지는 흐름을 설명하며, 백엔드 인증 구현 전에도 준비된 데이터로 들어갈 수 있는 데모 진입을 제공합니다.
+별도의 비밀번호 대신 GitLab Authorization Code 방식으로 로그인합니다. 백엔드는 `state`를 검증하고 code를 access/refresh token으로 교환한 뒤 HttpOnly 세션 쿠키를 발급합니다. 데모 UI는 운영 화면에 노출하지 않고 명시적인 앱 모드로만 실행합니다.
 
 ![로그인 페이지 — GitLab OAuth와 데모 진입](docs/images/screenshots/login.png)
 
@@ -146,7 +151,7 @@ AI 도구는 디자인과 구현을 구체화하는 협업 도구로 사용했�
 - Java
 - Spring Boot
 - Spring MVC
-- Spring Security OAuth2 Client
+- Spring Security / Spring Session JDBC
 - Spring Data JPA
 - WebClient
 - PostgreSQL
@@ -160,7 +165,7 @@ AI 도구는 디자인과 구현을 구체화하는 협업 도구로 사용했�
 
 > 편집 가능한 원본: [study-workspace-architecture.svg](docs/images/study-workspace-architecture.svg)
 
-브라우저에는 GitLab 토큰을 저장하지 않습니다. Spring 백엔드가 암호화된 사용자 OAuth 토큰으로 Workspace에 연결된 프로젝트만 호출합니다.
+브라우저와 JDBC 세션에는 GitLab 토큰을 저장하지 않습니다. OAuth credential은 AES-GCM으로 암호화해 DB에 보관하고, 브라우저에는 HttpOnly 세션 쿠키만 전달합니다.
 
 ## 백엔드 구현 전 GitLab 연결 검증
 
@@ -176,7 +181,7 @@ AI 도구는 디자인과 구현을 구체화하는 협업 도구로 사용했�
 → 테스트 브랜치에 임시 파일 커밋
 ```
 
-초기 읽기 연결에서는 `read_api`, 쓰기 스파이크에서는 `api` scope의 서버 환경변수 Personal Access Token을 사용합니다. 네트워크와 프로젝트 권한 검증이 끝나면 정식 OAuth 방식으로 교체할 예정입니다. 토큰은 프론트엔드 코드나 Git 저장소에 포함하지 않습니다.
+초기 GitLab 연결 진단과 쓰기 스파이크만 `dev`/`local` 프로필에서 서버 Personal Access Token을 선택적으로 사용합니다. 사용자 인증과 프로젝트 검색·검증은 `api` scope의 GitLab OAuth Bearer token으로 동작하며 브라우저에 토큰을 저장하지 않습니다. 실제 파일 읽기·쓰기 API의 OAuth 전환은 운영 연동 단계에 남아 있습니다.
 
 ## 백엔드 역할 분담
 
@@ -222,7 +227,7 @@ AI 도구는 디자인과 구현을 구체화하는 협업 도구로 사용했�
 
 ### 5단계 — 운영 준비
 
-- OAuth token refresh
+- OAuth token refresh 검증과 분산 세션 저장소
 - 보호 브랜치 및 권한 테스트
 - 로그에서 토큰과 민감정보 마스킹
 - 캐시 무효화와 GitLab API 요청 제한 대응

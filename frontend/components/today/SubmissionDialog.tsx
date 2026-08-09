@@ -127,7 +127,7 @@ export function SubmissionDialog({
     try {
       await onSubmit(session.date, selectedItem.id, {
         type: selectedItem.submitType,
-        value: value.trim(),
+        value: selectedItem.submitType === "code" ? value : value.trim(),
         language:
           selectedItem.submitType === "code" ? language : undefined,
         commitMessage: commitMessage.trim(),

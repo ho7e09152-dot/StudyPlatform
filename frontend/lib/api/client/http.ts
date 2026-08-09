@@ -20,17 +20,64 @@ export class ApiError extends Error {
 }
 
 export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method: "GET",
-    credentials: "include",
-    headers: {
-      Accept: "application/json",
-    },
-    signal,
-  });
+	return apiRequest<T>(path, { method: "GET", signal });
+}
+
+interface ApiRequestOptions {
+	method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+	body?: unknown;
+	signal?: AbortSignal;
+}
+
+interface CsrfResponse {
+	token: string;
+	headerName: string;
+}
+
+let csrfTokenPromise: Promise<CsrfResponse> | null = null;
+
+async function getCsrfToken(): Promise<CsrfResponse> {
+	csrfTokenPromise ??= fetch(`${API_BASE_URL}/api/v1/auth/csrf`, {
+		method: "GET",
+		credentials: "include",
+		headers: { Accept: "application/json" },
+	}).then(async (response) => {
+		if (!response.ok) throw new ApiError("CSRF_TOKEN_FAILED", "보안 토큰을 준비하지 못했습니다.", response.status);
+		return response.json() as Promise<CsrfResponse>;
+	});
+	return csrfTokenPromise;
+}
+
+export async function apiRequest<T>(
+	path: string,
+	options: ApiRequestOptions = {},
+): Promise<T> {
+	const method = options.method ?? "GET";
+	const csrf = method === "GET" ? null : await getCsrfToken();
+	const response = await fetch(`${API_BASE_URL}${path}`, {
+		method,
+		credentials: "include",
+		headers: {
+			Accept: "application/json",
+			...(options.body === undefined ? {} : { "Content-Type": "application/json" }),
+			...(csrf ? { [csrf.headerName]: csrf.token } : {}),
+		},
+		body: options.body === undefined ? undefined : JSON.stringify(options.body),
+		signal: options.signal,
+	});
 
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as ApiErrorBody | null;
+    if (
+      response.status === 401 &&
+      typeof window !== "undefined" &&
+      !path.startsWith("/api/v1/auth/")
+    ) {
+      const returnUrl = `${window.location.pathname}${window.location.search}`;
+      window.location.replace(
+        `/login?oauthError=${body?.code === "GITLAB_RECONNECT_REQUIRED" ? "reconnect_required" : "session_expired"}&returnUrl=${encodeURIComponent(returnUrl)}`,
+      );
+    }
     throw new ApiError(
       body?.code ?? "API_REQUEST_FAILED",
       body?.message ?? "백엔드 요청을 처리하지 못했습니다.",
@@ -38,5 +85,6 @@ export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> 
     );
   }
 
-  return response.json() as Promise<T>;
+	if (response.status === 204) return undefined as T;
+	return response.json() as Promise<T>;
 }
