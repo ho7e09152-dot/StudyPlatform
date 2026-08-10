@@ -32,6 +32,21 @@ class SessionYamlParserTests {
 	}
 
 	@Test
+	void parsesV2SessionPathWhileKeepingTheInternalLegacyFolderKey() {
+		StudySession source = validSession();
+
+		StudySession parsed = parser.parse(
+			"sessions/2026/2026-08-09/session.yml",
+			serializer.serialize(source),
+			"gitlab-sha-v2"
+		);
+
+		assertThat(parsed.date()).isEqualTo("2026-08-09");
+		assertThat(parsed.folder()).isEqualTo("260809");
+		assertThat(parsed.lastCommitId()).isEqualTo("gitlab-sha-v2");
+	}
+
+	@Test
 	void rejectsAFileWhoseFolderAndDateDiffer() {
 		String yaml = serializer.serialize(validSession()).replace("2026-08-09", "2026-08-10");
 

@@ -29,7 +29,7 @@ public class GitLabSessionFileService {
 		StudySession current,
 		StudySession next
 	) {
-		String path = WorkspaceRepositoryPath.join(workspace.repositoryBasePath(), next.folder() + "/session.yml");
+		String path = WorkspaceRepositoryLayout.sessionPath(workspace, next);
 		String content = serializer.serialize(next);
 		String commitMessage = commitMessage(current, next);
 		if (current == null) {

@@ -13,6 +13,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.AnonymousAuthenticationFilter;
 import org.springframework.security.web.csrf.HttpSessionCsrfTokenRepository;
+import org.springframework.security.web.context.RequestAttributeSecurityContextRepository;
 import tools.jackson.databind.ObjectMapper;
 
 @Configuration
@@ -31,7 +32,12 @@ public class SecurityConfig {
 		http
 			.cors(Customizer.withDefaults())
 			.csrf(csrf -> csrf.csrfTokenRepository(csrfRepository))
-			.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED))
+			.securityContext(context -> context
+				.requireExplicitSave(true)
+				.securityContextRepository(new RequestAttributeSecurityContextRepository()))
+			.sessionManagement(session -> session
+				.sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
+				.sessionFixation(fixation -> fixation.none()))
 			.authorizeHttpRequests(authorize -> authorize
 				.requestMatchers(
 					"/api/v1/auth/gitlab/**",

@@ -1,6 +1,6 @@
 # 초심자를 위한 로컬 개발환경 가이드
 
-이 문서는 저장소를 처음 받은 팀원이 프론트엔드, Spring Boot, PostgreSQL, Redis를 실행하고 테스트하는 과정을 설명합니다.
+이 문서는 저장소를 처음 받은 팀원이 프론트엔드, Spring Boot와 PostgreSQL을 실행하고 테스트하는 과정을 설명합니다. 로그인 세션은 현재 Spring Session JDBC를 사용하며 Compose의 Redis는 향후 다중 인스턴스 전환을 위한 선택 인프라입니다.
 
 ## 1. 필요한 프로그램
 
@@ -64,15 +64,16 @@ git status
 
 | 그룹 | 변수 | 지금 필요한 시점 |
 |---|---|---|
-| GitLab 읽기 | `GITLAB_BASE_URL`, `GITLAB_ACCESS_TOKEN`, `GITLAB_PROJECT_ID` | 연결 스파이크 |
-| OAuth | `GITLAB_OAUTH_CLIENT_ID`, `GITLAB_OAUTH_CLIENT_SECRET` | 팀원 1 구현 |
-| DB | `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` | 팀원 1 구현 |
-| Redis | `REDIS_HOST`, `REDIS_PORT`, `REDIS_PASSWORD` | 세션·캐시 구현 |
+| GitLab PAT | `GITLAB_BASE_URL`, `GITLAB_ACCESS_TOKEN`, `GITLAB_PROJECT_ID` | dev/local 연결 스파이크만 |
+| OAuth | `GITLAB_OAUTH_CLIENT_ID`, `GITLAB_OAUTH_CLIENT_SECRET`, `GITLAB_OAUTH_REDIRECT_URI` | 실제 사용자 로그인 |
+| DB | `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD` | PostgreSQL 사용 시 |
+| 암호화 | `OAUTH_TOKEN_ENCRYPTION_KEY` | OAuth credential 저장 시 필수 |
+| Redis | `REDIS_PORT`, `REDIS_PASSWORD` | 현재 앱 실행에는 선택 사항 |
 | Frontend | `NEXT_PUBLIC_API_BASE_URL` | 항상 |
 
 토큰이나 client secret 값을 채팅, 화면 캡처, GitLab Issue에 올리지 않습니다.
 
-## 4. PostgreSQL과 Redis 실행
+## 4. PostgreSQL과 선택 Redis 실행
 
 Docker Desktop을 먼저 실행한 뒤:
 
@@ -86,7 +87,7 @@ docker compose up -d
 docker compose ps
 ```
 
-`postgres`와 `redis`의 STATUS에 `healthy`가 보이면 준비된 상태입니다.
+`postgres`와 `redis`의 STATUS에 `healthy`가 보이면 준비된 상태입니다. 백엔드는 PostgreSQL과 Spring Session JDBC를 사용하며 Redis가 중지되어도 현재 애플리케이션 기능은 동작합니다.
 
 로그 확인:
 
@@ -135,6 +136,8 @@ http://localhost:3000
 ```bash
 npm run lint
 npm run test
+npx playwright install chromium  # 최초 한 번
+npm run test:e2e
 ```
 
 `npm ci`는 `package-lock.json`에 고정된 버전을 설치합니다. 팀 프로젝트에서는 임의로 의존성 버전이 달라지는 것을 줄이기 위해 `npm install`보다 `npm ci`를 검증에 사용합니다.
@@ -154,7 +157,7 @@ set +a
 상태 확인:
 
 ```bash
-curl http://localhost:8080/actuator/health
+curl http://localhost:8080/actuator/health/readiness
 ```
 
 예상 응답:
@@ -195,7 +198,8 @@ make check
 2. OpenAPI 검사
 3. 프론트 ESLint
 4. 프론트 빌드와 라우트 테스트
-5. 백엔드 테스트
+5. 브라우저 E2E
+6. 백엔드 테스트
 
 개별 명령은 `make help`에서 확인합니다.
 
@@ -203,21 +207,20 @@ make check
 make help
 ```
 
-## 8. 현재는 DB 연결이 자동으로 되지 않는 이유
+## 8. 현재 DB와 파일 저장 방식
 
-Compose는 공통 인프라만 먼저 준비한 상태입니다. 아직 Spring Data JPA와 Redis Session 기능은 팀원 1의 학습 범위로 남겨두었습니다.
+환경변수 없이 백엔드를 실행하면 로컬 H2 파일 DB인 `backend/.data/study-platform`을 사용합니다. `DATABASE_URL`을 설정하면 PostgreSQL을 사용하고 Flyway V1~V9가 사용자, 암호화 credential, Workspace, 알림·감사 로그, 팀 피드와 팀 문서 테이블을 준비합니다.
 
-따라서 현재 `docker compose up -d`를 해도 기존 GitLab 연결 스파이크는 DB를 사용하지 않습니다. 팀원 1이 다음을 구현하면서 연결합니다.
+| 데이터 | 저장 위치 |
+|---|---|
+| 일정과 학습 항목 | GitLab `session.yml` 원본 + DB 동기화 cache |
+| 개인 제출 | GitLab 멤버 Markdown 원본 + DB 동기화 cache |
+| 제출 리뷰 | GitLab commit comment |
+| 사용자, OAuth credential, Workspace와 멤버 | DB |
+| 공지, 메시지, 팀 문서, 알림과 감사 로그 | DB |
+| 로그인 세션 | Spring Session JDBC |
 
-```text
-spring-boot-starter-data-jpa
-PostgreSQL driver
-Flyway
-Spring Security OAuth2 Client
-Spring Session Redis
-```
-
-공통 환경을 먼저 준비하고 실제 Entity·Repository·Security 설정은 담당자가 직접 구현하는 구조입니다.
+기존 `.data/workspaces-production.json`이 있으면 최초 한 번 DB로 이관하지만 새 데이터는 JSON 파일에 저장하지 않습니다. 자세한 현재 상태는 [현재 시스템 상태](current-system-status.md)를 참고합니다.
 
 ## 9. 테스트 Fixture 사용법
 

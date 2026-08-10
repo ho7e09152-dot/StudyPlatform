@@ -16,7 +16,7 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SubmissionDialog } from "@/components/today/SubmissionDialog";
 import { SessionEditorDialog } from "./SessionEditorDialog";
 import { SESSION_TYPE_META } from "@/lib/domain/constants";
-import { formatDate, formatTime, getWorkspaceRepositoryPath } from "@/lib/domain/format";
+import { formatDate, formatTime, getSessionRepositoryPath } from "@/lib/domain/format";
 import { getDashboardMetrics } from "@/lib/domain/metrics";
 import type { SessionType, StudySession } from "@/lib/domain/types";
 
@@ -177,7 +177,7 @@ export function ScheduleWorkspace() {
                 <ProgressBar value={metrics.submissionRate} />
               </div>
               <footer>
-                <code>{getWorkspaceRepositoryPath(workspace.repositoryBasePath, `${session.folder}/session.yml`)}</code>
+                <code>{getSessionRepositoryPath(workspace, session)}</code>
                 <div className="schedule-card__actions">
                   <button
                     type="button"

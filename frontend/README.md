@@ -17,6 +17,8 @@ npm run dev
 npm run build
 npm run lint
 npm test
+npx playwright install chromium
+npm run test:e2e
 ```
 
 ## 구조
@@ -28,9 +30,12 @@ components/onboarding/       OAuth 프로젝트 검색·검증·첫 Workspace �
 components/providers/        백엔드 Workspace 상태 수화와 API mutation
 components/shell/            공개/인증 라우트 분리와 반응형 앱 셸
 components/today/            오늘의 학습과 항목별 제출
+components/feed/             DB 기반 공지와 오늘/전체 팀 대화
+components/notifications/    밀린 학습과 인앱 알림 활동함
+components/review/           GitLab 제출 commit 리뷰
 components/schedule/         일정 생성·수정과 revision 처리
 components/records/          저장소 데이터 기반 학습 통계
-components/repository/       session.yml·멤버 Markdown 조회
+components/repository/       세션 아카이브와 DB 기반 팀 문서
 components/settings/         연결·멤버·보안 설정
 components/ui/               공통 UI 컴포넌트
 lib/api/                     Spring Boot API 클라이언트·타입·연결 hook
@@ -47,7 +52,7 @@ lib/repository/              YAML·Markdown 직렬화
 /today        인증 후 오늘의 학습
 /schedule     일정
 /records      기록과 점수
-/repository   GitLab 저장소
+/repository   학습 라이브러리와 팀 문서
 /settings     Workspace 설정
 ```
 
@@ -55,7 +60,8 @@ lib/repository/              YAML·Markdown 직렬화
 
 - GitLab 저장소가 학습 일정과 제출의 원본입니다.
 - Workspace마다 GitLab 프로젝트 하나만 연결합니다.
-- 모든 활성 멤버는 앱에서 동등한 관리 권한을 가집니다.
+- 활성 멤버는 학습과 제출에 참여하고, 프로젝트·멤버·공지·삭제 같은 관리 작업은 Owner/Manager 역할로 제한합니다.
+- 팀 문서는 모든 활성 멤버가 읽을 수 있지만 만든 사람만 수정·삭제합니다.
 - 실제 쓰기는 각 사용자의 GitLab 권한을 다시 확인해야 합니다.
 - 항목 ID는 생성 후 변경하지 않습니다.
 - 제거된 항목은 삭제하지 않고 보관합니다.

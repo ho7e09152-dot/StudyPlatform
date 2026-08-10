@@ -10,6 +10,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.studyworkspace.gitlab.config.GitLabProperties;
+import com.studyworkspace.gitlab.dto.GitLabCommitAction;
 import com.studyworkspace.gitlab.dto.GitLabProject;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
@@ -102,6 +103,48 @@ class GitLabOAuthProjectServiceTests {
 		assertThat(authorization).hasValue("Bearer oauth-user-token");
 	}
 
+	@Test
+	void createsOneCommitWithMultipleMoveActions() {
+		var commit = service.createCommit(
+			"oauth-user-token",
+			48213,
+			"main",
+			"study: migrate repository layout to schema v2",
+			List.of(
+				GitLabCommitAction.move("260809/session.yml", ".study-workspace/sessions/2026/2026-08-09/session.yml"),
+				GitLabCommitAction.create(".study-workspace/config.yml", "repositorySchemaVersion: 2\n")
+			),
+			"김서연"
+		);
+
+		assertThat(commit.id()).isEqualTo("batch-commit-1");
+		assertThat(requests).contains("POST /api/v4/projects/48213/repository/commits");
+		assertThat(requestBodies).anySatisfy(body -> assertThat(body).contains(
+			"study: migrate repository layout to schema v2",
+			"\"action\":\"move\"",
+			"\"previous_path\":\"260809/session.yml\"",
+			".study-workspace/sessions/2026/2026-08-09/session.yml",
+			"\"author_name\":\"김서연\""
+		));
+	}
+
+	@Test
+	void readsAndCreatesCommentsOnASubmissionCommit() {
+		var comments = service.getCommitComments("oauth-user-token", 48213, "submission-sha");
+		var created = service.createCommitComment("oauth-user-token", 48213, "submission-sha", "풀이 설명이 명확해요.");
+
+		assertThat(comments).singleElement().satisfies(comment -> {
+			assertThat(comment.note()).isEqualTo("기존 리뷰");
+			assertThat(comment.author().name()).isEqualTo("Reviewer");
+		});
+		assertThat(created.note()).isEqualTo("풀이 설명이 명확해요.");
+		assertThat(requests).contains(
+			"GET /api/v4/projects/48213/repository/commits/submission-sha/comments",
+			"POST /api/v4/projects/48213/repository/commits/submission-sha/comments"
+		);
+		assertThat(requestBodies).anySatisfy(body -> assertThat(body).contains("풀이 설명이 명확해요."));
+	}
+
 	private void handle(HttpExchange exchange) throws IOException {
 		authorization.set(exchange.getRequestHeaders().getFirst("Authorization"));
 		query.set(exchange.getRequestURI().getRawQuery());
@@ -119,6 +162,18 @@ class GitLabOAuthProjectServiceTests {
 			send(exchange, """
 				[{"id":"tree-1","name":"session.yml","type":"blob","path":"260809/session.yml","mode":"100644"}]
 				""");
+			return;
+		}
+		if (path.endsWith("/repository/commits")) {
+			send(exchange, 201, "{\"id\":\"batch-commit-1\",\"short_id\":\"batch-1\",\"title\":\"migration\",\"message\":\"migration\",\"web_url\":\"https://gitlab.example/commit/batch-commit-1\"}");
+			return;
+		}
+		if (path.endsWith("/comments")) {
+			if ("POST".equals(exchange.getRequestMethod())) {
+				send(exchange, 201, "{\"note\":\"풀이 설명이 명확해요.\",\"author\":{\"id\":9,\"username\":\"reviewer\",\"name\":\"Reviewer\"},\"created_at\":\"2026-08-10T12:00:00Z\",\"line\":null,\"path\":null,\"line_type\":null}");
+			} else {
+				send(exchange, "[{\"note\":\"기존 리뷰\",\"author\":{\"id\":9,\"username\":\"reviewer\",\"name\":\"Reviewer\"},\"created_at\":\"2026-08-10T11:00:00Z\",\"line\":null,\"path\":null,\"line_type\":null}]");
+			}
 			return;
 		}
 		if (path.contains("/repository/files/")) {

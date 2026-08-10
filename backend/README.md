@@ -35,6 +35,10 @@ Spring Boot 기반 Study Workspace 백엔드입니다. 환경변수 없이 실�
 - Spring Security 인증, CSRF, Workspace 활성 멤버 접근 경계
 - Owner/Manager/Member 역할, GitLab 멤버 후보·동기화와 접근 상실 처리
 - sync job, 인앱 알림, 감사 로그, 7일 삭제·복원·정리
+- GitLab 최신 제출 commit comment 기반 팀 리뷰와 제출자 알림
+- PostgreSQL 기반 공지·오늘/전체 메시지 피드, cursor pagination과 soft delete
+- PostgreSQL 기반 Markdown 팀 문서, 작성자 전용 수정과 optimistic lock
+- `.study-workspace/sessions/{연도}/{날짜}` 저장 구조와 V1 단일 commit 안전 마이그레이션
 - request ID, security headers, rate limit, Prometheus metrics와 production Docker/backup runbook
 
 GitLab OAuth Application 환경변수가 있으면 실제 사용자 승인, callback 코드 교환, 사용자와 credential 저장, 접근 가능한 프로젝트 조회를 수행합니다. 운영 모드에서는 API 실패 시 데모 데이터로 대체하지 않습니다. 데모는 프론트의 명시적인 `NEXT_PUBLIC_APP_MODE=demo`에서만 사용합니다.
@@ -132,6 +136,11 @@ curl --get \
 | `GET` | `/api/v1/workspaces/{workspaceId}/scores` | 기간별 점수와 순위 |
 | `GET` | `/api/v1/workspaces/{workspaceId}/repository/tree` | Workspace 파일 tree |
 | `GET` | `/api/v1/workspaces/{workspaceId}/repository/file?path=...` | 생성된 YAML·Markdown 파일 |
+| `GET/POST` | `/api/v1/workspaces/{workspaceId}/sessions/{date}/members/{memberId}/reviews` | GitLab 제출 commit 리뷰 |
+| `GET/POST/PATCH/DELETE` | `/api/v1/workspaces/{workspaceId}/announcements...` | 팀 공지와 읽음 상태 |
+| `GET/POST/PATCH/DELETE` | `/api/v1/workspaces/{workspaceId}/messages...` | 오늘/전체 팀 메시지 |
+| `GET/POST/PATCH/DELETE` | `/api/v1/workspaces/{workspaceId}/documents...` | Markdown 팀 문서 |
+| `GET/POST` | `/api/v1/workspaces/{workspaceId}/repository-schema/...` | V1→V2 미리보기와 실행 |
 
 `/connection` 응답 상태:
 

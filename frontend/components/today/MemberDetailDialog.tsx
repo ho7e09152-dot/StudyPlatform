@@ -4,7 +4,8 @@ import { ExternalLink } from "lucide-react";
 import { Avatar } from "@/components/ui/Avatar";
 import { Modal } from "@/components/ui/Modal";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { formatDateTime, getWorkspaceRepositoryPath } from "@/lib/domain/format";
+import { SubmissionReviewPanel } from "@/components/review/SubmissionReviewPanel";
+import { formatDateTime, getSubmissionRepositoryPath } from "@/lib/domain/format";
 import { getSubmissionKey } from "@/lib/domain/metrics";
 import type { StudyMember, StudySession, Workspace } from "@/lib/domain/types";
 
@@ -12,11 +13,13 @@ export function MemberDetailDialog({
   workspace,
   session,
   member,
+  currentUserId,
   onClose,
 }: {
   workspace: Workspace;
   session: StudySession;
   member: StudyMember;
+  currentUserId: string;
   onClose: () => void;
 }) {
   const file = workspace.submissions[getSubmissionKey(session.folder, member.id)];
@@ -31,9 +34,11 @@ export function MemberDetailDialog({
   return (
     <Modal
       title={`${member.displayName}의 제출`}
-      description={`${getWorkspaceRepositoryPath(workspace.repositoryBasePath, `${session.folder}/${member.fileName}`)} · 읽기 전용`}
+      description={`${getSubmissionRepositoryPath(workspace, session, member.fileName)} · 제출은 읽기 전용, 리뷰 댓글 가능`}
       onClose={onClose}
+      size="large"
     >
+      <div className="member-detail-content">
       <div className="member-dialog-summary">
         <Avatar member={member} size="large" />
         <div>
@@ -62,6 +67,8 @@ export function MemberDetailDialog({
                       <a href={entry.value} target="_blank" rel="noreferrer">
                         {entry.value} <ExternalLink size={13} />
                       </a>
+                    ) : entry.type === "code" ? (
+                      <pre className="member-submission-code"><code>{entry.value}</code></pre>
                     ) : (
                       <p>{entry.value}</p>
                     )
@@ -75,6 +82,20 @@ export function MemberDetailDialog({
               </article>
             );
           })}
+      </div>
+      {file ? (
+        <SubmissionReviewPanel
+          key={member.id}
+          workspaceId={workspace.id}
+          date={session.date}
+          memberId={member.id}
+          currentGitLabUserId={workspace.members.find((candidate) => candidate.id === currentUserId)?.gitlabUserId ?? 0}
+          currentUserName={workspace.members.find((candidate) => candidate.id === currentUserId)?.displayName ?? "나"}
+          memberName={member.displayName}
+          filePath={getSubmissionRepositoryPath(workspace, session, member.fileName)}
+          commitId={file.lastCommitId}
+        />
+      ) : null}
       </div>
     </Modal>
   );

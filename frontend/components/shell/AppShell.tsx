@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { AccountMenu } from "@/components/account/AccountMenu";
 import { ProfileSettingsDialog } from "@/components/account/ProfileSettingsDialog";
+import { ActivityInbox } from "@/components/notifications/ActivityInbox";
 import { AppThemeProvider, useAppTheme } from "@/components/providers/AppThemeProvider";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { Avatar } from "@/components/ui/Avatar";
@@ -29,7 +30,7 @@ const navigation = [
   { href: "/today", label: "오늘", icon: LayoutDashboard },
   { href: "/schedule", label: "일정", icon: CalendarDays },
   { href: "/records", label: "기록", icon: ChartNoAxesColumnIncreasing },
-  { href: "/repository", label: "저장소", icon: FolderGit2 },
+  { href: "/repository", label: "학습 라이브러리", icon: FolderGit2 },
   { href: "/settings", label: "설정", icon: Settings },
 ];
 
@@ -171,6 +172,7 @@ function ThemedAppShell({ children }: { children: ReactNode }) {
               </Link>
             );
           })}
+          <ActivityInbox />
         </nav>
 
         <div className="sidebar-foot">
@@ -225,6 +227,7 @@ function ThemedAppShell({ children }: { children: ReactNode }) {
           <strong>{workspace.name}</strong>
           <small>{workspace.defaultBranch}</small>
         </span>
+        <ActivityInbox variant="mobile" />
         <button className="mobile-profile-button" type="button" aria-label="프로필 메뉴 열기" onClick={() => setDrawerOpen(true)}>
           <Avatar member={currentMember} size="small" />
         </button>

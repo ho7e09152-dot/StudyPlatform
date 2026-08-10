@@ -12,7 +12,7 @@ import {
 import { Modal } from "@/components/ui/Modal";
 import { SUBMISSION_TYPE_LABEL } from "@/lib/domain/constants";
 import { getSubmissionKey } from "@/lib/domain/metrics";
-import { getWorkspaceRepositoryPath } from "@/lib/domain/format";
+import { getSubmissionRepositoryPath } from "@/lib/domain/format";
 import type {
   SessionItem,
   StudySession,
@@ -282,7 +282,7 @@ export function SubmissionDialog({
             <dl>
               <div>
                 <dt>파일</dt>
-                <dd>{getWorkspaceRepositoryPath(workspace.repositoryBasePath, `${session.folder}/${me.fileName}`)}</dd>
+                <dd>{getSubmissionRepositoryPath(workspace, session, me.fileName)}</dd>
               </div>
               <div>
                 <dt>작성자</dt>

@@ -4,8 +4,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import com.studyworkspace.common.exception.GitLabApiException;
 import com.studyworkspace.gitlab.dto.GitLabFileContent;
@@ -23,9 +21,6 @@ import org.springframework.stereotype.Service;
 
 @Service
 public class GitLabSessionSyncService {
-	private static final Pattern SESSION_PATH = Pattern.compile("^(\\d{6})/session\\.yml$");
-	private static final Pattern SUBMISSION_PATH = Pattern.compile("^(\\d{6})/([^/]+\\.md)$");
-
 	private final GitLabOAuthProjectService gitLab;
 	private final SessionYamlParser parser;
 	private final WorkspaceService workspaces;
@@ -52,12 +47,14 @@ public class GitLabSessionSyncService {
 		Map<String, String> failedDates = new LinkedHashMap<>();
 		List<SyncFailure> failures = new java.util.ArrayList<>();
 		int validSessionCount = 0;
+		int schemaVersion = WorkspaceRepositoryLayout.schemaVersion(current.repositorySchemaVersion());
 
 		for (GitLabTreeItem item : tree) {
 			String relativePath = WorkspaceRepositoryPath.relative(current.repositoryBasePath(), item.path());
-			Matcher matcher = SESSION_PATH.matcher(relativePath == null ? "" : relativePath);
-			if (!"blob".equals(item.type()) || !matcher.matches()) continue;
-			String date = folderDate(matcher.group(1));
+			if (!"blob".equals(item.type())) continue;
+			var location = WorkspaceRepositoryLayout.matchSession(relativePath, schemaVersion).orElse(null);
+			if (location == null) continue;
+			String date = location.date();
 			try {
 				GitLabFileContent file = gitLab.getRepositoryFile(
 					accessToken, current.gitlabProjectId(), item.path(), current.defaultBranch()
@@ -88,11 +85,12 @@ public class GitLabSessionSyncService {
 		int validSubmissionCount = 0;
 		for (GitLabTreeItem item : tree) {
 			String relativePath = WorkspaceRepositoryPath.relative(current.repositoryBasePath(), item.path());
-			Matcher matcher = SUBMISSION_PATH.matcher(relativePath == null ? "" : relativePath);
-			if (!"blob".equals(item.type()) || !matcher.matches()) continue;
-			StudyMember member = memberByFileName(current, matcher.group(2));
+			if (!"blob".equals(item.type())) continue;
+			var location = WorkspaceRepositoryLayout.matchSubmission(relativePath, schemaVersion).orElse(null);
+			if (location == null) continue;
+			StudyMember member = memberByFileName(current, location.fileName());
 			if (member == null) continue;
-			StudySession session = sessionByFolder(imported, matcher.group(1));
+			StudySession session = imported.get(location.date());
 			if (session == null) {
 				failures.add(new SyncFailure(item.path(), "SUBMISSION_SESSION_MISSING", "제출 파일에 대응하는 session.yml이 없습니다."));
 				continue;
@@ -133,10 +131,6 @@ public class GitLabSessionSyncService {
 		return workspace.members().stream().filter(member -> fileName.equals(member.fileName())).findFirst().orElse(null);
 	}
 
-	private static StudySession sessionByFolder(Map<String, StudySession> sessions, String folder) {
-		return sessions.values().stream().filter(session -> folder.equals(session.folder())).findFirst().orElse(null);
-	}
-
 	private static void validateSubmissionFile(MemberSubmissionFile file, StudySession session, StudyMember member) {
 		if (!member.id().equals(file.memberId()) || member.gitlabUserId() != file.gitlabUserId()
 			|| (!member.displayName().equals(file.username()) && !member.username().equals(file.username()))) {
@@ -158,7 +152,4 @@ public class GitLabSessionSyncService {
 		return new WorkspaceException("SUBMISSION_FILE_INVALID", message, 422);
 	}
 
-	private static String folderDate(String folder) {
-		return "20" + folder.substring(0, 2) + "-" + folder.substring(2, 4) + "-" + folder.substring(4, 6);
-	}
 }

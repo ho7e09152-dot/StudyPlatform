@@ -27,6 +27,7 @@ class RepositoryImportAnalysisServiceTests {
 
 		assertThat(result.classification()).isEqualTo("LEGACY");
 		assertThat(result.repositoryBasePath()).isEqualTo(".study-workspace");
+		assertThat(result.repositorySchemaVersion()).isEqualTo(2);
 		assertThat(result.totalFiles()).isEqualTo(2);
 		assertThat(result.ignoredFiles()).isEqualTo(2);
 		assertThat(result.treeFingerprint()).hasSize(64);
@@ -47,7 +48,33 @@ class RepositoryImportAnalysisServiceTests {
 
 		assertThat(result.classification()).isEqualTo("COMPATIBLE");
 		assertThat(result.repositoryBasePath()).isEmpty();
+		assertThat(result.repositorySchemaVersion()).isEqualTo(1);
 		assertThat(result.compatibleSessions()).isEqualTo(1);
+	}
+
+	@Test
+	void recognizesExistingManagedV2Format() {
+		GitLabOAuthProjectService gitLab = mock(GitLabOAuthProjectService.class);
+		when(gitLab.getProject("token", 12)).thenReturn(project());
+		String sessionPath = ".study-workspace/sessions/2026/2026-08-09/session.yml";
+		when(gitLab.getAllRepositoryTree("token", 12, "main")).thenReturn(List.of(
+			new GitLabTreeItem("config", "config.yml", "blob", ".study-workspace/config.yml", "100644"),
+			new GitLabTreeItem("session", "session.yml", "blob", sessionPath, "100644"),
+			new GitLabTreeItem("submission", "김서연.md", "blob", ".study-workspace/sessions/2026/2026-08-09/submissions/김서연.md", "100644")
+		));
+		when(gitLab.getRepositoryFile("token", 12, ".study-workspace/config.yml", "main"))
+			.thenReturn(new GitLabFileContent("config.yml", ".study-workspace/config.yml", 40, "version: 1\nrepositorySchemaVersion: 2\n", "main", "config", "sha", "sha"));
+		String content = new SessionYamlSerializer(new ObjectMapper()).serialize(SessionYamlParserTests.validSession());
+		when(gitLab.getRepositoryFile("token", 12, sessionPath, "main"))
+			.thenReturn(new GitLabFileContent("session.yml", sessionPath, content.length(), content, "main", "session", "sha", "sha"));
+
+		var result = new RepositoryImportAnalysisService(gitLab, new SessionYamlParser()).analyze("token", 12);
+
+		assertThat(result.classification()).isEqualTo("COMPATIBLE");
+		assertThat(result.repositoryBasePath()).isEqualTo(".study-workspace");
+		assertThat(result.repositorySchemaVersion()).isEqualTo(2);
+		assertThat(result.compatibleSessions()).isEqualTo(1);
+		assertThat(result.compatibleSubmissions()).isEqualTo(1);
 	}
 
 	private static GitLabProject project() {

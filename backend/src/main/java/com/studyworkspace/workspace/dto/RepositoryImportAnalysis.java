@@ -8,6 +8,7 @@ public record RepositoryImportAnalysis(
 	String defaultBranch,
 	String classification,
 	String repositoryBasePath,
+	int repositorySchemaVersion,
 	String treeFingerprint,
 	int totalFiles,
 	int compatibleSessions,

@@ -112,6 +112,7 @@ export function WorkspaceOnboarding({
         defaultBranch: selected.defaultBranch ?? "main",
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Seoul",
         repositoryBasePath: analysis.repositoryBasePath,
+        repositorySchemaVersion: analysis.repositorySchemaVersion,
         importMode: analysis.classification,
         expectedTreeFingerprint: analysis.treeFingerprint,
       });
@@ -223,7 +224,9 @@ function RepositoryAnalysisCard({ analysis }: { analysis: RepositoryImportAnalys
         <span>{conflicted ? <AlertTriangle size={18} /> : compatible ? <FileCheck2 size={18} /> : <Database size={18} />}</span>
         <div>
           <strong>{conflicted ? "전용 경로 충돌을 해결해야 합니다" : compatible ? "기존 학습 데이터를 찾았습니다" : analysis.classification === "EMPTY" ? "빈 저장소에서 새로 시작합니다" : "기존 파일을 그대로 유지합니다"}</strong>
-          <small>{analysis.repositoryBasePath ? `${analysis.repositoryBasePath}/ 아래에서만 학습 데이터를 관리합니다.` : "현재 루트의 서비스 형식을 그대로 가져옵니다."}</small>
+          <small>{analysis.repositorySchemaVersion >= 2
+            ? "학습 데이터는 .study-workspace/sessions 아래에 날짜별로 정리됩니다."
+            : "기존 루트 형식을 그대로 가져오며 설정에서 안전하게 정리할 수 있습니다."}</small>
         </div>
       </header>
       <dl>

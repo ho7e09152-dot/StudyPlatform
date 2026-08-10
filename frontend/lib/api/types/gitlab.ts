@@ -50,6 +50,7 @@ export interface RepositoryImportAnalysis {
   defaultBranch: string;
   classification: "EMPTY" | "COMPATIBLE" | "LEGACY" | "PARTIALLY_COMPATIBLE" | "CONFLICTED";
   repositoryBasePath: string;
+  repositorySchemaVersion: number;
   treeFingerprint: string;
   totalFiles: number;
   compatibleSessions: number;

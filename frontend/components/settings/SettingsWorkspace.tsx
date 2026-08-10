@@ -15,18 +15,20 @@ import {
   CheckCheck,
   History,
   Unplug,
+  FolderTree,
+  ArrowRight,
 } from "lucide-react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
+import { useAuth } from "@/components/providers/AuthProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { useGitLabConnection } from "@/lib/api/hooks/useGitLabConnection";
 import { GITLAB_ACCESS_LABEL } from "@/lib/domain/constants";
 import {
   listMemberCandidates,
-  listNotifications,
-  markNotificationRead,
   listAuditEvents,
-  type InAppNotification,
+  getRepositorySchemaMigrationPreview,
   type AuditEvent,
+  type RepositorySchemaMigrationPreview,
 } from "@/lib/api/services/workspaceApi";
 import type { StudyMember } from "@/lib/domain/types";
 import { deleteAccount, getGitLabReconnectUrl } from "@/lib/api/services/authApi";
@@ -51,6 +53,7 @@ const notifications = [
 ];
 
 export function SettingsWorkspace() {
+  const { mode } = useAuth();
   const {
     workspace,
     syncing,
@@ -62,30 +65,35 @@ export function SettingsWorkspace() {
     currentUserId,
     toggleNotification,
     deleteCurrentWorkspace,
+    migrateRepositoryLayout,
   } = useWorkspace();
   const [deleting, setDeleting] = useState(false);
   const [memberBusy, setMemberBusy] = useState(false);
   const [candidates, setCandidates] = useState<StudyMember[]>([]);
-  const [inbox, setInbox] = useState<InAppNotification[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [confirmation, setConfirmation] = useState<"workspace" | "account" | null>(null);
   const [accountDeleting, setAccountDeleting] = useState(false);
   const [actionError, setActionError] = useState("");
+  const [migrationPreview, setMigrationPreview] = useState<RepositorySchemaMigrationPreview | null>(null);
+  const [migrationBusy, setMigrationBusy] = useState(false);
   const connection = useGitLabConnection();
   const currentMember = workspace.members.find((member) => member.id === currentUserId);
   const canManage = currentMember?.role === "OWNER" || currentMember?.role === "MANAGER";
   const isOwner = currentMember?.role === "OWNER";
 
   const refreshOperationalData = useMemo(() => async () => {
-    const [candidateResult, notificationResult, auditResult] = await Promise.allSettled([
+    if (mode === "demo") {
+      setCandidates([]);
+      setAuditEvents([]);
+      return;
+    }
+    const [candidateResult, auditResult] = await Promise.allSettled([
       canManage ? listMemberCandidates(workspace.id) : Promise.resolve([]),
-      listNotifications(),
       canManage ? listAuditEvents(workspace.id) : Promise.resolve([]),
     ]);
     if (candidateResult.status === "fulfilled") setCandidates(candidateResult.value);
-    if (notificationResult.status === "fulfilled") setInbox(notificationResult.value);
     if (auditResult.status === "fulfilled") setAuditEvents(auditResult.value);
-  }, [canManage, workspace.id]);
+  }, [canManage, mode, workspace.id]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => void refreshOperationalData(), 0);
@@ -151,6 +159,7 @@ export function SettingsWorkspace() {
           <div><dt>Project ID</dt><dd>{project?.id ?? "—"}</dd></div>
           <div><dt>기본 브랜치</dt><dd>{project?.defaultBranch ?? "—"}</dd></div>
           <div><dt>시간대</dt><dd>{workspace.settings.timezone}</dd></div>
+          <div><dt>학습 데이터 경로</dt><dd>{workspace.repositorySchemaVersion >= 2 ? ".study-workspace/sessions" : workspace.repositoryBasePath || "저장소 루트"}</dd></div>
           <div><dt>GitLab 사용자</dt><dd>{connection.data?.user ? `@${connection.data.user.username}` : "—"}</dd></div>
           <div><dt>연결 상태</dt><dd>{connection.error ?? connection.data?.message ?? "백엔드 응답 대기 중"}</dd></div>
         </dl>
@@ -161,6 +170,31 @@ export function SettingsWorkspace() {
               <span key={`${failure.path}-${failure.code}`}><code>{failure.path}</code>{failure.message}</span>
             ))}
           </div>
+        ) : null}
+        {isOwner && connected && workspace.repositorySchemaVersion < 2 ? (
+          <div className="repository-migration-callout">
+            <FolderTree size={20} />
+            <span>
+              <strong>날짜 폴더를 한곳에 정리할 수 있어요</strong>
+              <small>현재 파일을 지우지 않고, GitLab 커밋 하나로 서비스 전용 폴더에 이동합니다.</small>
+            </span>
+            <button
+              type="button"
+              className="button button--secondary button--small"
+              disabled={migrationBusy}
+              onClick={() => {
+                setActionError("");
+                setMigrationBusy(true);
+                void getRepositorySchemaMigrationPreview(workspace.id)
+                  .then(setMigrationPreview)
+                  .catch((error) => setActionError(error instanceof Error ? error.message : "저장 구조를 확인하지 못했습니다."))
+                  .finally(() => setMigrationBusy(false));
+              }}
+            >{migrationBusy ? "확인 중…" : "저장 구조 정리"}</button>
+          </div>
+        ) : null}
+        {workspace.repositorySchemaVersion >= 2 ? (
+          <p className="repository-layout-status"><CheckCheck size={15} /> 날짜별 학습 파일이 서비스 전용 경로에 정리되어 있습니다.</p>
         ) : null}
       </section>
 
@@ -247,23 +281,7 @@ export function SettingsWorkspace() {
             );
           })}
         </div>
-        {inbox.length ? (
-          <div className="notification-inbox">
-            <strong>앱 알림</strong>
-            {inbox.map((notification) => (
-              <article className={notification.readAt ? "is-read" : ""} key={notification.id}>
-                <span><strong>{notification.title}</strong><small>{notification.message} · {new Date(notification.createdAt).toLocaleString("ko-KR")}</small></span>
-                {!notification.readAt ? (
-                  <button
-                    type="button"
-                    className="button button--secondary button--small"
-                    onClick={() => void markNotificationRead(notification.id).then((updated) => setInbox((current) => current.map((item) => item.id === updated.id ? updated : item)))}
-                  ><CheckCheck size={14} /> 읽음</button>
-                ) : null}
-              </article>
-            ))}
-          </div>
-        ) : null}
+        <p className="settings-notification-note">팀 제출과 리뷰, 놓친 일정은 좌측 메뉴의 <strong>활동함</strong>에서 확인할 수 있습니다.</p>
       </section>
 
       <section id="security-settings" className="surface settings-section settings-section--security" aria-labelledby="security-title">
@@ -346,6 +364,57 @@ export function SettingsWorkspace() {
                     .finally(() => setAccountDeleting(false));
                 }}
               >{deleting || accountDeleting ? "처리 중…" : confirmation === "workspace" ? "Workspace 삭제" : "계정 탈퇴"}</button>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+
+      {migrationPreview ? (
+        <Modal
+          title="GitLab 저장 구조를 정리할까요?"
+          description="확인한 파일만 이동하며, 저장소가 중간에 바뀌면 실행하지 않습니다."
+          onClose={() => { if (!migrationBusy) setMigrationPreview(null); }}
+        >
+          <div className="repository-migration-preview">
+            <div className="repository-migration-summary">
+              <span><strong>{migrationPreview.sessionFiles}</strong><small>일정 파일</small></span>
+              <span><strong>{migrationPreview.submissionFiles}</strong><small>제출 파일</small></span>
+              <span><strong>{migrationPreview.totalMoves}</strong><small>총 이동</small></span>
+            </div>
+            {migrationPreview.blockers.length ? (
+              <div className="sync-failure-list" role="alert">
+                <strong>먼저 확인할 항목</strong>
+                {migrationPreview.blockers.map((blocker) => (
+                  <span key={`${blocker.code}-${blocker.path}`}><code>{blocker.path || blocker.code}</code>{blocker.message}</span>
+                ))}
+              </div>
+            ) : (
+              <div className="repository-migration-moves">
+                <strong>이동 예시</strong>
+                {migrationPreview.moves.slice(0, 5).map((move) => (
+                  <span key={move.sourcePath}>
+                    <code>{move.sourcePath}</code><ArrowRight size={14} /><code>{move.targetPath}</code>
+                  </span>
+                ))}
+                {migrationPreview.moves.length > 5 ? <small>외 {migrationPreview.moves.length - 5}개 파일</small> : null}
+              </div>
+            )}
+            {actionError ? <div className="onboarding-error" role="alert">{actionError}</div> : null}
+            <div className="modal-actions">
+              <button type="button" className="button button--ghost" disabled={migrationBusy} onClick={() => setMigrationPreview(null)}>취소</button>
+              <button
+                type="button"
+                className="button"
+                disabled={!migrationPreview.ready || migrationBusy}
+                onClick={() => {
+                  setMigrationBusy(true);
+                  setActionError("");
+                  void migrateRepositoryLayout(migrationPreview.treeFingerprint)
+                    .then(() => setMigrationPreview(null))
+                    .catch((error) => setActionError(error instanceof Error ? error.message : "저장 구조를 변경하지 못했습니다."))
+                    .finally(() => setMigrationBusy(false));
+                }}
+              >{migrationBusy ? "GitLab에 반영 중…" : `${migrationPreview.totalMoves}개 파일 이동`}</button>
             </div>
           </div>
         </Modal>

@@ -4,6 +4,10 @@ import type {
   SubmissionEntry,
   Workspace,
 } from "../domain/types";
+import {
+  getSessionRepositoryPath,
+  getSubmissionRepositoryPath,
+} from "../domain/format";
 
 function yamlString(value: string) {
   return /[:#\n]/.test(value) ? JSON.stringify(value) : value;
@@ -120,7 +124,7 @@ export function getRepositoryFiles(workspace: Workspace) {
     .flatMap((session) => {
       const files: RepositoryFile[] = [
         {
-          path: `${session.folder}/session.yml`,
+          path: getSessionRepositoryPath(workspace, session),
           kind: "yaml" as const,
           content: serializeSession(session),
         },
@@ -130,7 +134,7 @@ export function getRepositoryFiles(workspace: Workspace) {
         const file = workspace.submissions[`${session.folder}/${member.id}`];
         if (file) {
           files.push({
-            path: `${session.folder}/${member.fileName}`,
+            path: getSubmissionRepositoryPath(workspace, session, member.fileName),
             kind: "markdown" as const,
             content: serializeMemberFile(session, file),
           });

@@ -1,3 +1,5 @@
+import type { StudySession, Workspace } from "./types";
+
 export function toFolderName(date: string) {
   const [year, month, day] = date.split("-");
   return `${year.slice(2)}${month}${day}`;
@@ -57,4 +59,25 @@ export function percent(value: number) {
 }
 export function getWorkspaceRepositoryPath(basePath: string | undefined, relativePath: string) {
   return basePath ? `${basePath.replace(/\/+$/, "")}/${relativePath}` : relativePath;
+}
+
+export function getSessionRepositoryPath(
+  workspace: Pick<Workspace, "repositoryBasePath" | "repositorySchemaVersion">,
+  session: Pick<StudySession, "date" | "folder">,
+) {
+  const relativePath = workspace.repositorySchemaVersion >= 2
+    ? `sessions/${session.date.slice(0, 4)}/${session.date}/session.yml`
+    : `${session.folder}/session.yml`;
+  return getWorkspaceRepositoryPath(workspace.repositoryBasePath, relativePath);
+}
+
+export function getSubmissionRepositoryPath(
+  workspace: Pick<Workspace, "repositoryBasePath" | "repositorySchemaVersion">,
+  session: Pick<StudySession, "date" | "folder">,
+  fileName: string,
+) {
+  const relativePath = workspace.repositorySchemaVersion >= 2
+    ? `sessions/${session.date.slice(0, 4)}/${session.date}/submissions/${fileName}`
+    : `${session.folder}/${fileName}`;
+  return getWorkspaceRepositoryPath(workspace.repositoryBasePath, relativePath);
 }

@@ -21,11 +21,25 @@ curl -fsS http://127.0.0.1:8080/actuator/health/readiness
 
 Flyway migrations run before the application accepts traffic. Do not enable Hibernate schema creation in production.
 
+Current application migrations end at V9. V8 creates the normalized team announcement/message tables and V9 creates team documents. Confirm the startup log reaches V9 before sending user traffic.
+
 ## Reverse proxy
 
 Terminate TLS at the load balancer or reverse proxy, forward `X-Forwarded-Proto: https`, and proxy the public API domain to `127.0.0.1:8080`. The backend production profile trusts framework-forwarded headers and issues a Secure, HttpOnly session cookie.
 
 Expose `/actuator/health/readiness` to the load balancer. Keep `/actuator/prometheus` on a private monitoring network because it requires authentication by default.
+
+## Staging release gate
+
+Run the read-only preflight against the deployed addresses:
+
+```bash
+FRONTEND_BASE_URL=https://study.example.com \
+BACKEND_BASE_URL=https://api.study.example.com \
+./scripts/staging-smoke.sh
+```
+
+This verifies the public pages, readiness, unauthenticated 401 boundary, GitLab authorize redirect and request ID header. Then complete [the two-account OAuth checklist](staging-e2e-checklist.md). Do not promote to production until real GitLab commits, cross-user permissions, reconnect and conflict handling pass.
 
 ## Backup and restore
 
@@ -54,4 +68,3 @@ Restore is destructive for objects already present in the target database. Stop 
 ## Key rotation
 
 The current encrypted OAuth rows depend on `OAUTH_TOKEN_ENCRYPTION_KEY`. Rotate it with a dual-key migration or force all users to reconnect after clearing `oauth_credentials`; replacing the key without one of these steps makes existing credentials unreadable.
-

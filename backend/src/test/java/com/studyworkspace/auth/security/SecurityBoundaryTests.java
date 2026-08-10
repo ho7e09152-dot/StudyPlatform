@@ -1,5 +1,6 @@
 package com.studyworkspace.auth.security;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.authentication;
 import static org.hamcrest.Matchers.containsInAnyOrder;
@@ -9,11 +10,18 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
+
 import com.studyworkspace.gitlab.dto.GitLabUser;
+import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.session.Session;
+import org.springframework.session.SessionRepository;
+import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest(properties = "app.demo.persistence-path=build/test-data/security-boundary-workspaces.json")
@@ -22,6 +30,9 @@ class SecurityBoundaryTests {
 
 	@Autowired
 	private MockMvc mockMvc;
+
+	@Autowired
+	private SessionRepository<?> sessionRepository;
 
 	@Test
 	void unauthenticatedWorkspaceRequestReturnsJson401() throws Exception {
@@ -39,6 +50,30 @@ class SecurityBoundaryTests {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.length()").value(2))
 			.andExpect(jsonPath("$[*].id").value(containsInAnyOrder("workspace-evening", "workspace-reading")));
+	}
+
+	@Test
+	void gitLabUserSessionAuthenticatesWithoutPersistingADuplicateSecurityContext() throws Exception {
+		SessionRepository<Session> sessions = sessions();
+		Session session = sessions.createSession();
+		GitLabUser user = new GitLabUser(
+			101, "gitlab-user-a", "GitLab User A", null, "https://gitlab.example/gitlab-user-a"
+		);
+		session.setAttribute(AuthSessionAttributes.GITLAB_USER, user);
+		sessions.save(session);
+		String cookieValue = Base64.getEncoder().encodeToString(
+			session.getId().getBytes(StandardCharsets.UTF_8)
+		);
+
+		mockMvc.perform(get("/api/v1/workspaces").cookie(new Cookie("SESSION", cookieValue)))
+			.andExpect(status().isOk());
+
+		Session persisted = sessions.findById(session.getId());
+		assertThat(persisted).isNotNull();
+		Object securityContext = persisted.getAttribute(
+			HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY
+		);
+		assertThat(securityContext).isNull();
 	}
 
 	@Test
@@ -62,5 +97,10 @@ class SecurityBoundaryTests {
 	private static org.springframework.test.web.servlet.request.RequestPostProcessor oauthUser(long userId, String username) {
 		GitLabUser user = new GitLabUser(userId, username, username, null, "https://gitlab.example/" + username);
 		return authentication(new GitLabAuthenticationToken(user));
+	}
+
+	@SuppressWarnings({"rawtypes", "unchecked"})
+	private SessionRepository<Session> sessions() {
+		return (SessionRepository) sessionRepository;
 	}
 }

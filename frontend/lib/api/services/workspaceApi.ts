@@ -97,6 +97,122 @@ export function markNotificationRead(notificationId: string) {
   return apiRequest<InAppNotification>(`/api/v1/notifications/${encodeURIComponent(notificationId)}/read`, { method: "PATCH" });
 }
 
+export interface WorkspaceAnnouncement {
+  id: string;
+  authorName: string;
+  title: string;
+  body: string;
+  pinned: boolean;
+  publishedAt: string;
+  expiresAt?: string;
+  updatedAt: string;
+  canEdit: boolean;
+}
+
+export interface WorkspaceMessage {
+  id: string;
+  authorName: string;
+  contextDate: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+  edited: boolean;
+  canEdit: boolean;
+}
+
+export interface WorkspaceMessagePage {
+  items: WorkspaceMessage[];
+  nextCursor?: string;
+}
+
+export interface AnnouncementInput {
+  title: string;
+  body: string;
+  pinned: boolean;
+  publishedAt?: string;
+  expiresAt?: string;
+}
+
+export function listWorkspaceAnnouncements(workspaceId: string, signal?: AbortSignal) {
+  return apiGet<WorkspaceAnnouncement[]>(`${workspacePath(workspaceId)}/announcements`, signal);
+}
+
+export function createWorkspaceAnnouncement(workspaceId: string, input: AnnouncementInput) {
+  return apiRequest<WorkspaceAnnouncement>(`${workspacePath(workspaceId)}/announcements`, { method: "POST", body: input });
+}
+
+export function updateWorkspaceAnnouncement(workspaceId: string, announcementId: string, input: AnnouncementInput) {
+  return apiRequest<WorkspaceAnnouncement>(`${workspacePath(workspaceId)}/announcements/${encodeURIComponent(announcementId)}`, { method: "PATCH", body: input });
+}
+
+export function deleteWorkspaceAnnouncement(workspaceId: string, announcementId: string) {
+  return apiRequest<void>(`${workspacePath(workspaceId)}/announcements/${encodeURIComponent(announcementId)}`, { method: "DELETE" });
+}
+
+export function listWorkspaceMessages(workspaceId: string, options: { date?: string; cursor?: string } = {}, signal?: AbortSignal) {
+  const search = new URLSearchParams();
+  if (options.date) search.set("date", options.date);
+  if (options.cursor) search.set("cursor", options.cursor);
+  const query = search.size ? `?${search}` : "";
+  return apiGet<WorkspaceMessagePage>(`${workspacePath(workspaceId)}/messages${query}`, signal);
+}
+
+export function createWorkspaceMessage(workspaceId: string, body: string, contextDate: string) {
+  return apiRequest<WorkspaceMessage>(`${workspacePath(workspaceId)}/messages`, { method: "POST", body: { body, contextDate } });
+}
+
+export function updateWorkspaceMessage(workspaceId: string, messageId: string, body: string) {
+  return apiRequest<WorkspaceMessage>(`${workspacePath(workspaceId)}/messages/${encodeURIComponent(messageId)}`, { method: "PATCH", body: { body } });
+}
+
+export function deleteWorkspaceMessage(workspaceId: string, messageId: string) {
+  return apiRequest<void>(`${workspacePath(workspaceId)}/messages/${encodeURIComponent(messageId)}`, { method: "DELETE" });
+}
+
+export interface WorkspaceDocument {
+  id: string;
+  authorName: string;
+  title: string;
+  bodyMarkdown: string;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+  canEdit: boolean;
+}
+
+export interface WorkspaceDocumentPage {
+  items: WorkspaceDocument[];
+  nextCursor?: string;
+}
+
+export function listWorkspaceDocuments(workspaceId: string, options: { query?: string; cursor?: string } = {}, signal?: AbortSignal) {
+  const search = new URLSearchParams();
+  if (options.query) search.set("query", options.query);
+  if (options.cursor) search.set("cursor", options.cursor);
+  const query = search.size ? `?${search}` : "";
+  return apiGet<WorkspaceDocumentPage>(`${workspacePath(workspaceId)}/documents${query}`, signal);
+}
+
+export function getWorkspaceDocument(workspaceId: string, documentId: string, signal?: AbortSignal) {
+  return apiGet<WorkspaceDocument>(`${workspacePath(workspaceId)}/documents/${encodeURIComponent(documentId)}`, signal);
+}
+
+export function createWorkspaceDocument(workspaceId: string, title: string, bodyMarkdown: string) {
+  return apiRequest<WorkspaceDocument>(`${workspacePath(workspaceId)}/documents`, { method: "POST", body: { title, bodyMarkdown } });
+}
+
+export function updateWorkspaceDocument(workspaceId: string, documentId: string, title: string, bodyMarkdown: string, expectedVersion: number) {
+  return apiRequest<WorkspaceDocument>(`${workspacePath(workspaceId)}/documents/${encodeURIComponent(documentId)}`, {
+    method: "PATCH",
+    body: { title, bodyMarkdown, expectedVersion },
+  });
+}
+
+export function deleteWorkspaceDocument(workspaceId: string, documentId: string, expectedVersion: number) {
+  const search = new URLSearchParams({ expectedVersion: expectedVersion.toString() });
+  return apiRequest<void>(`${workspacePath(workspaceId)}/documents/${encodeURIComponent(documentId)}?${search}`, { method: "DELETE" });
+}
+
 export interface CreateWorkspaceInput {
   name: string;
   gitlabProjectId: number;
@@ -104,6 +220,7 @@ export interface CreateWorkspaceInput {
   defaultBranch: string;
   timezone: string;
   repositoryBasePath: string;
+  repositorySchemaVersion: number;
   importMode: string;
   expectedTreeFingerprint: string;
 }
@@ -122,6 +239,52 @@ export interface WorkspaceSyncResult {
   syncedAt: string;
 }
 
+export interface RepositorySchemaMigrationPreview {
+  currentSchemaVersion: number;
+  targetSchemaVersion: number;
+  currentBasePath: string;
+  targetBasePath: string;
+  treeFingerprint: string;
+  sessionFiles: number;
+  submissionFiles: number;
+  totalMoves: number;
+  ready: boolean;
+  moves: Array<{
+    sourcePath: string;
+    targetPath: string;
+    type: "SESSION" | "SUBMISSION";
+  }>;
+  blockers: Array<{
+    path: string;
+    code: string;
+    message: string;
+  }>;
+}
+
+export interface RepositorySchemaMigrationResult {
+  workspace: Workspace;
+  commitId: string;
+  movedFiles: number;
+  failures: WorkspaceSyncResult["failures"];
+  syncedAt: string;
+}
+
+export interface SubmissionReviewThread {
+  memberId: string;
+  memberName: string;
+  filePath: string;
+  commitId: string;
+  comments: Array<{
+    id: string;
+    body: string;
+    authorGitLabUserId: number;
+    authorUsername: string;
+    authorName: string;
+    authorAvatarUrl?: string;
+    createdAt: string;
+  }>;
+}
+
 export function createWorkspace(input: CreateWorkspaceInput) {
   return apiRequest<Workspace>("/api/v1/workspaces", {
     method: "POST",
@@ -133,6 +296,19 @@ export function syncWorkspace(workspaceId: string) {
   return apiRequest<WorkspaceSyncResult>(`${workspacePath(workspaceId)}/sync`, {
     method: "POST",
   });
+}
+
+export function getRepositorySchemaMigrationPreview(workspaceId: string) {
+  return apiGet<RepositorySchemaMigrationPreview>(
+    `${workspacePath(workspaceId)}/repository-schema/migration`,
+  );
+}
+
+export function migrateRepositorySchema(workspaceId: string, expectedTreeFingerprint: string) {
+  return apiRequest<RepositorySchemaMigrationResult>(
+    `${workspacePath(workspaceId)}/repository-schema/migrate`,
+    { method: "POST", body: { expectedTreeFingerprint } },
+  );
 }
 
 export function saveWorkspaceSession(
@@ -175,6 +351,34 @@ export function upsertSubmission(
   return apiRequest<Workspace>(
     `${workspacePath(workspaceId)}/sessions/${encodeURIComponent(date)}/items/${encodeURIComponent(itemId)}/submission`,
     { method: "PUT", body: draft },
+  );
+}
+
+function submissionReviewPath(workspaceId: string, date: string, memberId: string) {
+  return `${workspacePath(workspaceId)}/sessions/${encodeURIComponent(date)}/members/${encodeURIComponent(memberId)}/reviews`;
+}
+
+export function getSubmissionReviews(
+  workspaceId: string,
+  date: string,
+  memberId: string,
+  signal?: AbortSignal,
+) {
+  return apiGet<SubmissionReviewThread>(
+    submissionReviewPath(workspaceId, date, memberId),
+    signal,
+  );
+}
+
+export function createSubmissionReview(
+  workspaceId: string,
+  date: string,
+  memberId: string,
+  body: string,
+) {
+  return apiRequest<SubmissionReviewThread>(
+    submissionReviewPath(workspaceId, date, memberId),
+    { method: "POST", body: { body } },
   );
 }
 

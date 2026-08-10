@@ -2,7 +2,9 @@
 
 ## 업데이트 항목 1 — 오늘 페이지의 저장소 미리보기를 팀 피드로 교체
 
-상태: `TODO`
+상태: `P0 완료 (2026-08-10) · P1/P2 TODO`
+
+> 현재 저장소 미리보기는 업데이트 항목 3의 `팀 제출 리뷰` 카드로 먼저 교체되었다. 팀 피드를 구현할 때 리뷰 진입점을 없애지 않고 공지·피드 아래의 보조 영역이나 별도 탭으로 유지한다.
 
 ### 목표
 
@@ -115,14 +117,22 @@ API 목록 응답은 커서 기반 페이지네이션을 사용한다. 메시지
 
 #### P0
 
-- 저장소 미리보기 제거
-- 공지/메시지 DB 마이그레이션과 엔티티 구현
-- 공지 및 메시지 CRUD API
-- 오늘/전체 피드 UI
-- 커서 기반 페이지네이션
-- 새 공지 인앱 알림
-- 권한, 입력 검증, 소프트 삭제 및 감사 이벤트
-- 5~10초 폴링 또는 수동 새로고침
+- [x] 저장소 미리보기 제거
+- [x] 공지/메시지 DB 마이그레이션과 엔티티 구현
+- [x] 공지 및 메시지 CRUD API
+- [x] 오늘/전체 피드 UI
+- [x] 커서 기반 페이지네이션
+- [x] 새 공지 인앱 알림
+- [x] 권한, 입력 검증, 소프트 삭제 및 감사 이벤트
+- [x] 10초 폴링과 수동 새로고침
+
+구현 메모:
+
+- 공지와 메시지는 GitLab 커밋이나 Workspace JSON 상태에 포함하지 않고 PostgreSQL 정규화 테이블에 저장한다.
+- 공지는 `OWNER`와 `MANAGER`만 게시·수정·보관할 수 있다.
+- 일반 메시지는 모든 활성 멤버가 작성할 수 있고 작성자 또는 관리자가 수정·소프트 삭제할 수 있다.
+- 공지 등록 시 작성자를 제외한 활성 멤버에게 `WORKSPACE_ANNOUNCEMENT` 인앱 알림을 생성한다.
+- 일반 메시지는 알림 피로를 막기 위해 전체 알림을 생성하지 않는다.
 
 #### P1
 
@@ -152,7 +162,7 @@ API 목록 응답은 커서 기반 페이지네이션을 사용한다. 메시지
 
 ## 업데이트 항목 2 — 기존 GitLab 저장소 가져오기와 안전한 초기화
 
-상태: `P0 완료 · P1/P2 TODO`
+상태: `P0 완료 · 저장 구조 V2와 안전 마이그레이션 완료 · P1/P2 TODO`
 
 ### 배경
 
@@ -224,15 +234,20 @@ docs/
 
 .study-workspace/
   config.yml
-  260810/
-    session.yml
-    member-a.md
+  sessions/
+    2026/
+      2026-08-10/
+        session.yml
+        submissions/
+          사용자-지정-이름.md
 ```
 
-- 신규 또는 기존 일반 저장소의 기본 경로는 `.study-workspace`로 한다.
+- 신규 또는 기존 일반 저장소의 기본 데이터 경로는 `.study-workspace/sessions/{YYYY}/{YYYY-MM-DD}`로 한다.
 - 현재 루트 경로 형식으로 연결된 기존 Workspace는 `repositoryBasePath=""`로 유지해 호환성을 보장한다.
 - 세션, 제출, 저장소 조회, 경로 정책과 동기화 로직이 모두 `repositoryBasePath`를 사용하도록 변경한다.
 - `.study-workspace/config.yml`에는 스키마 버전과 데이터 루트만 저장하고 OAuth 토큰이나 사용자 비밀정보는 저장하지 않는다.
+- 기존 V1 파일은 Owner가 설정에서 명시적으로 실행할 때만 GitLab 단일 커밋으로 V2에 이동한다.
+- 실행 전 tree fingerprint, 대상 경로 충돌, 미지원 파일을 다시 검사하고 저장소가 바뀌었으면 중단한다.
 
 ### 데이터 모델
 
@@ -332,3 +347,103 @@ Workspace 연결 정보에 다음 필드를 추가한다.
 - 분석 이후 저장소가 변경되면 오래된 결과로 초기화할 수 없다.
 - 기존 루트 경로 Workspace의 동작이 깨지지 않는다.
 - 가져오기 실패 후 중복 Workspace나 중복 커밋 없이 재시도할 수 있다.
+
+## 업데이트 항목 3 — GitLab 커밋 기반 팀 제출 리뷰
+
+상태: `P0 완료`
+
+### 구현 원칙
+
+- 리뷰 원본은 별도 로컬 JSON이 아니라 멤버 제출 파일의 최신 GitLab commit comment로 관리한다.
+- 활성 Workspace 멤버만 댓글을 읽거나 작성할 수 있다.
+- 댓글 작성은 로그인 사용자의 OAuth 토큰을 사용하므로 GitLab에도 실제 작성자 계정으로 남는다.
+- 제출 파일이 갱신되면 새 commit SHA가 현재 리뷰 대상이 된다. 이전 댓글은 이전 커밋 이력에 보존된다.
+- 댓글을 등록하면 제출자에게 인앱 알림을 만들고 감사 로그에 `SUBMISSION_REVIEW_CREATED`를 기록한다.
+
+### 완료된 UI
+
+- 오늘 페이지의 저장소 미리보기를 `팀 제출 리뷰` 카드로 교체
+- 멤버 제출 상세에 댓글 목록, 작성자, 작성 시각, 입력창 추가
+- 일정 상세에서 모든 멤버의 제출 리뷰 진입 가능
+- 기록 페이지의 날짜별 멤버 행에서 과거 제출 리뷰 진입 가능
+- 코드 제출은 리뷰 모달에서도 줄바꿈과 들여쓰기를 유지해 표시
+
+### API
+
+- `GET /api/v1/workspaces/{workspaceId}/sessions/{date}/members/{memberId}/reviews`
+- `POST /api/v1/workspaces/{workspaceId}/sessions/{date}/members/{memberId}/reviews`
+
+### 다음 단계
+
+- P1: 댓글 답글과 해결 상태가 필요하면 GitLab Discussions API 기반 thread로 확장
+- P1: 리뷰 요청, 미확인 리뷰 수, 리뷰 완료 상태 집계
+- P2: 코드 줄 단위 diff comment와 Merge Request 기반 승인 흐름
+
+## 업데이트 항목 4 — 학습 라이브러리 팀 문서
+
+상태: `MVP 완료 (2026-08-10)`
+
+### 구현 원칙
+
+- 세션 일정과 제출 파일의 GitLab 원본 구조와 분리한다.
+- 잦은 편집에서 불필요한 GitLab 커밋이 쌓이지 않도록 문서 원본은 PostgreSQL에 저장한다.
+- 활성 Workspace 멤버는 모든 팀 문서를 읽을 수 있다.
+- 문서를 만든 사람만 해당 문서를 수정하거나 삭제할 수 있다.
+- Owner와 Manager도 다른 작성자의 문서 내용을 대신 수정하지 않는다.
+- 수정 요청은 `expectedVersion`으로 낙관적 잠금을 적용해 오래된 화면의 덮어쓰기를 차단한다.
+- 삭제는 즉시 물리 삭제하지 않고 `deleted_at`을 기록하는 소프트 삭제로 처리한다.
+
+### 완료된 UI
+
+- 학습 라이브러리의 `세션 아카이브 / 팀 문서` 탭
+- 제목·본문·작성자 검색
+- 카드형 팀 문서 목록과 Markdown 문서 상세
+- Markdown 소제목, 굵게, 목록, 할 일, 인용, 코드 블록 도구
+- 편집/미리보기 전환
+- 작성자에게만 편집·삭제 버튼 표시
+- 버전 충돌 오류와 최신 목록 다시 불러오기
+- 데스크톱·모바일 반응형 문서 편집 화면
+
+### API와 저장 구조
+
+- `workspace_documents` 테이블과 수정일 인덱스
+- `GET /api/v1/workspaces/{workspaceId}/documents`
+- `POST /api/v1/workspaces/{workspaceId}/documents`
+- `GET /api/v1/workspaces/{workspaceId}/documents/{documentId}`
+- `PATCH /api/v1/workspaces/{workspaceId}/documents/{documentId}`
+- `DELETE /api/v1/workspaces/{workspaceId}/documents/{documentId}`
+- 문서 생성 시 다른 활성 멤버에게 인앱 알림 생성
+- 생성·수정·삭제 감사 이벤트 기록
+
+### 다음 단계
+
+- P1: 블록 단위 순서 변경과 드래그 앤 드롭
+- P1: 문서 댓글, 즐겨찾기, 태그와 문서 간 링크
+- P1: 변경 이력 조회와 이전 버전 복원
+- P2: 공동 실시간 편집과 presence
+- P2: 첨부파일과 이미지 업로드
+
+## 업데이트 항목 5 — 릴리스 안정화와 실제 OAuth 승인
+
+상태: `자동 검증 완료 · 외부 스테이징 승인 TODO`
+
+### 완료
+
+- [x] 백엔드 전체 테스트와 프론트 lint/build/render 테스트
+- [x] OpenAPI lint와 비밀정보 기본 검사
+- [x] 오늘 제출·팀 피드·활동함 브라우저 E2E
+- [x] 팀 문서 생성·작성자 권한 브라우저 E2E
+- [x] 일정 검색·설정 데모 격리 브라우저 E2E
+- [x] GitLab CI에 Chromium E2E job과 실패 trace/artifact 추가
+- [x] 스테이징 URL·readiness·401·OAuth redirect 사전 점검 스크립트
+
+### 외부 환경에서 남은 승인
+
+- [ ] public HTTPS 도메인과 GitLab Redirect URI 등록
+- [ ] managed PostgreSQL과 운영 Secret 주입
+- [ ] 실제 GitLab 사용자 A/B 가입·제출·리뷰·문서 권한 E2E
+- [ ] OAuth 철회·재연결과 백엔드 재시작 세션 유지 검증
+- [ ] 외부 commit 충돌과 GitLab 429/5xx 복구 검증
+- [ ] PostgreSQL backup/restore 리허설
+
+실행 절차는 `docs/staging-e2e-checklist.md`를 기준으로 한다.

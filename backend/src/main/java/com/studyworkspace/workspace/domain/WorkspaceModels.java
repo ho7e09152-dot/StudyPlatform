@@ -162,6 +162,7 @@ public final class WorkspaceModels {
 		String defaultBranch,
 		String timezone,
 		String repositoryBasePath,
+		Integer repositorySchemaVersion,
 		String importMode,
 		String expectedTreeFingerprint,
 		String ownerRepositoryFileName
@@ -169,7 +170,7 @@ public final class WorkspaceModels {
 		public CreateWorkspaceRequest(
 			String name, long gitlabProjectId, String gitlabProjectPath, String defaultBranch, String timezone
 		) {
-			this(name, gitlabProjectId, gitlabProjectPath, defaultBranch, timezone, "", "COMPATIBLE", null, null);
+			this(name, gitlabProjectId, gitlabProjectPath, defaultBranch, timezone, "", 1, "COMPATIBLE", null, null);
 		}
 	}
 

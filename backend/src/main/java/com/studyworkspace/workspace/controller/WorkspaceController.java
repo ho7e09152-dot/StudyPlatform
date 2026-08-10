@@ -6,9 +6,10 @@ import java.nio.charset.StandardCharsets;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import com.studyworkspace.gitlab.dto.GitLabUser;
 import com.studyworkspace.gitlab.dto.GitLabProject;
@@ -31,8 +32,16 @@ import com.studyworkspace.workspace.service.InAppNotificationService;
 import com.studyworkspace.common.exception.GitLabApiException;
 import com.studyworkspace.workspace.dto.WorkspaceSyncResponse;
 import com.studyworkspace.workspace.dto.RepositoryImportAnalysis;
+import com.studyworkspace.workspace.dto.RepositorySchemaMigrationPreview;
+import com.studyworkspace.workspace.dto.RepositorySchemaMigrationRequest;
+import com.studyworkspace.workspace.dto.RepositorySchemaMigrationResult;
 import com.studyworkspace.workspace.service.RepositoryImportAnalysisService;
 import com.studyworkspace.workspace.service.RepositoryInitializationService;
+import com.studyworkspace.workspace.service.RepositorySchemaMigrationService;
+import com.studyworkspace.workspace.service.WorkspaceRepositoryLayout;
+import com.studyworkspace.workspace.service.SubmissionReviewService;
+import com.studyworkspace.workspace.dto.SubmissionReviewThread;
+import com.studyworkspace.workspace.dto.CreateSubmissionReviewRequest;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -69,6 +78,8 @@ public class WorkspaceController {
 	private final RepositoryImportAnalysisService importAnalysisService;
 	private final OAuthAccountService accountService;
 	private final RepositoryInitializationService repositoryInitializationService;
+	private final RepositorySchemaMigrationService repositorySchemaMigrationService;
+	private final SubmissionReviewService submissionReviewService;
 
 	public WorkspaceController(
 		WorkspaceService service,
@@ -86,7 +97,9 @@ public class WorkspaceController {
 		InAppNotificationService notificationService,
 		RepositoryImportAnalysisService importAnalysisService,
 		OAuthAccountService accountService,
-		RepositoryInitializationService repositoryInitializationService
+		RepositoryInitializationService repositoryInitializationService,
+		RepositorySchemaMigrationService repositorySchemaMigrationService,
+		SubmissionReviewService submissionReviewService
 	) {
 		this.service = service;
 		this.tokenProvider = tokenProvider;
@@ -104,6 +117,8 @@ public class WorkspaceController {
 		this.importAnalysisService = importAnalysisService;
 		this.accountService = accountService;
 		this.repositoryInitializationService = repositoryInitializationService;
+		this.repositorySchemaMigrationService = repositorySchemaMigrationService;
+		this.submissionReviewService = submissionReviewService;
 	}
 
 	@GetMapping
@@ -147,6 +162,7 @@ public class WorkspaceController {
 			StringUtils.hasText(project.defaultBranch()) ? project.defaultBranch() : "main",
 			profile.timezone(),
 			analysis.repositoryBasePath(),
+			analysis.repositorySchemaVersion(),
 			analysis.classification(),
 			analysis.treeFingerprint(),
 			profile.repositoryFileName()
@@ -289,6 +305,53 @@ public class WorkspaceController {
 			recordSyncFailure(workspaceId, user, jobId, "SYNC_FAILED", exception.getMessage());
 			throw exception;
 		}
+	}
+
+	@GetMapping("/{workspaceId}/repository-schema/migration")
+	public RepositorySchemaMigrationPreview previewRepositorySchemaMigration(
+		@PathVariable String workspaceId,
+		@AuthenticationPrincipal GitLabUser user,
+		HttpServletRequest servletRequest
+	) {
+		accessService.requireOwner(workspaceId, user.id(), false);
+		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
+		return repositorySchemaMigrationService.preview(oauth.accessToken(), service.get(workspaceId));
+	}
+
+	@PostMapping("/{workspaceId}/repository-schema/migrate")
+	public RepositorySchemaMigrationResult migrateRepositorySchema(
+		@PathVariable String workspaceId,
+		@RequestBody RepositorySchemaMigrationRequest request,
+		@AuthenticationPrincipal GitLabUser user,
+		HttpServletRequest servletRequest
+	) {
+		accessService.requireOwner(workspaceId, user.id(), false);
+		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
+		WorkspaceState current = service.get(workspaceId);
+		OAuthAccountService.AccountProfile profile = accountService.requireProfile(user.id());
+		RepositorySchemaMigrationService.MigrationCommit commit = repositorySchemaMigrationService.migrate(
+			oauth.accessToken(),
+			current,
+			request == null ? null : request.expectedTreeFingerprint(),
+			profile.name()
+		);
+		service.updateRepositoryLayout(
+			workspaceId,
+			WorkspaceRepositoryLayout.MANAGED_BASE_PATH,
+			WorkspaceRepositoryLayout.CURRENT_SCHEMA_VERSION
+		);
+		WorkspaceSyncResponse sync = sessionSyncService.sync(oauth.accessToken(), workspaceId);
+		auditEventService.record(
+			workspaceId,
+			user,
+			"REPOSITORY_SCHEMA_MIGRATED",
+			"WORKSPACE",
+			workspaceId,
+			Map.of("commitId", commit.commitId(), "movedFiles", commit.movedFiles())
+		);
+		return new RepositorySchemaMigrationResult(
+			sync.workspace(), commit.commitId(), commit.movedFiles(), sync.failures(), sync.syncedAt()
+		);
 	}
 
 	@GetMapping("/{workspaceId}/sync-jobs")
@@ -437,6 +500,50 @@ public class WorkspaceController {
 		return workspace.submissions().get(session.folder() + "/" + memberId);
 	}
 
+	@GetMapping("/{workspaceId}/sessions/{date}/members/{memberId}/reviews")
+	public SubmissionReviewThread listSubmissionReviews(
+		@PathVariable String workspaceId,
+		@PathVariable String date,
+		@PathVariable String memberId,
+		HttpServletRequest servletRequest
+	) {
+		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
+		return submissionReviewService.list(oauth.accessToken(), service.get(workspaceId), date, memberId);
+	}
+
+	@PostMapping("/{workspaceId}/sessions/{date}/members/{memberId}/reviews")
+	@ResponseStatus(HttpStatus.CREATED)
+	public SubmissionReviewThread createSubmissionReview(
+		@PathVariable String workspaceId,
+		@PathVariable String date,
+		@PathVariable String memberId,
+		@RequestBody CreateSubmissionReviewRequest request,
+		@AuthenticationPrincipal GitLabUser user,
+		HttpServletRequest servletRequest
+	) {
+		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
+		WorkspaceState workspace = service.get(workspaceId);
+		StudyMember target = workspace.members().stream()
+			.filter(member -> member.id().equals(memberId))
+			.findFirst()
+			.orElseThrow(() -> new WorkspaceException("MEMBER_NOT_FOUND", "Workspace 멤버를 찾을 수 없습니다.", 404));
+		SubmissionReviewThread thread = submissionReviewService.add(
+			oauth.accessToken(), workspace, date, memberId, request == null ? null : request.body()
+		);
+		auditEventService.record(
+			workspaceId, user, "SUBMISSION_REVIEW_CREATED", "GITLAB_COMMIT", thread.commitId(),
+			Map.of("date", date, "memberId", memberId, "filePath", thread.filePath())
+		);
+		if (target.gitlabUserId() != user.id()) {
+			notificationService.create(
+				target.gitlabUserId(), workspaceId, "SUBMISSION_REVIEW",
+				"새 제출 리뷰가 등록되었습니다.", user.name() + "님이 " + date + " 제출에 댓글을 남겼습니다.",
+				"/today"
+			);
+		}
+		return thread;
+	}
+
 	@PutMapping("/{workspaceId}/sessions/{date}/items/{itemId}/submission")
 	public WorkspaceState upsertSubmission(
 		@PathVariable String workspaceId,
@@ -509,17 +616,29 @@ public class WorkspaceController {
 	@GetMapping("/{workspaceId}/repository/tree")
 	public List<Map<String, Object>> repositoryTree(@PathVariable String workspaceId) {
 		WorkspaceState workspace = service.get(workspaceId);
-		List<Map<String, Object>> tree = new ArrayList<>();
-		workspace.sessions().values().stream().sorted(Comparator.comparing(StudySession::folder)).forEach(session -> {
-			String folderPath = com.studyworkspace.workspace.service.WorkspaceRepositoryPath.join(workspace.repositoryBasePath(), session.folder());
-			tree.add(treeItem(folderPath, session.folder(), "tree"));
-			tree.add(treeItem(folderPath + "/session.yml", "session.yml", "blob"));
+		List<String> files = new ArrayList<>();
+		workspace.sessions().values().stream().sorted(Comparator.comparing(StudySession::date)).forEach(session -> {
+			files.add(WorkspaceRepositoryLayout.sessionPath(workspace, session));
 			workspace.members().forEach(member -> {
 				if (workspace.submissions().containsKey(session.folder() + "/" + member.id())) {
-					tree.add(treeItem(folderPath + "/" + member.fileName(), member.fileName(), "blob"));
+					files.add(WorkspaceRepositoryLayout.submissionPath(workspace, session, member.fileName()));
 				}
 			});
 		});
+		files.sort(String::compareTo);
+
+		Set<String> directories = new LinkedHashSet<>();
+		for (String file : files) {
+			String[] parts = file.split("/");
+			String current = "";
+			for (int index = 0; index < parts.length - 1; index++) {
+				current = current.isEmpty() ? parts[index] : current + "/" + parts[index];
+				directories.add(current);
+			}
+		}
+		List<Map<String, Object>> tree = new ArrayList<>();
+		directories.forEach(directory -> tree.add(treeItem(directory, fileName(directory), "tree")));
+		files.forEach(file -> tree.add(treeItem(file, fileName(file), "blob")));
 		return tree;
 	}
 
@@ -527,19 +646,25 @@ public class WorkspaceController {
 	public Map<String, Object> repositoryFile(@PathVariable String workspaceId, @RequestParam String path) {
 		WorkspaceState workspace = service.get(workspaceId);
 		String relativePath = com.studyworkspace.workspace.service.WorkspaceRepositoryPath.relative(workspace.repositoryBasePath(), path);
-		if (relativePath == null || relativePath.contains("..") || !relativePath.matches("[0-9]{6}/[\\p{L}\\p{N}._-]+")) {
+		if (relativePath == null || relativePath.contains("..")) {
 			throw new WorkspaceException("FILE_PATH_NOT_ALLOWED", "허용되지 않은 저장소 경로입니다.", 400);
 		}
-		String[] parts = relativePath.split("/", 2);
-		StudySession session = workspace.sessions().values().stream().filter(candidate -> candidate.folder().equals(parts[0])).findFirst()
+		int schemaVersion = WorkspaceRepositoryLayout.schemaVersion(workspace.repositorySchemaVersion());
+		var sessionLocation = WorkspaceRepositoryLayout.matchSession(relativePath, schemaVersion).orElse(null);
+		var submissionLocation = WorkspaceRepositoryLayout.matchSubmission(relativePath, schemaVersion).orElse(null);
+		if (sessionLocation == null && submissionLocation == null) {
+			throw new WorkspaceException("FILE_PATH_NOT_ALLOWED", "허용되지 않은 저장소 경로입니다.", 400);
+		}
+		String date = sessionLocation != null ? sessionLocation.date() : submissionLocation.date();
+		StudySession session = workspace.sessions().values().stream().filter(candidate -> candidate.date().equals(date)).findFirst()
 			.orElseThrow(() -> new WorkspaceException("FILE_NOT_FOUND", "파일을 찾을 수 없습니다.", 404));
 		String content;
 		String commitId;
-		if ("session.yml".equals(parts[1])) {
+		if (sessionLocation != null) {
 			content = sessionYamlSerializer.serialize(session);
 			commitId = session.lastCommitId();
 		} else {
-			StudyMember member = workspace.members().stream().filter(candidate -> candidate.fileName().equals(parts[1])).findFirst()
+			StudyMember member = workspace.members().stream().filter(candidate -> candidate.fileName().equals(submissionLocation.fileName())).findFirst()
 				.orElseThrow(() -> new WorkspaceException("FILE_NOT_FOUND", "파일을 찾을 수 없습니다.", 404));
 			MemberSubmissionFile submission = workspace.submissions().get(session.folder() + "/" + member.id());
 			if (submission == null) throw new WorkspaceException("FILE_NOT_FOUND", "파일을 찾을 수 없습니다.", 404);
@@ -547,9 +672,14 @@ public class WorkspaceController {
 			commitId = submission.lastCommitId();
 		}
 		return Map.of(
-			"fileName", parts[1], "filePath", path, "size", content.getBytes(StandardCharsets.UTF_8).length,
+			"fileName", fileName(path), "filePath", path, "size", content.getBytes(StandardCharsets.UTF_8).length,
 			"content", content, "ref", workspace.defaultBranch(), "blobId", commitId, "commitId", commitId, "lastCommitId", commitId
 		);
+	}
+
+	private static String fileName(String path) {
+		int slash = path.lastIndexOf('/');
+		return slash < 0 ? path : path.substring(slash + 1);
 	}
 
 	private static Map<String, Object> treeItem(String path, String name, String type) {

@@ -31,6 +31,10 @@ tags:
     description: 팀원 3 담당 멤버 제출
   - name: Analytics
     description: 팀원 3 담당 Dashboard, 기록, 점수
+  - name: Team Feed
+    description: Workspace 공지와 누적 팀 대화
+  - name: Team Documents
+    description: 학습 라이브러리의 공동 열람·작성자 전용 편집 문서
   - name: Connection Spike
     description: 공통 기반에서 이미 구현한 GitLab 읽기 진단 API
 
@@ -679,7 +683,7 @@ paths:
     post:
       tags: [Workspaces, Sessions]
       summary: GitLab 원본에서 일정 파일 동기화
-      description: YYMMDD/session.yml 파일을 안전하게 검증해 반영하며, 잘못된 파일은 이전 정상 상태를 보존하고 failures에 반환합니다.
+      description: Workspace 스키마에 따라 V1 YYMMDD/session.yml 또는 V2 .study-workspace/sessions/{연도}/{날짜}/session.yml 파일을 안전하게 검증해 반영하며, 잘못된 파일은 이전 정상 상태를 보존하고 failures에 반환합니다.
       operationId: syncWorkspaceSessions
       x-owner: member-2
       x-implementation-status: implemented
@@ -698,6 +702,50 @@ paths:
           $ref: "#/components/responses/WorkspaceAccessDenied"
         "429":
           description: GitLab 요청 제한
+
+  /workspaces/{workspaceId}/repository-schema/migration:
+    get:
+      tags: [Workspaces]
+      summary: V1 저장 구조의 V2 이동 가능 여부 미리보기
+      description: 저장소를 변경하지 않고 이동 대상, 충돌, tree fingerprint를 반환합니다. Owner만 실행할 수 있습니다.
+      operationId: previewRepositorySchemaMigration
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      responses:
+        "200":
+          description: 마이그레이션 미리보기
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepositorySchemaMigrationPreview"
+        "403":
+          $ref: "#/components/responses/WorkspaceAccessDenied"
+
+  /workspaces/{workspaceId}/repository-schema/migrate:
+    post:
+      tags: [Workspaces]
+      summary: V1 파일을 GitLab 단일 커밋으로 V2 경로에 이동
+      description: 미리보기 fingerprint가 유지된 경우에만 move actions와 config 갱신을 하나의 GitLab 커밋으로 수행합니다. Owner만 실행할 수 있습니다.
+      operationId: migrateRepositorySchema
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RepositorySchemaMigrationRequest"
+      responses:
+        "200":
+          description: 이동 커밋과 재동기화 결과
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RepositorySchemaMigrationResult"
+        "409":
+          description: 저장소 변경, 대상 경로 충돌 또는 지원하지 않는 파일
 
   /workspaces/{workspaceId}/sync-jobs:
     get:
@@ -1055,6 +1103,52 @@ paths:
         "404":
           $ref: "#/components/responses/NotFound"
 
+  /workspaces/{workspaceId}/sessions/{date}/members/{memberId}/reviews:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/SessionDate"
+      - name: memberId
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags: [Submissions]
+      summary: 멤버의 최신 제출 커밋 리뷰 댓글 조회
+      description: GitLab commit comments를 원본으로 사용하며 현재 MemberSubmissionFile의 lastCommitId에 연결된 댓글을 반환합니다.
+      operationId: listSubmissionReviews
+      x-implementation-status: implemented
+      responses:
+        "200":
+          description: 현재 제출 버전의 리뷰 댓글
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubmissionReviewThread"
+        "404":
+          $ref: "#/components/responses/NotFound"
+    post:
+      tags: [Submissions]
+      summary: 멤버의 최신 제출 커밋에 리뷰 댓글 등록
+      description: 로그인 사용자의 OAuth 권한으로 GitLab commit comment를 생성하고 제출자에게 인앱 알림을 보냅니다.
+      operationId: createSubmissionReview
+      x-implementation-status: implemented
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSubmissionReviewRequest"
+      responses:
+        "201":
+          description: 댓글 등록 후 갱신된 리뷰 목록
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SubmissionReviewThread"
+        "404":
+          $ref: "#/components/responses/NotFound"
+
   /workspaces/{workspaceId}/dashboard:
     get:
       tags: [Analytics]
@@ -1143,6 +1237,268 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ScoreboardResponse"
+
+  /workspaces/{workspaceId}/announcements:
+    get:
+      tags: [Team Feed]
+      summary: 현재 게시 중인 공지 목록
+      operationId: listWorkspaceAnnouncements
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      responses:
+        "200":
+          description: 고정 우선 공지 목록
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/WorkspaceAnnouncement" }
+    post:
+      tags: [Team Feed]
+      summary: Workspace 공지 게시
+      operationId: createWorkspaceAnnouncement
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AnnouncementInput" }
+      responses:
+        "201":
+          description: 생성된 공지
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkspaceAnnouncement" }
+
+  /workspaces/{workspaceId}/announcements/{announcementId}:
+    patch:
+      tags: [Team Feed]
+      summary: 공지 수정
+      operationId: updateWorkspaceAnnouncement
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - name: announcementId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/AnnouncementInput" }
+      responses:
+        "200":
+          description: 수정된 공지
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkspaceAnnouncement" }
+    delete:
+      tags: [Team Feed]
+      summary: 공지 보관
+      operationId: archiveWorkspaceAnnouncement
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - name: announcementId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: 공지 보관 완료 }
+
+  /workspaces/{workspaceId}/announcements/{announcementId}/read:
+    patch:
+      tags: [Team Feed]
+      summary: 공지 읽음 처리
+      operationId: markWorkspaceAnnouncementRead
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - name: announcementId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200": { description: 읽음 처리 시각 }
+
+  /workspaces/{workspaceId}/messages:
+    get:
+      tags: [Team Feed]
+      summary: Workspace 메시지 조회
+      operationId: listWorkspaceMessages
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - name: date
+          in: query
+          schema: { type: string, format: date }
+        - name: cursor
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: 최신순 커서 페이지
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkspaceMessagePage" }
+    post:
+      tags: [Team Feed]
+      summary: Workspace 메시지 작성
+      operationId: createWorkspaceMessage
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MessageInput" }
+      responses:
+        "201":
+          description: 생성된 메시지
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkspaceMessage" }
+
+  /workspaces/{workspaceId}/messages/{messageId}:
+    patch:
+      tags: [Team Feed]
+      summary: 작성자 또는 관리자의 메시지 수정
+      operationId: updateWorkspaceMessage
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - name: messageId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/MessageInput" }
+      responses:
+        "200":
+          description: 수정된 메시지
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkspaceMessage" }
+    delete:
+      tags: [Team Feed]
+      summary: 작성자 또는 관리자의 메시지 소프트 삭제
+      operationId: deleteWorkspaceMessage
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - name: messageId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "204": { description: 메시지 삭제 완료 }
+
+  /workspaces/{workspaceId}/documents:
+    get:
+      tags: [Team Documents]
+      summary: 팀 문서 검색과 커서 목록
+      operationId: listWorkspaceDocuments
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - name: query
+          in: query
+          schema: { type: string, maxLength: 100 }
+        - name: cursor
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        "200":
+          description: 수정일 최신순 문서 목록
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkspaceDocumentPage" }
+    post:
+      tags: [Team Documents]
+      summary: 팀 문서 생성
+      operationId: createWorkspaceDocument
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DocumentMutation" }
+      responses:
+        "201":
+          description: 생성된 팀 문서
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkspaceDocument" }
+
+  /workspaces/{workspaceId}/documents/{documentId}:
+    get:
+      tags: [Team Documents]
+      summary: 팀 문서 상세 열람
+      operationId: getWorkspaceDocument
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - name: documentId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Markdown 문서 상세
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkspaceDocument" }
+    patch:
+      tags: [Team Documents]
+      summary: 작성자의 팀 문서 수정
+      operationId: updateWorkspaceDocument
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - name: documentId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/DocumentMutation" }
+      responses:
+        "200":
+          description: 수정된 문서와 증가한 version
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/WorkspaceDocument" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    delete:
+      tags: [Team Documents]
+      summary: 작성자의 팀 문서 소프트 삭제
+      operationId: deleteWorkspaceDocument
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+        - name: documentId
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: expectedVersion
+          in: query
+          required: true
+          schema: { type: integer, minimum: 0 }
+      responses:
+        "204": { description: 문서 삭제 완료 }
+        "409": { $ref: "#/components/responses/Conflict" }
 
 components:
   securitySchemes:
@@ -1317,6 +1673,89 @@ components:
           type: string
           format: date-time
 
+    AnnouncementInput:
+      type: object
+      required: [title, body, pinned]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 120 }
+        body: { type: string, minLength: 1, maxLength: 10000 }
+        pinned: { type: boolean }
+        publishedAt: { type: [string, "null"], format: date-time }
+        expiresAt: { type: [string, "null"], format: date-time }
+
+    WorkspaceAnnouncement:
+      type: object
+      required: [id, authorName, title, body, pinned, publishedAt, updatedAt, canEdit]
+      properties:
+        id: { type: string, format: uuid }
+        authorName: { type: string }
+        title: { type: string }
+        body: { type: string }
+        pinned: { type: boolean }
+        publishedAt: { type: string, format: date-time }
+        expiresAt: { type: [string, "null"], format: date-time }
+        updatedAt: { type: string, format: date-time }
+        canEdit: { type: boolean }
+
+    MessageInput:
+      type: object
+      required: [body]
+      properties:
+        body: { type: string, minLength: 1, maxLength: 4000 }
+        contextDate: { type: [string, "null"], format: date }
+
+    WorkspaceMessage:
+      type: object
+      required: [id, authorName, contextDate, body, createdAt, updatedAt, edited, canEdit]
+      properties:
+        id: { type: string, format: uuid }
+        authorName: { type: string }
+        contextDate: { type: string, format: date }
+        body: { type: string }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        edited: { type: boolean }
+        canEdit: { type: boolean }
+
+    WorkspaceMessagePage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/WorkspaceMessage" }
+        nextCursor: { type: [string, "null"], format: date-time }
+
+    DocumentMutation:
+      type: object
+      required: [title, bodyMarkdown]
+      properties:
+        title: { type: string, minLength: 1, maxLength: 120 }
+        bodyMarkdown: { type: string, maxLength: 100000 }
+        expectedVersion: { type: [integer, "null"], minimum: 0 }
+
+    WorkspaceDocument:
+      type: object
+      required: [id, authorName, title, bodyMarkdown, version, createdAt, updatedAt, canEdit]
+      properties:
+        id: { type: string, format: uuid }
+        authorName: { type: string }
+        title: { type: string }
+        bodyMarkdown: { type: string }
+        version: { type: integer, minimum: 0 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+        canEdit: { type: boolean }
+
+    WorkspaceDocumentPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/WorkspaceDocument" }
+        nextCursor: { type: [string, "null"], format: date-time }
+
     PageMeta:
       type: object
       required: [page, perPage, total]
@@ -1406,7 +1845,7 @@ components:
 
     RepositoryImportAnalysis:
       type: object
-      required: [projectId, classification, repositoryBasePath, treeFingerprint, totalFiles, compatibleSessions, compatibleSubmissions, ignoredFiles, issues]
+      required: [projectId, classification, repositoryBasePath, repositorySchemaVersion, treeFingerprint, totalFiles, compatibleSessions, compatibleSubmissions, ignoredFiles, issues]
       properties:
         projectId: { type: integer, format: int64 }
         projectPath: { type: string }
@@ -1415,6 +1854,7 @@ components:
           type: string
           enum: [EMPTY, COMPATIBLE, LEGACY, PARTIALLY_COMPATIBLE, CONFLICTED]
         repositoryBasePath: { type: string }
+        repositorySchemaVersion: { type: integer, enum: [1, 2] }
         treeFingerprint: { type: string, minLength: 64, maxLength: 64 }
         totalFiles: { type: integer, minimum: 0 }
         compatibleSessions: { type: integer, minimum: 0 }
@@ -1450,43 +1890,6 @@ components:
         effectiveAccessLevel:
           type: integer
           description: GitLab access level, Developer는 30 이상
-    GitLabProjectPageResponse:
-      type: object
-      required: [data, meta]
-      properties:
-        data:
-          type: array
-          items:
-            $ref: "#/components/schemas/GitLabProject"
-        meta:
-          $ref: "#/components/schemas/PageMeta"
-    ConnectionCheckResponse:
-      type: object
-      required: [data]
-      properties:
-        data:
-          type: object
-          required: [readable, writable, alreadyConnected, checks]
-          properties:
-            readable:
-              type: boolean
-            writable:
-              type: boolean
-            alreadyConnected:
-              type: boolean
-            checks:
-              type: array
-              items:
-                type: object
-                required: [name, passed]
-                properties:
-                  name:
-                    type: string
-                  passed:
-                    type: boolean
-                  message:
-                    type: string
-
     WorkspaceStatus:
       type: string
       enum: [ACTIVE, SOFT_DELETED]
@@ -1551,7 +1954,7 @@ components:
     CreateWorkspaceRequest:
       type: object
       required:
-        [name, gitlabProjectId, repositoryBasePath, importMode, expectedTreeFingerprint]
+        [name, gitlabProjectId, repositoryBasePath, repositorySchemaVersion, importMode, expectedTreeFingerprint]
       properties:
         name:
           type: string
@@ -1563,6 +1966,9 @@ components:
         repositoryBasePath:
           type: string
           enum: ["", ".study-workspace"]
+        repositorySchemaVersion:
+          type: integer
+          enum: [1, 2]
         importMode:
           type: string
           enum: [EMPTY, COMPATIBLE, LEGACY, PARTIALLY_COMPATIBLE]
@@ -1570,6 +1976,60 @@ components:
           type: string
           minLength: 64
           maxLength: 64
+    RepositorySchemaMigrationRequest:
+      type: object
+      required: [expectedTreeFingerprint]
+      properties:
+        expectedTreeFingerprint:
+          type: string
+          minLength: 64
+          maxLength: 64
+    RepositorySchemaMigrationPreview:
+      type: object
+      required: [currentSchemaVersion, targetSchemaVersion, currentBasePath, targetBasePath, treeFingerprint, sessionFiles, submissionFiles, totalMoves, ready, moves, blockers]
+      properties:
+        currentSchemaVersion: { type: integer, enum: [1, 2] }
+        targetSchemaVersion: { type: integer, enum: [2] }
+        currentBasePath: { type: string }
+        targetBasePath: { type: string, enum: [".study-workspace"] }
+        treeFingerprint: { type: string }
+        sessionFiles: { type: integer, minimum: 0 }
+        submissionFiles: { type: integer, minimum: 0 }
+        totalMoves: { type: integer, minimum: 0 }
+        ready: { type: boolean }
+        moves:
+          type: array
+          items:
+            type: object
+            properties:
+              sourcePath: { type: string }
+              targetPath: { type: string }
+              type: { type: string, enum: [SESSION, SUBMISSION] }
+        blockers:
+          type: array
+          items:
+            type: object
+            properties:
+              path: { type: string }
+              code: { type: string }
+              message: { type: string }
+    RepositorySchemaMigrationResult:
+      type: object
+      required: [workspace, commitId, movedFiles, failures, syncedAt]
+      properties:
+        workspace:
+          $ref: "#/components/schemas/Workspace"
+        commitId: { type: string }
+        movedFiles: { type: integer, minimum: 0 }
+        failures:
+          type: array
+          items:
+            type: object
+            properties:
+              path: { type: string }
+              code: { type: string }
+              message: { type: string }
+        syncedAt: { type: string, format: date-time }
     UpdateWorkspaceRequest:
       type: object
       minProperties: 1
@@ -1889,9 +2349,6 @@ components:
               type: string
               format: uri
 
-    SubmissionStatus:
-      type: string
-      enum: [NOT_SUBMITTED, SUBMITTED, UPDATED]
     ItemSubmission:
       type: object
       required: [itemId, type, value, submittedAt, updatedAt]
@@ -1962,33 +2419,35 @@ components:
           type: string
           minLength: 1
           maxLength: 200
-    SubmissionMutationResponse:
+    CreateSubmissionReviewRequest:
       type: object
-      required: [data]
+      required: [body]
       properties:
-        data:
-          type: object
-          required: [itemId, status, filePath, commitId, dashboard]
-          properties:
-            itemId:
-              type: string
-            status:
-              $ref: "#/components/schemas/SubmissionStatus"
-            filePath:
-              type: string
-            commitId:
-              type: string
-            dashboard:
-              type: object
-              required: [myCompletedItems, myRequiredItems, teamSubmissionRate]
-              properties:
-                myCompletedItems:
-                  type: integer
-                myRequiredItems:
-                  type: integer
-                teamSubmissionRate:
-                  type: number
-
+        body:
+          type: string
+          minLength: 1
+          maxLength: 4000
+    SubmissionReviewThread:
+      type: object
+      required: [memberId, memberName, filePath, commitId, comments]
+      properties:
+        memberId: { type: string }
+        memberName: { type: string }
+        filePath: { type: string }
+        commitId: { type: string }
+        comments:
+          type: array
+          items:
+            type: object
+            required: [id, body, authorGitLabUserId, authorUsername, authorName, createdAt]
+            properties:
+              id: { type: string }
+              body: { type: string }
+              authorGitLabUserId: { type: integer, format: int64 }
+              authorUsername: { type: string }
+              authorName: { type: string }
+              authorAvatarUrl: { type: [string, "null"], format: uri }
+              createdAt: { type: string, format: date-time }
     MemberProgress:
       type: object
       required:

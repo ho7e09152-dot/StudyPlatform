@@ -15,6 +15,7 @@ import {
   listWorkspaces,
   saveWorkspaceSession,
   softDeleteWorkspace,
+  migrateRepositorySchema,
   syncWorkspace as syncWorkspaceApi,
   syncWorkspaceMembers,
   updateWorkspaceMemberRole,
@@ -26,7 +27,7 @@ import { WorkspaceOnboarding } from "@/components/onboarding/WorkspaceOnboarding
 import { initialWorkspaces } from "@/lib/data/seed";
 import { REFERENCE_DATE } from "@/lib/domain/constants";
 import { getSubmissionKey } from "@/lib/domain/metrics";
-import { getDateKeyInTimeZone, getWorkspaceRepositoryPath, toFolderName } from "@/lib/domain/format";
+import { getDateKeyInTimeZone, getSessionRepositoryPath, toFolderName } from "@/lib/domain/format";
 import type {
   SessionDraft,
   StudySession,
@@ -67,6 +68,7 @@ interface WorkspaceContextValue {
     key: keyof Workspace["settings"]["notifications"],
   ) => void;
   deleteCurrentWorkspace: () => Promise<void>;
+  migrateRepositoryLayout: (treeFingerprint: string) => Promise<void>;
   dismissToast: () => void;
 }
 
@@ -397,7 +399,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         replaceWorkspace(updated);
         notify(
           current ? "일정을 수정했습니다" : "새 일정을 만들었습니다",
-		  `${getWorkspaceRepositoryPath(updatedWorkspace.repositoryBasePath, `${nextSession.folder}/session.yml`)} · ${nextSession.lastCommitId.slice(0, 8)} · revision ${nextSession.revision}`,
+          `${getSessionRepositoryPath(updated, nextSession)} · ${nextSession.lastCommitId.slice(0, 8)} · revision ${nextSession.revision}`,
         );
         return;
       }
@@ -440,7 +442,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       await new Promise((resolve) => setTimeout(resolve, 350));
       notify(
         current ? "일정을 수정했습니다" : "새 일정을 만들었습니다",
-		`${getWorkspaceRepositoryPath(workspace.repositoryBasePath, `${nextSession.folder}/session.yml`)} · revision ${nextSession.revision}`,
+        `${getSessionRepositoryPath(workspace, nextSession)} · revision ${nextSession.revision}`,
       );
     },
     [backendConnected, currentUserId, notify, replaceWorkspace, updateCurrentWorkspace, workspace],
@@ -509,6 +511,17 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     notify("Workspace를 소프트 삭제했습니다", "GitLab 파일은 변경하지 않았습니다.");
   }, [backendConnected, notify, workspace.id, workspaces]);
 
+  const migrateRepositoryLayout = useCallback(async (treeFingerprint: string) => {
+    if (!backendConnected) throw new Error("실제 GitLab 연결에서만 저장 구조를 변경할 수 있습니다.");
+    const result = await migrateRepositorySchema(workspace.id, treeFingerprint);
+    replaceWorkspace(result.workspace);
+    setLastSyncFailures(result.failures);
+    notify(
+      "저장 구조를 V2로 변경했습니다",
+      `${result.movedFiles}개 파일 이동 · ${result.commitId.slice(0, 12)}`,
+    );
+  }, [backendConnected, notify, replaceWorkspace, workspace.id]);
+
   const value: WorkspaceContextValue = {
     workspaces,
     workspace,
@@ -529,6 +542,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     cancelSession,
     toggleNotification,
     deleteCurrentWorkspace,
+    migrateRepositoryLayout,
     dismissToast: () => setToast(null),
   };
 

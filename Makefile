@@ -1,4 +1,4 @@
-.PHONY: help infra-up infra-down infra-status frontend-install frontend-run backend-run api-lint test check
+.PHONY: help infra-up infra-down infra-status frontend-install frontend-run backend-run api-lint test e2e check
 
 help:
 	@echo "make infra-up        PostgreSQL과 Redis 시작"
@@ -7,6 +7,7 @@ help:
 	@echo "make backend-run     백엔드 개발 서버 시작"
 	@echo "make api-lint        OpenAPI 계약 검사"
 	@echo "make test            프론트와 백엔드 테스트"
+	@echo "make e2e             프론트 브라우저 E2E"
 	@echo "make check           push 전 전체 검사"
 
 infra-up:
@@ -34,6 +35,9 @@ api-lint:
 test:
 	cd frontend && npm run test
 	cd backend && ./gradlew test
+
+e2e:
+	cd frontend && npm run test:e2e
 
 check:
 	./scripts/check-all.sh

@@ -12,8 +12,6 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 import com.studyworkspace.workspace.domain.WorkspaceException;
 import org.springframework.stereotype.Component;
@@ -25,17 +23,16 @@ import org.yaml.snakeyaml.error.YAMLException;
 
 @Component
 public class SessionYamlParser {
-	private static final Pattern SESSION_PATH = Pattern.compile("^(\\d{6})/session\\.yml$");
 	private static final Set<String> SESSION_TYPES = Set.of("algorithm", "english", "cs", "free");
 	private static final Set<String> SESSION_STATUSES = Set.of("active", "cancelled");
 	private static final Set<String> ITEM_STATUSES = Set.of("active", "cancelled", "replaced");
 	private static final Set<String> SUBMISSION_TYPES = Set.of("link", "text", "code", "mixed");
 
 	public StudySession parse(String path, String content, String lastCommitId) {
-		Matcher matcher = SESSION_PATH.matcher(path == null ? "" : path);
-		if (!matcher.matches()) {
-			throw invalid("일정 파일 경로는 YYMMDD/session.yml 형식이어야 합니다.");
-		}
+		WorkspaceRepositoryLayout.SessionLocation location = WorkspaceRepositoryLayout
+			.matchSession(path, WorkspaceRepositoryLayout.LEGACY_SCHEMA_VERSION)
+			.or(() -> WorkspaceRepositoryLayout.matchSession(path, WorkspaceRepositoryLayout.CURRENT_SCHEMA_VERSION))
+			.orElseThrow(() -> invalid("일정 파일 경로 형식이 올바르지 않습니다."));
 		if (!StringUtils.hasText(content)) {
 			throw invalid("session.yml 파일이 비어 있습니다.");
 		}
@@ -46,8 +43,8 @@ public class SessionYamlParser {
 		int revision = integer(root, "revision", true);
 		if (revision < 1) throw invalid("revision은 1 이상이어야 합니다.");
 
-		String folder = matcher.group(1);
-		String expectedDate = "20" + folder.substring(0, 2) + "-" + folder.substring(2, 4) + "-" + folder.substring(4, 6);
+		String folder = location.folder();
+		String expectedDate = location.date();
 		String date = text(root, "date", true);
 		try {
 			if (!LocalDate.parse(date).equals(LocalDate.parse(expectedDate))) {

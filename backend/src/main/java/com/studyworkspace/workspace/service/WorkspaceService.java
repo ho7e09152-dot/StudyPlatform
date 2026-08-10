@@ -136,7 +136,8 @@ public class WorkspaceService {
 		WorkspaceState workspace = new WorkspaceState(
 			id, request.name().trim(), request.gitlabProjectId(), request.gitlabProjectPath().trim(),
 			StringUtils.hasText(request.defaultBranch()) ? request.defaultBranch().trim() : "main",
-			WorkspaceRepositoryPath.normalizeBasePath(request.repositoryBasePath()), 1,
+			WorkspaceRepositoryPath.normalizeBasePath(request.repositoryBasePath()),
+			WorkspaceRepositoryLayout.schemaVersion(request.repositorySchemaVersion()),
 			StringUtils.hasText(request.importMode()) ? request.importMode() : "EMPTY", "ACTIVE", now(),
 			List.of(owner), Map.of(), Map.of(),
 			new WorkspaceSettings(
@@ -168,6 +169,24 @@ public class WorkspaceService {
 			current.id(), name, current.gitlabProjectId(), current.gitlabProjectPath(), current.defaultBranch(),
 			current.repositoryBasePath(), current.repositorySchemaVersion(), current.importMode(), current.status(),
 			current.lastSyncedAt(), current.members(), current.sessions(), current.submissions(), settings
+		);
+		store(updated);
+		persist();
+		return updated;
+	}
+
+	public synchronized WorkspaceState updateRepositoryLayout(
+		String workspaceId,
+		String repositoryBasePath,
+		int repositorySchemaVersion
+	) {
+		WorkspaceState current = get(workspaceId);
+		WorkspaceState updated = new WorkspaceState(
+			current.id(), current.name(), current.gitlabProjectId(), current.gitlabProjectPath(), current.defaultBranch(),
+			WorkspaceRepositoryPath.normalizeBasePath(repositoryBasePath),
+			WorkspaceRepositoryLayout.schemaVersion(repositorySchemaVersion),
+			current.importMode(), current.status(), current.lastSyncedAt(), current.members(), current.sessions(),
+			current.submissions(), current.settings()
 		);
 		store(updated);
 		persist();

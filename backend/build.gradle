@@ -46,6 +46,33 @@ tasks.named('test') {
 	useJUnitPlatform()
 }
 
+tasks.named('bootRun') {
+	def envFile = file('.env')
+	if (envFile.exists()) {
+		envFile.eachLine('UTF-8') { rawLine ->
+			def line = rawLine.trim()
+			if (!line || line.startsWith('#') || !line.contains('=')) {
+				return
+			}
+
+			def separator = line.indexOf('=')
+			def key = line.substring(0, separator).trim()
+			def value = line.substring(separator + 1).trim()
+			if (!(key ==~ /[A-Za-z_][A-Za-z0-9_]*/)) {
+				return
+			}
+			if (value.length() >= 2 && ((value.startsWith('"') && value.endsWith('"'))
+				|| (value.startsWith("'") && value.endsWith("'")))) {
+				value = value.substring(1, value.length() - 1)
+			}
+
+			if (System.getenv(key) == null) {
+				environment key, value
+			}
+		}
+	}
+}
+
 tasks.withType(JavaCompile).configureEach {
 	options.release = 21
 }

@@ -38,7 +38,7 @@ Study Workspace는 이 과정을 `일정 생성 → 항목별 제출 → GitLab 
 
 ### GitLab 저장소가 원본입니다
 
-`session.yml`, 멤버별 Markdown, 제출 코드와 커밋 이력은 GitLab에 저장합니다. 애플리케이션 DB에는 사용자, OAuth 토큰, Workspace 연결과 같은 서비스 운영 데이터만 저장합니다.
+`session.yml`, 멤버별 Markdown, 제출 코드와 커밋 이력은 GitLab에 저장합니다. 애플리케이션 DB에는 사용자, 암호화 OAuth credential, Workspace 연결과 함께 빠른 화면 조회와 장애 복구를 위한 일정·제출 동기화 캐시를 저장합니다. GitLab 원본과 충돌하면 GitLab 데이터를 기준으로 다시 동기화합니다.
 
 ### Workspace 하나는 GitLab 프로젝트 하나와 연결됩니다
 
@@ -60,20 +60,21 @@ Study Workspace는 이 과정을 `일정 생성 → 항목별 제출 → GitLab 
 |---|---|
 | 랜딩 | 서비스 소개, GitLab 기반 워크플로, 자동 전환 제품 미리보기, 스크롤 애니메이션 |
 | 로그인 | GitLab OAuth 진입, 최초 프로필·표시 이름·GitLab 기록 이름·약관 동의, 운영 모드와 명시적 데모 모드 분리 |
-| 온보딩 | OAuth 사용자의 프로젝트 검색·접근 확인, 기존 저장소 읽기 전용 분석, 충돌 방지, 전용 `.study-workspace` 경로와 첫 Workspace 생성 |
-| 오늘 | 오늘의 학습 항목, 팀 진행률, 개인 진행률, 멤버 현황, 저장소 미리보기 |
-| 일정 | 일정 검색·필터, 여러 학습 항목, 1차·2차 마감, 실제 GitLab `session.yml` 생성·수정·취소·재동기화, revision·commit SHA 표시 |
+| 온보딩 | OAuth 사용자의 프로젝트 검색·접근 확인, 기존 저장소 읽기 전용 분석, 충돌 방지, 전용 `.study-workspace/sessions/{연도}/{날짜}` 경로와 첫 Workspace 생성 |
+| 오늘 | 내 학습, 팀 제출, 추천 리뷰, 미제출 열람 경고, DB 기반 공지와 오늘/전체 팀 대화 피드 |
+| 일정 | 일정 검색·필터, 여러 학습 항목, 1차·2차 마감, 실제 GitLab `session.yml` 생성·수정·취소·재동기화, 상세 화면의 팀 제출 리뷰 |
 | 제출 | 항목별 링크·텍스트·코드 제출, 커밋 메시지, OAuth 기반 GitLab 멤버 Markdown 생성·수정과 commit SHA 표시 |
-| 기록 | 일별·월별 전환, 날짜·월 이동, 달력, 주간 제출률, 멤버별 평균 |
+| 기록 | 일별·월별 전환, 날짜·월 이동, 달력, 주간 제출률, 멤버별 평균과 과거 제출 리뷰 진입 |
 | 점수 | 1차 제출 10P, 2차 제출 6P, 개인 점수 카드, 카드 클릭형 멤버 순위 모달 |
-| 저장소 | 날짜 폴더 탐색, 파일 검색, 폴더 접기, YAML 원문·GFM Markdown 미리보기, 커밋 정보 |
-| 설정 | 프로젝트 연결 정보, 멤버와 GitLab 권한, 알림, 보안 원칙 |
+| 학습 라이브러리 | 세션·항목·제출 통합 검색, 문서형 세션 아카이브, 작성자 전용 편집 권한을 가진 Markdown 팀 문서 |
+| 설정 | 프로젝트 연결 정보, 멤버와 GitLab 권한, 알림, 보안 원칙, V1 저장 구조의 충돌 감지·단일 커밋 V2 마이그레이션 |
 | 반응형 UI | 데스크톱·태블릿·모바일 레이아웃과 모바일 전체 화면 모달 |
 | GitLab 연결 스파이크 | 사용자·프로젝트·tree·파일 조회, 임시 브랜치 파일 생성·수정·삭제와 정리 검증 |
-| Workspace API | Workspace·멤버·일정·제출·Dashboard·기록·점수·저장소 REST API, revision 충돌과 입력 검증 |
-| DB 영속화 | 사용자·암호화 OAuth credential·Workspace 상태/cache·sync job·알림·감사 로그를 Flyway/JPA DB에 저장하고 기존 운영 JSON을 최초 1회 이관 |
+| Workspace API | Workspace·멤버·일정·제출·Dashboard·기록·점수·학습 라이브러리·팀 피드 REST API, revision 충돌과 입력 검증 |
+| DB 영속화 | 사용자·암호화 OAuth credential·Workspace 상태/cache·sync job·알림·감사 로그·공지·메시지·팀 문서를 Flyway/JPA DB에 저장하고 기존 운영 JSON을 최초 1회 이관 |
 | 인증·데이터 경계 | 비로그인 API 차단, Workspace 활성 멤버 검증, CSRF, 운영 모드 seed fallback 금지 |
 | OAuth 영속화 | JPA/Flyway 사용자 upsert, AES-GCM credential 암호화, Spring Session JDBC |
+| 제출 리뷰 | 멤버별 최신 제출 commit 댓글 조회·작성, OAuth 사용자 명의 GitLab 반영, 제출자 인앱 알림과 감사 로그 |
 
 ## 화면 소개
 
@@ -93,7 +94,7 @@ Study Workspace는 이 과정을 `일정 생성 → 항목별 제출 → GitLab 
 
 ### 오늘
 
-선택 날짜의 학습 항목과 일정 변경 사항을 확인하고, 팀·개인 진행률을 비교합니다. 항목별 제출·수정 버튼에서 링크, 텍스트 또는 코드와 커밋 메시지를 작성할 수 있으며 저장소와 멤버 진행 현황도 한 화면에서 확인할 수 있습니다.
+오늘 내 학습을 진행하면서 팀원의 최신 제출과 추천 리뷰를 함께 확인합니다. 미제출 상태에서 다른 사람의 답을 열면 선택 가능한 경고를 표시하며, 하단 팀 공간에서 고정 공지와 오늘/전체 누적 대화를 작성·수정·확인할 수 있습니다.
 
 ![오늘 페이지 — 학습 항목과 팀 진행률](docs/images/screenshots/today.png)
 
@@ -109,9 +110,9 @@ Study Workspace는 이 과정을 `일정 생성 → 항목별 제출 → GitLab 
 
 ![기록 페이지 — 제출 통계와 현재 점수](docs/images/screenshots/records.png)
 
-### 저장소
+### 학습 라이브러리
 
-연결된 GitLab 프로젝트의 폴더와 파일을 검색·탐색하는 읽기 전용 화면입니다. Markdown 파일은 GFM 표와 문서 구조가 적용된 미리보기 또는 원문으로 전환할 수 있고, 다른 텍스트·YAML 파일도 안전하게 확인할 수 있습니다.
+GitLab 파일 트리를 전면에 노출하지 않고, 팀이 쌓아온 세션과 제출을 검색 가능한 학습 자료로 재구성합니다. 세션 상세에서 모든 멤버의 제출과 GitLab 리뷰를 확인하고, 팀 문서 탭에서는 Markdown 기반 학습 문서를 작성합니다. 문서는 모든 활성 멤버가 읽을 수 있지만 만든 사람만 수정·삭제할 수 있습니다.
 
 ![저장소 페이지 — GitLab Markdown 미리보기](docs/images/screenshots/repository.png)
 
@@ -155,7 +156,8 @@ AI 도구는 디자인과 구현을 구체화하는 협업 도구로 사용했�
 - Spring Data JPA
 - WebClient
 - PostgreSQL
-- Redis 또는 Spring Session
+- Spring Session JDBC
+- Redis (향후 다중 인스턴스 shared rate limit/세션 전환 시 선택)
 - GitLab REST API
 - JUnit, Testcontainers, WireMock
 
@@ -277,7 +279,7 @@ http://localhost:3000/today   # 데모 Workspace
 ```bash
 cd backend
 cp .env.example .env
-# .env에 GitLab 주소, read_api 토큰, 프로젝트 ID 입력
+# .env에 GitLab OAuth Application, DB와 암호화 키 입력
 set -a
 source .env
 set +a
@@ -293,16 +295,23 @@ cd frontend
 npm run build
 npm run lint
 npm test
+npx playwright install chromium
+npm run test:e2e
 ```
+
+브라우저 E2E는 데모 전용 서버를 자동으로 실행해 오늘의 제출·팀 피드·활동함, 팀 문서 권한, 일정 검색과 설정 화면을 검증합니다. 실제 GitLab OAuth와 두 사용자 권한 검증은 [스테이징 E2E 체크리스트](docs/staging-e2e-checklist.md)를 사용합니다.
 
 ## 관련 문서
 
+- [문서 전체 안내](docs/README.md)
+- [현재 시스템 상태와 데이터 저장 위치](docs/current-system-status.md)
 - [3인 팀 백엔드 구현 로드맵](docs/team-implementation-roadmap.md)
 - [백엔드·API·GitLab 전체 설계서](STUDY_WORKSPACE_BACKEND_API_GITLAB.md)
 - [OpenAPI 실행 계약](docs/openapi.yaml)
 - [API 공통 오류 계약](docs/api-error-catalog.md)
 - [GitLab CI 사용 가이드](docs/ci-guide.md)
 - [로컬 개발환경 가이드](docs/development-environment.md)
+- [실제 OAuth 스테이징 E2E 체크리스트](docs/staging-e2e-checklist.md)
 - [협업 및 Merge Request 가이드](CONTRIBUTING.md)
 - [Spring 백엔드 디렉터리 구조](backend/README.md)
 - [프론트엔드 실행 및 구조](frontend/README.md)

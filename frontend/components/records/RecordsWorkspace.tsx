@@ -12,11 +12,13 @@ import {
   Medal,
   Trophy,
   Users,
+  MessageCircle,
 } from "lucide-react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { Modal } from "@/components/ui/Modal";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { MemberDetailDialog } from "@/components/today/MemberDetailDialog";
 import {
   SESSION_TYPE_META,
   SUBMISSION_TYPE_LABEL,
@@ -28,7 +30,7 @@ import {
   getScoreboard,
   SCORE_RULES,
 } from "@/lib/domain/metrics";
-import type { StudySession, Workspace } from "@/lib/domain/types";
+import type { StudyMember, StudySession, Workspace } from "@/lib/domain/types";
 
 const weekdays = ["일", "월", "화", "수", "목", "금", "토"];
 type RecordsView = "day" | "month";
@@ -84,10 +86,12 @@ function RecordDetail({
   workspace,
   session,
   selectedDate,
+  onOpenMember,
 }: {
   workspace: Workspace;
   session?: StudySession;
   selectedDate: string;
+  onOpenMember: (session: StudySession, member: StudyMember) => void;
 }) {
   if (!session) {
     return (
@@ -136,7 +140,12 @@ function RecordDetail({
       </div>
       <div className="record-detail__members">
         {getMemberProgress(workspace, session).map((progress) => (
-          <div key={progress.member.id}>
+          <button
+            type="button"
+            key={progress.member.id}
+            disabled={!workspace.submissions[`${session.folder}/${progress.member.id}`]}
+            onClick={() => onOpenMember(session, progress.member)}
+          >
             <Avatar member={progress.member} size="small" />
             <span>
               <strong>{progress.member.displayName}</strong>
@@ -145,7 +154,8 @@ function RecordDetail({
               </small>
             </span>
             <strong>{progress.completionRate}%</strong>
-          </div>
+            <MessageCircle size={14} aria-label="리뷰 보기" />
+          </button>
         ))}
       </div>
     </section>
@@ -214,6 +224,7 @@ export function RecordsWorkspace() {
   const [view, setView] = useState<RecordsView>("month");
   const [selectedDate, setSelectedDate] = useState(initialDate);
   const [selectedMonth, setSelectedMonth] = useState(initialDate.slice(0, 7));
+  const [reviewTarget, setReviewTarget] = useState<{ session: StudySession; member: StudyMember } | null>(null);
   const [isScoreModalOpen, setIsScoreModalOpen] = useState(false);
 
   const selected =
@@ -635,8 +646,18 @@ export function RecordsWorkspace() {
           workspace={workspace}
           session={selected}
           selectedDate={selectedDate}
+          onOpenMember={(session, member) => setReviewTarget({ session, member })}
         />
       </div>
+      {reviewTarget ? (
+        <MemberDetailDialog
+          workspace={workspace}
+          session={reviewTarget.session}
+          member={reviewTarget.member}
+          currentUserId={currentUserId}
+          onClose={() => setReviewTarget(null)}
+        />
+      ) : null}
     </div>
   );
 }

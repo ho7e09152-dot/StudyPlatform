@@ -1,439 +1,180 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import {
-  Check,
-  ChevronDown,
-  ChevronRight,
-  Clipboard,
-  Code2,
-  CodeXml,
-  Eye,
+  ArrowLeft,
+  ArrowRight,
+  BookOpen,
+  CalendarDays,
   ExternalLink,
-  FileCode2,
   FileText,
-  Folder,
-  GitBranch,
-  RefreshCw,
   Search,
+  Users,
 } from "lucide-react";
-import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { useGitLabConnection } from "@/lib/api/hooks/useGitLabConnection";
-import { getGitLabFile } from "@/lib/api/services/gitlabApi";
-import type { GitLabFileContent } from "@/lib/api/types/gitlab";
-import { getSubmissionKey } from "@/lib/domain/metrics";
-import { getRepositoryFiles } from "@/lib/repository/serializers";
-import { MarkdownPreview } from "./MarkdownPreview";
-
-const ROOT_GROUP = "__root__";
-
-interface RepositoryFileView {
-  path: string;
-  kind: "yaml" | "markdown" | "text";
-  content?: string;
-}
-
-function getFileKind(path: string): RepositoryFileView["kind"] {
-  if (/\.ya?ml$/i.test(path)) return "yaml";
-  if (/\.md$/i.test(path)) return "markdown";
-  return "text";
-}
-
-function getFolderGroup(path: string) {
-  return path.includes("/") ? path.split("/")[0] : ROOT_GROUP;
-}
-
-function getFileName(path: string) {
-  return path.split("/").at(-1) ?? path;
-}
+import { useWorkspace } from "@/components/providers/WorkspaceProvider";
+import { Avatar } from "@/components/ui/Avatar";
+import { Modal } from "@/components/ui/Modal";
+import { ProgressBar } from "@/components/ui/ProgressBar";
+import { MemberDetailDialog } from "@/components/today/MemberDetailDialog";
+import { SESSION_TYPE_META } from "@/lib/domain/constants";
+import { formatDate, formatDateTime } from "@/lib/domain/format";
+import { getActiveRequiredItems, getDashboardMetrics, getMemberProgress, getSubmissionKey } from "@/lib/domain/metrics";
+import type { StudyMember, StudySession } from "@/lib/domain/types";
+import { TeamDocumentLibrary } from "./TeamDocumentLibrary";
 
 export function RepositoryWorkspace() {
-  const { workspace } = useWorkspace();
+  const { workspace, currentUserId } = useWorkspace();
   const connection = useGitLabConnection();
-  const mockFiles = useMemo(() => getRepositoryFiles(workspace), [workspace]);
-  const isLive =
-    connection.state === "ready" &&
-    connection.data?.status === "CONNECTED" &&
-    Boolean(connection.data.project);
-  const liveFiles = useMemo<RepositoryFileView[]>(
-    () =>
-      connection.data?.repositoryTree
-        .filter((item) => item.type === "blob")
-        .map((item) => ({
-          path: item.path,
-          kind: getFileKind(item.path),
-        })) ?? [],
-    [connection.data],
-  );
-  const files: RepositoryFileView[] = isLive ? liveFiles : mockFiles;
-  const [selectedPath, setSelectedPath] = useState(
-    mockFiles.find((file) => file.path.endsWith("session.yml"))?.path ??
-      mockFiles[0]?.path,
-  );
-  const [fileRequest, setFileRequest] = useState<{
-    path: string;
-    state: "ready" | "error";
-    file: GitLabFileContent | null;
-    error: string | null;
-  } | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [markdownView, setMarkdownView] = useState<"preview" | "source">(
-    "preview",
-  );
-  const [searchQuery, setSearchQuery] = useState("");
-  const [collapsedFolders, setCollapsedFolders] = useState<Set<string>>(
-    () => new Set(),
-  );
-  const selected = files.find((file) => file.path === selectedPath) ?? files[0];
+  const searchParams = useSearchParams();
+  const initialDocumentId = searchParams.get("document") ?? undefined;
+  const [libraryTab, setLibraryTab] = useState<"sessions" | "documents">(initialDocumentId ? "documents" : "sessions");
+  const [query, setQuery] = useState("");
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!isLive || !selected?.path) return;
+  const sessions = useMemo(() => Object.values(workspace.sessions)
+    .filter((session) => session.status === "active")
+    .sort((a, b) => b.date.localeCompare(a.date)), [workspace.sessions]);
 
-    const controller = new AbortController();
-    const requestedPath = selected.path;
-
-    void getGitLabFile(workspace.gitlabProjectId, requestedPath, controller.signal)
-      .then((file) => {
-        setFileRequest({
-          path: requestedPath,
-          state: "ready",
-          file,
-          error: null,
-        });
-      })
-      .catch((requestError) => {
-        if (controller.signal.aborted) return;
-        setFileRequest({
-          path: requestedPath,
-          state: "error",
-          file: null,
-          error:
-            requestError instanceof Error
-              ? requestError.message
-              : "GitLab 파일을 불러오지 못했습니다.",
-        });
-      });
-
-    return () => controller.abort();
-  }, [isLive, selected?.path, workspace.gitlabProjectId]);
-
-  const activeFileRequest =
-    isLive && selected && fileRequest?.path === selected.path
-      ? fileRequest
-      : null;
-  const fileState = !isLive
-    ? "idle"
-    : activeFileRequest?.state ?? "loading";
-  const liveFile = activeFileRequest?.file ?? null;
-  const fileError = activeFileRequest?.error ?? null;
-
-  const filteredFiles = files.filter((file) =>
-    file.path
-      .toLocaleLowerCase("ko")
-      .includes(searchQuery.trim().toLocaleLowerCase("ko")),
-  );
-  const folders = Array.from(
-    new Set(filteredFiles.map((file) => getFolderGroup(file.path))),
-  );
-  const selectedFolder = selected ? getFolderGroup(selected.path) : undefined;
-  const selectedDate =
-    selectedFolder && selectedFolder !== ROOT_GROUP
-      ? selectedFolder.replace(/^(\d{2})(\d{2})(\d{2})$/, "20$1-$2-$3")
-      : undefined;
-  const selectedSession = selectedDate
-    ? workspace.sessions[selectedDate]
-    : undefined;
-  const selectedFileName = selected ? getFileName(selected.path) : undefined;
-  const selectedMember = workspace.members.find(
-    (member) => member.fileName === selectedFileName,
-  );
-  const selectedSubmission =
-    !isLive &&
-    selectedFolder &&
-    selectedFolder !== ROOT_GROUP &&
-    selectedMember
-      ? workspace.submissions[
-          getSubmissionKey(selectedFolder, selectedMember.id)
-        ]
-      : undefined;
-  const selectedCommitId = isLive
-    ? liveFile?.lastCommitId
-    : selectedFileName === "session.yml"
-      ? selectedSession?.lastCommitId
-      : selectedSubmission?.lastCommitId;
-  const selectedCommitMessage = isLive
-    ? "GitLab에서 조회한 최신 파일"
-    : selectedFileName === "session.yml"
-      ? selectedSession
-        ? `study: ${selectedSession.revision > 1 ? "update" : "create"} session ${selectedSession.folder}`
-        : undefined
-      : selectedSubmission?.lastCommitMessage;
-  const selectedContent = isLive ? liveFile?.content : selected?.content;
-  const projectPath =
-    connection.data?.project?.pathWithNamespace ?? workspace.gitlabProjectPath;
-  const defaultBranch =
-    connection.data?.project?.defaultBranch ?? workspace.defaultBranch;
-  const statusLabel =
-    connection.state === "loading"
-      ? "연결 확인 중"
-      : connection.state === "error"
-        ? "백엔드 연결 실패"
-        : isLive
-          ? "GitLab 연결됨"
-          : "환경변수 필요 · 데모 데이터";
-  const statusClass =
-    connection.state === "error"
-      ? "danger"
-      : isLive
-        ? "success"
-        : connection.state === "loading"
-          ? "neutral"
-          : "warning";
-
-  function filesInFolder(folder: string) {
-    return filteredFiles.filter(
-      (file) => getFolderGroup(file.path) === folder,
-    );
-  }
-
-  function handleSearch(value: string) {
-    setSearchQuery(value);
-    const normalizedQuery = value.trim().toLocaleLowerCase("ko");
-    if (!normalizedQuery) return;
-
-    const selectedMatches = selected?.path
-      ?.toLocaleLowerCase("ko")
-      .includes(normalizedQuery);
-    if (!selectedMatches) {
-      const firstMatch = files.find((file) =>
-        file.path.toLocaleLowerCase("ko").includes(normalizedQuery),
+  const filteredSessions = useMemo(() => {
+    const normalized = query.trim().toLocaleLowerCase("ko");
+    if (!normalized) return sessions;
+    return sessions.filter((session) => {
+      const submissionText = workspace.members.flatMap((member) =>
+        workspace.submissions[getSubmissionKey(session.folder, member.id)]?.submissions.map((entry) => entry.value) ?? [],
       );
-      if (firstMatch) handleSelectFile(firstMatch.path);
-    }
-    setCollapsedFolders(new Set());
-  }
-
-  function handleSelectFile(path: string) {
-    setSelectedPath(path);
-    setMarkdownView("preview");
-  }
-
-  function toggleFolder(folder: string) {
-    setCollapsedFolders((current) => {
-      const next = new Set(current);
-      if (next.has(folder)) next.delete(folder);
-      else next.add(folder);
-      return next;
+      return [session.title, session.description, ...session.items.map((item) => item.title), ...submissionText]
+        .join(" ")
+        .toLocaleLowerCase("ko")
+        .includes(normalized);
     });
-  }
+  }, [query, sessions, workspace]);
 
-  async function copy() {
-    if (!selectedContent) return;
-    await navigator.clipboard?.writeText(selectedContent);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+  const selected = selectedDate ? workspace.sessions[selectedDate] : undefined;
+
+  if (selected) {
+    return <LibrarySessionDocument session={selected} currentUserId={currentUserId} onBack={() => setSelectedDate(null)} projectUrl={connection.data?.project?.webUrl ?? undefined} />;
   }
 
   return (
-    <div className="page-stack repository-page">
+    <div className="page-stack library-page">
       <header className="page-heading">
         <div>
-          <p className="eyebrow">GITLAB SOURCE OF TRUTH</p>
-          <h1>저장소</h1>
-          <p>연결된 프로젝트의 학습 파일을 안전한 읽기 전용 화면으로 확인합니다.</p>
+          <p className="eyebrow">LEARNING LIBRARY</p>
+          <h1>학습 라이브러리</h1>
+          <p>GitLab 파일 경로 대신, 팀이 쌓아온 일정과 제출을 읽기 좋은 학습 자료로 탐색합니다.</p>
         </div>
-        {isLive && connection.data?.project?.webUrl ? (
-          <a
-            className="button button--secondary"
-            href={connection.data.project.webUrl}
-            target="_blank"
-            rel="noreferrer"
-          >
-            GitLab에서 열기 <ExternalLink size={16} />
-          </a>
-        ) : (
-          <button
-            type="button"
-            className="button button--secondary"
-            onClick={connection.reload}
-          >
-            연결 다시 확인 <RefreshCw size={16} />
-          </button>
-        )}
+        {libraryTab === "sessions" && connection.data?.project?.webUrl ? <a className="button button--secondary" href={connection.data.project.webUrl} target="_blank" rel="noreferrer">GitLab 원본 <ExternalLink size={16} /></a> : null}
       </header>
 
-      <div className="repo-status-bar">
-        <span><Folder size={16} /> {projectPath}</span>
-        <span><GitBranch size={16} /> {defaultBranch}</span>
-        <span className={`status-badge ${statusClass}`}>{statusLabel}</span>
-      </div>
-      {connection.state === "error" ? (
-        <p className="repository-source-note">
-          {connection.error} 저장소를 불러오지 못했습니다.
-        </p>
-      ) : !isLive && connection.data?.message ? (
-        <p className="repository-source-note">{connection.data.message}</p>
-      ) : null}
+      <nav className="library-tabs" aria-label="학습 라이브러리 분류">
+        <button type="button" aria-current={libraryTab === "sessions" ? "page" : undefined} onClick={() => { setLibraryTab("sessions"); setQuery(""); }}><BookOpen size={17} /> 세션 아카이브</button>
+        <button type="button" aria-current={libraryTab === "documents" ? "page" : undefined} onClick={() => { setLibraryTab("documents"); setQuery(""); }}><FileText size={17} /> 팀 문서</button>
+      </nav>
 
-      <div className="repository-layout">
-        <aside className="surface repository-tree" aria-label="저장소 파일">
-          <div className="repository-tree__title">
-            <strong>{isLive ? "GitLab Files" : "Demo Files"}</strong>
-            <small>{files.length}개 파일</small>
-          </div>
-          <label className="repository-search">
-            <Search size={15} aria-hidden="true" />
-            <input
-              type="search"
-              value={searchQuery}
-              onChange={(event) => handleSearch(event.target.value)}
-              placeholder="파일 경로 검색"
-              aria-label="저장소 파일 검색"
-            />
-          </label>
-          {folders.map((folder) => (
-            <section key={folder}>
-              <button
-                type="button"
-                className="folder-row"
-                aria-expanded={!collapsedFolders.has(folder)}
-                onClick={() => toggleFolder(folder)}
-              >
-                <Folder size={16} />
-                <span>{folder === ROOT_GROUP ? "ROOT" : `${folder}/`}</span>
-                <small>{filesInFolder(folder).length}</small>
-                {collapsedFolders.has(folder) ? (
-                  <ChevronRight size={15} />
-                ) : (
-                  <ChevronDown size={15} />
-                )}
-              </button>
-              {!collapsedFolders.has(folder)
-                ? filesInFolder(folder).map((file) => {
-                    const Icon =
-                      file.kind === "yaml" ? FileCode2 : FileText;
-                    return (
-                      <button
-                        key={file.path}
-                        type="button"
-                        className={
-                          selected?.path === file.path ? "active" : undefined
-                        }
-                        title={file.path}
-                        onClick={() => handleSelectFile(file.path)}
-                      >
-                        <Icon size={15} /> {getFileName(file.path)}
-                      </button>
-                    );
-                  })
-                : null}
-            </section>
-          ))}
-          {!filteredFiles.length ? (
-            <div className="repository-tree__empty">
-              <strong>검색 결과가 없습니다</strong>
-              <button type="button" onClick={() => handleSearch("")}>
-                검색어 지우기
-              </button>
-            </div>
-          ) : null}
-        </aside>
+      <section className="library-toolbar" aria-label="학습 라이브러리 검색">
+        <label><Search size={18} /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder={libraryTab === "sessions" ? "제목, 학습 항목, 제출 내용 검색" : "문서 제목, 본문, 작성자 검색"} /></label>
+        <span>{libraryTab === "sessions" ? <><BookOpen size={16} /> 세션 아카이브 <strong>{filteredSessions.length}</strong></> : <><FileText size={16} /> 팀 지식 공간</>}</span>
+      </section>
 
-        <section className="surface file-viewer" aria-labelledby="file-name">
-          {selected ? (
-            <>
-              <header>
-                <span className="repo-badge"><CodeXml size={18} /></span>
-                <div>
-                  <h2 id="file-name">{selected.path}</h2>
-                  <p>
-                    {isLive
-                      ? `${selected.kind.toUpperCase()} · GitLab repository file`
-                      : selected.kind === "yaml"
-                      ? "YAML · session configuration"
-                      : selected.kind === "markdown"
-                        ? "Markdown · member submission"
-                        : "Text · GitLab repository file"}
-                  </p>
-                </div>
-                <div className="file-viewer__actions">
-                  {selected.kind === "markdown" ? (
-                    <div
-                      className="markdown-view-switch"
-                      aria-label="Markdown 보기 방식"
-                    >
-                      <button
-                        type="button"
-                        className={markdownView === "preview" ? "active" : undefined}
-                        aria-pressed={markdownView === "preview"}
-                        onClick={() => setMarkdownView("preview")}
-                      >
-                        <Eye size={14} /> 미리보기
-                      </button>
-                      <button
-                        type="button"
-                        className={markdownView === "source" ? "active" : undefined}
-                        aria-pressed={markdownView === "source"}
-                        onClick={() => setMarkdownView("source")}
-                      >
-                        <Code2 size={14} /> 원문
-                      </button>
-                    </div>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="button button--secondary button--small"
-                    onClick={copy}
-                    disabled={!selectedContent}
-                  >
-                    {copied ? <Check size={15} /> : <Clipboard size={15} />}
-                    {copied ? "복사됨" : "원문 복사"}
-                  </button>
-                </div>
-              </header>
-              {fileState === "loading" ? (
-                <div className="repository-file-state">
-                  <RefreshCw size={20} className="spin" />
-                  <strong>GitLab 파일을 불러오는 중입니다</strong>
-                </div>
-              ) : fileState === "error" ? (
-                <div className="repository-file-state repository-file-state--error">
-                  <strong>파일을 불러오지 못했습니다</strong>
-                  <p>{fileError}</p>
-                </div>
-              ) : selectedContent !== undefined &&
-                selected.kind === "markdown" &&
-                markdownView === "preview" ? (
-                <MarkdownPreview content={selectedContent} />
-              ) : selectedContent !== undefined ? (
-                <div className="code-panel">
-                  <ol aria-hidden="true">
-                    {selectedContent.split("\n").map((_, index) => (
-                      <li key={index}>{index + 1}</li>
-                    ))}
-                  </ol>
-                  <pre><code>{selectedContent}</code></pre>
-                </div>
-              ) : (
-                <div className="repository-file-state">
-                  <strong>표시할 파일 내용이 없습니다</strong>
-                </div>
-              )}
-              <footer>
-                <span>
-                  마지막 커밋
-                  {selectedCommitMessage ? <small>{selectedCommitMessage}</small> : null}
+      {libraryTab === "documents" ? <TeamDocumentLibrary query={query} initialDocumentId={initialDocumentId} /> : filteredSessions.length ? (
+        <section className="library-session-list" aria-label="세션 아카이브">
+          {filteredSessions.map((session) => {
+            const meta = SESSION_TYPE_META[session.type];
+            const metrics = getDashboardMetrics(workspace, session);
+            const activeItems = session.items.filter((item) => item.status === "active");
+            const latestSubmission = workspace.members
+              .map((member) => workspace.submissions[getSubmissionKey(session.folder, member.id)])
+              .filter(Boolean)
+              .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0];
+            return (
+              <button key={session.date} type="button" className="library-session-card" onClick={() => setSelectedDate(session.date)}>
+                <span className="library-session-date"><strong>{new Date(`${session.date}T00:00:00`).getDate()}</strong><small>{formatDate(session.date, true).split(" ").slice(0, 3).join(" ")}</small></span>
+                <span className="library-session-main">
+                  <span><em className={`type-chip type-chip--${meta.tone}`}>{meta.short} · {meta.label}</em><small>{activeItems.length}개 학습 항목</small></span>
+                  <strong>{session.title}</strong>
+                  <p>{session.description}</p>
+                  <small>{activeItems.map((item) => item.title).join(" · ")}</small>
                 </span>
-                <code>{selectedCommitId ?? "commit-preview"}</code>
-              </footer>
-            </>
-          ) : (
-            <div className="repository-file-state">
-              <strong>표시할 파일이 없습니다</strong>
-            </div>
-          )}
+                <span className="library-session-stats">
+                  <span><Users size={15} /> {metrics.completedMembers}/{metrics.totalMembers}명 완료</span>
+                  <ProgressBar value={metrics.submissionRate} label={`${session.title} 제출률`} />
+                  <small>{latestSubmission ? `최근 업데이트 ${formatDateTime(latestSubmission.updatedAt)}` : "아직 제출 없음"}</small>
+                </span>
+                <ArrowRight size={19} />
+              </button>
+            );
+          })}
         </section>
-      </div>
+      ) : (
+        <section className="surface library-empty"><Search size={27} /><strong>검색 결과가 없습니다</strong><p>다른 제목이나 제출 내용으로 다시 검색해 보세요.</p></section>
+      )}
+    </div>
+  );
+}
+
+function LibrarySessionDocument({ session, currentUserId, onBack, projectUrl }: { session: StudySession; currentUserId: string; onBack: () => void; projectUrl?: string }) {
+  const { workspace } = useWorkspace();
+  const [selectedMember, setSelectedMember] = useState<StudyMember | null>(null);
+  const [pendingMember, setPendingMember] = useState<StudyMember | null>(null);
+  const required = getActiveRequiredItems(session);
+  const myFile = workspace.submissions[getSubmissionKey(session.folder, currentUserId)];
+  const myIncomplete = required.some((item) => !myFile?.submissions.some((entry) => entry.itemId === item.id));
+  const progress = getMemberProgress(workspace, session);
+  const meta = SESSION_TYPE_META[session.type];
+
+  function requestMember(member: StudyMember) {
+    if (member.id !== currentUserId && myIncomplete) setPendingMember(member);
+    else setSelectedMember(member);
+  }
+
+  return (
+    <div className="page-stack library-document-page">
+      <header className="library-document-nav">
+        <button type="button" onClick={onBack}><ArrowLeft size={17} /> 세션 아카이브</button>
+        {projectUrl ? <a href={projectUrl} target="_blank" rel="noreferrer">GitLab 원본 <ExternalLink size={14} /></a> : null}
+      </header>
+
+      <article className="surface library-document">
+        <header className="library-document-header">
+          <p className="eyebrow">{formatDate(session.date, true)}</p>
+          <span className={`type-chip type-chip--${meta.tone}`}>{meta.short} · {meta.label}</span>
+          <h1>{session.title}</h1>
+          <p>{session.description}</p>
+          <div><span><CalendarDays size={15} /> 학습 항목 {session.items.filter((item) => item.status === "active").length}개</span><span><Users size={15} /> 참여 멤버 {progress.length}명</span><span><FileText size={15} /> revision {session.revision}</span></div>
+        </header>
+
+        <section className="library-document-section">
+          <h2>오늘의 학습 항목</h2>
+          <div className="library-item-outline">
+            {session.items.filter((item) => item.status === "active").map((item, index) => <div key={item.id}><span>{index + 1}</span><strong>{item.title}</strong><small>{item.source ?? "직접 학습"} · {item.required ? "필수" : "선택"}</small></div>)}
+          </div>
+        </section>
+
+        <section className="library-document-section">
+          <div className="library-document-section__head"><div><h2>팀 제출 모아보기</h2><p>멤버별 제출과 커밋 리뷰를 한 문서처럼 이어서 확인합니다.</p></div></div>
+          <div className="library-member-notes">
+            {progress.map((entry) => {
+              const file = workspace.submissions[getSubmissionKey(session.folder, entry.member.id)];
+              return (
+                <button type="button" key={entry.member.id} disabled={!file} onClick={() => requestMember(entry.member)}>
+                  <Avatar member={entry.member} />
+                  <span>
+                    <strong>{entry.member.displayName}{entry.member.id === currentUserId ? " (나)" : ""}<em>{entry.completedItems}/{entry.requiredItems}</em></strong>
+                    <p>{file?.submissions.map((submission) => submission.value).join(" · ") ?? "아직 제출하지 않았습니다."}</p>
+                    <small>{file ? `${formatDateTime(file.updatedAt)} · 제출과 리뷰 열기` : "제출 대기 중"}</small>
+                  </span>
+                  {file ? <ArrowRight size={17} /> : null}
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      </article>
+
+      {selectedMember ? <MemberDetailDialog workspace={workspace} session={session} member={selectedMember} currentUserId={currentUserId} onClose={() => setSelectedMember(null)} /> : null}
+      {pendingMember ? <Modal title="내 제출 전에 팀원의 답을 볼까요?" description="먼저 스스로 풀어본 뒤 비교해서 보는 것을 권장합니다." onClose={() => setPendingMember(null)}><div className="submission-warning-dialog"><p>이 세션에는 아직 제출하지 않은 필수 항목이 있습니다. 열람을 막지는 않으며, 계속하면 {pendingMember.displayName}님의 제출을 볼 수 있습니다.</p><div className="modal-actions"><button type="button" className="button button--secondary" onClick={() => setPendingMember(null)}>돌아가기</button><button type="button" className="button button--primary" onClick={() => { setSelectedMember(pendingMember); setPendingMember(null); }}>그래도 보기</button></div></div></Modal> : null}
     </div>
   );
 }

@@ -16,6 +16,10 @@ import com.studyworkspace.gitlab.dto.GitLabCommitResponse;
 import com.studyworkspace.gitlab.dto.GitLabCreateFileRequest;
 import com.studyworkspace.gitlab.dto.GitLabUpdateFileRequest;
 import com.studyworkspace.gitlab.dto.GitLabProjectMember;
+import com.studyworkspace.gitlab.dto.GitLabBatchCommitResponse;
+import com.studyworkspace.gitlab.dto.GitLabCommitAction;
+import com.studyworkspace.gitlab.dto.GitLabCreateCommitRequest;
+import com.studyworkspace.gitlab.dto.GitLabCommitComment;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.client.reactive.JdkClientHttpConnector;
@@ -218,6 +222,58 @@ public class GitLabOAuthProjectService {
 			.onStatus(HttpStatusCode::isError, this::toException)
 			.bodyToMono(GitLabCommitResponse.class));
 		return getRepositoryFile(accessToken, projectId, path, branch);
+	}
+
+	public GitLabBatchCommitResponse createCommit(
+		String accessToken,
+		long projectId,
+		String branch,
+		String commitMessage,
+		List<GitLabCommitAction> actions,
+		String authorName
+	) {
+		if (actions == null || actions.isEmpty()) {
+			throw new IllegalArgumentException("GitLab commit actions are required");
+		}
+		return execute(webClient.post()
+			.uri(builder -> builder.pathSegment("projects", Long.toString(projectId), "repository", "commits").build())
+			.headers(headers -> headers.setBearerAuth(accessToken))
+			.bodyValue(new GitLabCreateCommitRequest(branch, commitMessage, List.copyOf(actions), authorName))
+			.retrieve()
+			.onStatus(HttpStatusCode::isError, this::toException)
+			.bodyToMono(GitLabBatchCommitResponse.class));
+	}
+
+	public List<GitLabCommitComment> getCommitComments(
+		String accessToken,
+		long projectId,
+		String commitId
+	) {
+		return execute(webClient.get()
+			.uri(builder -> builder.pathSegment(
+				"projects", Long.toString(projectId), "repository", "commits", commitId, "comments"
+			).queryParam("per_page", 100).build())
+			.headers(headers -> headers.setBearerAuth(accessToken))
+			.retrieve()
+			.onStatus(HttpStatusCode::isError, this::toException)
+			.bodyToMono(new ParameterizedTypeReference<List<GitLabCommitComment>>() { }));
+	}
+
+	public GitLabCommitComment createCommitComment(
+		String accessToken,
+		long projectId,
+		String commitId,
+		String note
+	) {
+		return execute(webClient.post()
+			.uri(builder -> builder.pathSegment(
+				"projects", Long.toString(projectId), "repository", "commits", commitId, "comments"
+			).build())
+			.headers(headers -> headers.setBearerAuth(accessToken))
+			.bodyValue(java.util.Map.of("note", note))
+			.retrieve()
+			.onStatus(HttpStatusCode::isError, this::toException)
+			.bodyToMono(GitLabCommitComment.class));
 	}
 
 	private <T> T execute(Mono<T> request) {

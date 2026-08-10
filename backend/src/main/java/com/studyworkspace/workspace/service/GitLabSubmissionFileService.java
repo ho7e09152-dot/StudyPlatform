@@ -80,14 +80,11 @@ public class GitLabSubmissionFileService {
 	}
 
 	private String submissionPath(WorkspaceState workspace, StudySession session, StudyMember member) {
-		if (session.folder() == null || !session.folder().matches("\\d{6}")) {
-			throw new WorkspaceException("INVALID_SUBMISSION_PATH", "일정 폴더 형식이 올바르지 않습니다.", 400);
-		}
 		String fileName = member.fileName();
 		if (!StringUtils.hasText(fileName) || !fileName.matches("[\\p{L}\\p{N}._-]+\\.md") || fileName.contains("..")) {
 			throw new WorkspaceException("INVALID_SUBMISSION_PATH", "멤버 제출 파일명이 올바르지 않습니다.", 400);
 		}
-		return pathPolicy.validate(WorkspaceRepositoryPath.join(workspace.repositoryBasePath(), session.folder() + "/" + fileName));
+		return pathPolicy.validate(WorkspaceRepositoryLayout.submissionPath(workspace, session, fileName));
 	}
 
 	private static String commitId(GitLabFileContent file) {

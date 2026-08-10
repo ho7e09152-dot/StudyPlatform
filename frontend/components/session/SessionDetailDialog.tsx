@@ -1,6 +1,6 @@
 "use client";
 
-import type { ComponentPropsWithoutRef } from "react";
+import { useState, type ComponentPropsWithoutRef } from "react";
 import {
   Code2,
   CalendarDays,
@@ -11,21 +11,25 @@ import {
   Link2,
   Send,
   TextQuote,
+  MessageCircle,
 } from "lucide-react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Modal } from "@/components/ui/Modal";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { Avatar } from "@/components/ui/Avatar";
+import { MemberDetailDialog } from "@/components/today/MemberDetailDialog";
 import {
   SESSION_TYPE_META,
   SUBMISSION_TYPE_LABEL,
 } from "@/lib/domain/constants";
-import { formatDate, formatDateTime, formatTime, getWorkspaceRepositoryPath } from "@/lib/domain/format";
+import { formatDate, formatDateTime, formatTime, getSessionRepositoryPath } from "@/lib/domain/format";
 import { getSubmissionKey } from "@/lib/domain/metrics";
 import type {
   StudySession,
   SubmissionEntry,
   Workspace,
+  StudyMember,
 } from "@/lib/domain/types";
 
 function MarkdownLink({
@@ -121,8 +125,10 @@ export function SessionDetailDialog({
   const completionRate = requiredItems.length
     ? Math.round((completedRequired / requiredItems.length) * 100)
     : 100;
+  const [reviewMember, setReviewMember] = useState<StudyMember | null>(null);
 
   return (
+    <>
     <Modal
       title={session.title}
       description={`${formatDate(session.date, true)} · 내 학습 및 제출 상세`}
@@ -147,7 +153,7 @@ export function SessionDetailDialog({
               {session.secondaryDeadline ? (
                 <span><Clock3 size={14} /> 2차 {formatTime(session.secondaryDeadline)}</span>
               ) : null}
-              <span><FileCode2 size={14} /> {getWorkspaceRepositoryPath(workspace.repositoryBasePath, `${session.folder}/session.yml`)}</span>
+              <span><FileCode2 size={14} /> {getSessionRepositoryPath(workspace, session)}</span>
             </div>
           </div>
           <div className="session-detail__progress">
@@ -238,7 +244,46 @@ export function SessionDetailDialog({
           })}
         </section>
 
+        <section className="session-detail__team-review" aria-labelledby="session-team-review-title">
+          <header>
+            <div>
+              <span className="session-detail__review-icon"><MessageCircle size={17} /></span>
+              <div><h3 id="session-team-review-title">팀 제출 리뷰</h3><p>멤버의 제출을 확인하고 GitLab 커밋에 댓글을 남길 수 있습니다.</p></div>
+            </div>
+          </header>
+          <div className="session-detail__review-members">
+            {workspace.members.map((member) => {
+              const submission = workspace.submissions[getSubmissionKey(session.folder, member.id)];
+              return (
+                <button
+                  key={member.id}
+                  type="button"
+                  disabled={!submission}
+                  onClick={() => setReviewMember(member)}
+                >
+                  <Avatar member={member} />
+                  <span>
+                    <strong>{member.displayName}{member.id === currentUserId ? " (나)" : ""}</strong>
+                    <small>{submission ? `${submission.submissions.length}개 항목 제출` : "아직 제출 없음"}</small>
+                  </span>
+                  <em>{submission ? "리뷰 보기" : "대기"}</em>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+
       </div>
     </Modal>
+    {reviewMember ? (
+      <MemberDetailDialog
+        workspace={workspace}
+        session={session}
+        member={reviewMember}
+        currentUserId={currentUserId}
+        onClose={() => setReviewMember(null)}
+      />
+    ) : null}
+    </>
   );
 }
