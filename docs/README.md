@@ -1,51 +1,77 @@
-# Study-ing 문서 안내
+# Study-ing 문서
 
-이 디렉터리는 현재 실행 계약, 개발 방법, 저장 구조, 운영 절차와 과거 설계 자료를 함께 보관한다. 처음 보는 사람은 아래 순서로 읽는다.
+이 디렉터리는 현재 코드와 함께 유지해야 하는 문서만 보관합니다. 처음 참여한 개발자는 아래 순서로 읽으면 됩니다.
 
-## 빠른 시작
+1. [개발 환경과 실행](getting-started.md)
+2. [현재 아키텍처](architecture/overview.md)
+3. [OpenAPI 계약](api/openapi.yaml)과 [오류 계약](api/errors.md)
+4. 작업 영역에 해당하는 아키텍처 문서
+5. 배포 작업이라면 [운영 문서](operations/production.md)
 
-1. [프로젝트 README](../README.md) — 제품 목표와 구현 기능
-2. [현재 시스템 상태](current-system-status.md) — 실제 구현 범위, 데이터 저장 위치, 남은 출시 조건
-3. [로컬 개발환경](development-environment.md) — 프론트·백엔드·DB 실행과 테스트
-4. [API 계약](openapi.yaml) — 현재 HTTP 요청·응답의 기준
+## 문서 구조
 
-## 기능과 데이터 구조
+```text
+docs/
+├── README.md
+├── getting-started.md
+├── architecture/
+│   ├── overview.md
+│   ├── workspaces.md
+│   ├── repository-storage.md
+│   ├── records.md
+│   └── providers/
+├── api/
+│   ├── openapi.yaml
+│   └── errors.md
+├── design/
+│   └── design-system.md
+├── operations/
+│   ├── ci.md
+│   ├── staging-e2e.md
+│   ├── production.md
+│   ├── launch-checklist.md
+│   └── incident-response.md
+└── legal/
+```
 
-| 문서 | 내용 |
+## 아키텍처
+
+| 문서 | 기준으로 삼는 내용 |
 |---|---|
-| [저장소 구조 V2](repository-schema-v2.md) | `.study-workspace` 경로, V1 호환과 안전 마이그레이션 |
-| [API 오류 계약](api-error-catalog.md) | 공통 오류 코드와 프론트 처리 원칙 |
-| [팀 구현 로드맵](team-implementation-roadmap.md) | 기능 영역별 구현 순서와 협업 기준 |
-| [TODO](../todo.md) | P0/P1/P2 상태와 다음 제품 작업 |
+| [현재 아키텍처](architecture/overview.md) | 시스템 경계, 저장 위치, 주요 사용자 흐름과 권한 |
+| [Workspace](architecture/workspaces.md) | 멤버십, Discovery/Join, 권한 재검증과 삭제 |
+| [Repository 저장 구조](architecture/repository-storage.md) | `.study-workspace` 파일 구조와 V1 호환 |
+| [Records](architecture/records.md) | 기간, 완료율과 점수 계산 정의 |
+| [Provider identity](architecture/providers/identity.md) | Study-ing 사용자와 외부 계정의 관계 |
+| [Repository Provider](architecture/providers/repository.md) | 정규화된 Repository 연결과 credential 해석 |
+| [Provider capability](architecture/providers/capabilities.md) | 실제 노출 가능한 Provider 기능의 source of truth |
+| [GitHub account linking](architecture/providers/github-account-linking.md) | 현재 구현된 GitHub 연결 범위와 보안 경계 |
+| [Multi-provider migration](architecture/providers/migration.md) | V11 migration과 운영 검증 |
 
-## 테스트와 출시
+## 개발 계약
+
+- [OpenAPI](api/openapi.yaml)는 공개 HTTP 요청·응답 계약입니다.
+- [오류 계약](api/errors.md)은 HTTP 상태, 오류 코드와 UI 처리 기준입니다.
+- [디자인 시스템](design/design-system.md)은 token, component, responsive와 motion 기준입니다.
+- Controller, DTO 또는 공통 UI 계약을 바꾸면 관련 문서와 테스트를 같은 변경에서 갱신합니다.
+
+## 운영
 
 | 문서 | 사용 시점 |
 |---|---|
-| [GitLab CI 가이드](ci-guide.md) | Merge Request와 로컬 전체 검사 |
-| [스테이징 OAuth E2E](staging-e2e-checklist.md) | 실제 GitLab 두 계정 출시 승인 |
-| [Production runbook](production-runbook.md) | HTTPS, PostgreSQL, Secret, 백업과 장애 대응 |
-| [보안사고 최소 대응 절차](security/incident-response.md) | credential 차단, 영향 확인, 안내 판단과 재발 방지 |
+| [CI](operations/ci.md) | 로컬 검사와 pipeline 실패 분석 |
+| [Staging E2E](operations/staging-e2e.md) | 실제 GitLab 계정으로 출시 전 검증 |
+| [Production](operations/production.md) | 환경변수, 배포, 백업, 복구와 key rotation |
+| [Launch checklist](operations/launch-checklist.md) | 공개 전에 운영자가 확정할 항목 |
+| [Incident response](operations/incident-response.md) | credential 또는 개인정보 사고 대응 |
 
-## Legal / policy audit
+## 법무 초안
 
-| 문서 | 성격 |
-|---|---|
-| [구현 사실](legal/implementation-facts.md) | 코드·DB·배포 설정에서 확인한 데이터 처리와 삭제 사실 |
-| [운영 정책과 남은 결정](legal/policy-decisions-required.md) | 확정된 기본정책, 공개 전 입력값과 법률 검토 |
-| [개인정보 처리방침 초안](legal/privacy-policy-draft.md) | 운영자 승인·법률 검토 전 비공개 draft |
-| [이용약관 초안](legal/terms-of-service-draft.md) | 운영자 승인·법률 검토 전 비공개 draft |
+`legal/`은 구현 사실, 데이터 inventory, 정책 결정과 공개 전 초안을 분리합니다. `privacy-policy-draft.md`와 `terms-of-service-draft.md`는 `status: draft`인 동안 사용자 화면에 게시하지 않습니다.
 
-## 팀원별 백엔드 학습 자료
+## 유지 규칙
 
-- [인증·Workspace 역할](backend-role-1-auth-workspace.md) / [구현 핸드북](guides/member-1-auth-workspace-handbook.md)
-- [일정·저장소 역할](backend-role-2-session-repository.md) / [구현 핸드북](guides/member-2-session-repository-handbook.md)
-- [제출·기록 역할](backend-role-3-submission-analytics.md) / [구현 핸드북](guides/member-3-submission-analytics-handbook.md)
-
-## 문서 기준
-
-- API가 다르면 `openapi.yaml`과 실제 Controller를 함께 수정한다.
-- 구현 완료 상태가 바뀌면 `todo.md`와 `current-system-status.md`를 갱신한다.
-- 배포 방법이 바뀌면 `production-runbook.md`와 환경변수 예제를 함께 수정한다.
-- `docs/audits/`는 작성 당시의 진단 기록이다. 현재 상태 판단에는 이 문서와 `todo.md`를 우선한다.
-- 비밀값, OAuth token, 실제 Client Secret과 개인 이메일은 문서나 캡처에 넣지 않는다.
+- 완료된 QA 보고서, 작업 계획, 역할 분담 문서와 생성된 screenshot artifact는 Git에 보관하지 않습니다.
+- 재현 가능한 검증은 문서보다 자동 테스트나 `scripts/`로 남깁니다.
+- 현재 코드와 다른 계획 문서는 고치는 대신 제거하거나 명시적으로 `Future` 범위로 구분합니다.
+- 비밀값, OAuth token, 실제 session 값과 비공개 Repository 정보는 문서·이미지에 넣지 않습니다.

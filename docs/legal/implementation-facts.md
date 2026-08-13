@@ -14,7 +14,7 @@
 | CONFIRMED | GitLab read/write boundary | `GitLabOAuthProjectService`, `GitLabSessionFileService`, `GitLabSubmissionFileService`, `SubmissionReviewService` |
 | CONFIRMED | DB-only collaboration data | `WorkspaceDocumentService`, `WorkspaceFeedService`, `InAppNotificationService`, `AuditEventService`, `SyncJobService` |
 | CONFIRMED | Browser storage and public copy | `AppThemeProvider`, `demoDocuments`, `/login`, `/privacy`, `/terms` |
-| CONFIRMED | Repository-owned deployment templates | `application.yml`, `application-prod.yml`, `compose.prod.yml`, `compose.sandbox.yml`, `deploy/nginx.conf`, `docs/production-runbook.md` |
+| CONFIRMED | Repository-owned deployment templates | `application.yml`, `application-prod.yml`, `compose.prod.yml`, `compose.sandbox.yml`, `deploy/nginx.conf`, `docs/operations/production.md` |
 | UNKNOWN | 실제 공개 운영 환경의 서버 사업자, 물리 지역, DNS/CDN, DB host, 모니터링 사업자 | 배포된 인프라 inventory나 계약서가 저장소에 없음 |
 
 ## 2. Current product and account model

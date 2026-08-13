@@ -13,7 +13,6 @@
 - Method:
 - Path:
 - OpenAPI operationId:
-- 담당자:
 
 ## 구현할 클래스
 
@@ -35,6 +34,6 @@
 
 ## 완료 조건
 
-- [ ] 역할 문서의 완료 기준 만족
+- [ ] 관련 API·아키텍처 문서 갱신
 - [ ] `make check` 통과
 - [ ] Merge Request 리뷰 완료

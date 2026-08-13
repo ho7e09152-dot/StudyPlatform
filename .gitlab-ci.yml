@@ -19,7 +19,7 @@ api_contract:
     paths:
       - .npm/
   script:
-    - npx --yes --cache .npm @redocly/cli lint docs/openapi.yaml --config .redocly.yaml
+    - npx --yes --cache .npm @redocly/cli lint docs/api/openapi.yaml --config .redocly.yaml
 
 repository_hygiene:
   stage: validate

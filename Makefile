@@ -30,7 +30,7 @@ backend-run:
 	cd backend && set -a && . ./.env && set +a && ./gradlew bootRun
 
 api-lint:
-	npx --yes @redocly/cli lint docs/openapi.yaml --config .redocly.yaml
+	npx --yes @redocly/cli lint docs/api/openapi.yaml --config .redocly.yaml
 
 test:
 	cd frontend && npm run test

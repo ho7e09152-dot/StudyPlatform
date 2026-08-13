@@ -119,3 +119,4 @@ backups/
 # Local verification artifacts
 # ==============================
 output/playwright/
+artifacts/

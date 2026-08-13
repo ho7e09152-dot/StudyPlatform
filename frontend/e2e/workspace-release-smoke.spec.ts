@@ -168,6 +168,40 @@ test.describe("Workspace release smoke", () => {
     expect(errors).toEqual([]);
   });
 
+  test("기록 화면은 좁은 데스크톱에서 카드 내부 정보가 우측으로 넘치지 않는다", async ({ page }) => {
+    const errors = captureUnexpectedErrors(page);
+
+    for (const width of [1180, 1100, 1024, 961]) {
+      await page.setViewportSize({ width, height: 900 });
+      await openWorkspacePage(page, "/records");
+
+      const metrics = await page.evaluate(() => {
+        const layout = document.querySelector(".records-weekly-layout");
+        const panel = document.querySelector(".records-team-status");
+        const rows = [...document.querySelectorAll(".records-member-row")];
+        if (!(layout instanceof HTMLElement) || !(panel instanceof HTMLElement)) {
+          throw new Error("Records responsive layout not found");
+        }
+        const panelRect = panel.getBoundingClientRect();
+        const childrenInsidePanel = rows.every((row) => {
+          const rowRect = row.getBoundingClientRect();
+          return rowRect.left >= panelRect.left - 1 && rowRect.right <= panelRect.right + 1;
+        });
+        return {
+          layoutColumns: getComputedStyle(layout).gridTemplateColumns.split(" ").length,
+          childrenInsidePanel,
+          horizontalOverflow: document.documentElement.scrollWidth > window.innerWidth + 1,
+        };
+      });
+
+      expect(metrics.layoutColumns).toBe(1);
+      expect(metrics.childrenInsidePanel).toBe(true);
+      expect(metrics.horizontalOverflow).toBe(false);
+    }
+
+    expect(errors).toEqual([]);
+  });
+
   test("선행 제출 경고와 공통 리뷰 흐름이 모든 진입에서 유지된다", async ({ page }) => {
     const errors = captureUnexpectedErrors(page);
     await openWorkspacePage(page, "/library/sessions/2026-07-23");

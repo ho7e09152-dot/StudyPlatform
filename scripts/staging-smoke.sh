@@ -51,4 +51,4 @@ if ! grep -qi '^x-request-id:' "$oauth_headers"; then
 fi
 printf 'PASS request ID header\n'
 
-printf 'Staging preflight passed. Continue with docs/staging-e2e-checklist.md.\n'
+printf 'Staging preflight passed. Continue with docs/operations/staging-e2e.md.\n'

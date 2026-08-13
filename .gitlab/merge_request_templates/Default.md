@@ -9,8 +9,8 @@
 ## API·저장 형식 변경
 
 - [ ] OpenAPI 변경 없음
-- [ ] `docs/openapi.yaml`을 함께 수정함
-- [ ] GitLab `study.yml`, `session.yml`, 멤버 Markdown 형식을 변경함
+- [ ] `docs/api/openapi.yaml`을 함께 수정함
+- [ ] GitLab `config.yml`, `session.yml`, 멤버 Markdown 형식을 변경함
 
 ## 테스트
 

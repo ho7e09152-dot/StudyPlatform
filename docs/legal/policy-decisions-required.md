@@ -106,7 +106,7 @@ serviceModel: personal-free-noncommercial
 | Field | Value |
 |---|---|
 | Decision | 확인 → 영향 범위 → credential revoke/rotation → 노출 차단 → 필요한 로그 보존 → 사용자 안내 판단 → 재발 방지의 최소 절차를 사용한다. |
-| Current Behavior | `docs/security/incident-response.md`에 절차가 있다. |
+| Current Behavior | `docs/operations/incident-response.md`에 절차가 있다. |
 | Status | DECIDED; 실제 연락 담당자는 BLOCKER |
 
 ### LEGAL-010 — User content rights

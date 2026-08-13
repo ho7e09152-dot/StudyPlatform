@@ -9,7 +9,7 @@ echo "[1/7] 비밀 파일 검사"
 
 echo "[2/7] OpenAPI 검사"
 cd "$repository_root"
-npx --yes @redocly/cli lint docs/openapi.yaml --config .redocly.yaml
+npx --yes @redocly/cli lint docs/api/openapi.yaml --config .redocly.yaml
 
 echo "[3/7] Frontend lint"
 cd "$repository_root/frontend"
