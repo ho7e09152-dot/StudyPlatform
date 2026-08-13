@@ -19,6 +19,7 @@ import {
   KeyRound,
   LayoutGrid,
   LockKeyhole,
+  MessageSquareText,
   Palette,
   RefreshCcw,
   ShieldCheck,
@@ -57,6 +58,14 @@ import {
 import { GITLAB_ACCESS_LABEL } from "@/lib/domain/constants";
 import { APP_ROLE_LABEL, canDeleteWorkspace, canManageWorkspaceSettings } from "@/lib/domain/permissions";
 import type { StudyMember } from "@/lib/domain/types";
+import type { CommitRules } from "@/lib/domain/types";
+import {
+  COMMIT_RULE_VARIABLES,
+  DEFAULT_COMMIT_RULES,
+  normalizeCommitRules,
+  renderCommitMessage,
+  validateCommitRules,
+} from "@/lib/domain/commitRules";
 import { confirmUnsavedChanges, useUnsavedChanges } from "@/lib/navigation/unsavedChanges";
 import { APP_ROUTES } from "@/lib/routes";
 import { getUserFacingError } from "@/lib/api/errors";
@@ -65,6 +74,7 @@ import { formatDateTime } from "@/lib/domain/format";
 export type SettingsSection =
   | "general"
   | "study-rules"
+  | "commit-rules"
   | "members"
   | "notifications"
   | "repository"
@@ -85,6 +95,7 @@ const SETTINGS_GROUPS: Array<{
     items: [
       { id: "general", label: "일반", icon: LayoutGrid },
       { id: "study-rules", label: "학습 규칙", icon: BookOpenCheck },
+      { id: "commit-rules", label: "커밋 규칙", icon: MessageSquareText },
       { id: "members", label: "멤버", icon: Users },
       { id: "notifications", label: "알림", icon: Bell },
       { id: "repository", label: "저장소 연결", icon: GitBranch },
@@ -112,6 +123,7 @@ const SETTINGS_GROUPS: Array<{
 const SECTION_COPY: Record<SettingsSection, { title: string; description: string }> = {
   general: { title: "Workspace 일반", description: "현재 Workspace의 이름과 운영 기준 시간을 관리합니다." },
   "study-rules": { title: "학습 규칙", description: "일정과 제출에 적용되는 현재 운영 정책을 확인합니다." },
+  "commit-rules": { title: "커밋 규칙", description: "제출할 때 사용할 기본 커밋 메시지와 안내 문구를 관리합니다." },
   members: { title: "Workspace 멤버", description: "Study-ing 역할과 GitLab 저장소 접근 상태를 구분해 관리합니다." },
   notifications: { title: "Workspace 알림", description: "이 Workspace에서 발생하는 주요 변경 알림을 설정합니다." },
   repository: { title: "저장소 연결", description: "현재 Workspace가 학습 기록을 저장하는 GitLab 프로젝트를 확인합니다." },
@@ -265,6 +277,7 @@ export function SettingsWorkspace({ section = "general" }: { section?: SettingsS
     currentUserId,
     toggleNotification,
     saveWorkspaceGeneral,
+    saveCommitRules,
     deleteCurrentWorkspace,
 		notify,
   } = useWorkspace();
@@ -327,6 +340,7 @@ export function SettingsWorkspace({ section = "general" }: { section?: SettingsS
           </header>
           {section === "general" ? <GeneralSettings canManage={canManage} /> : null}
           {section === "study-rules" ? <StudyRulesSettings workspaceRequiresChangeNote={workspace.settings.requireChangeNoteWhenSubmitted} /> : null}
+          {section === "commit-rules" ? <CommitRulesSettings canManage={canManage} /> : null}
           {section === "members" ? <MemberSettings canManage={canManage} isOwner={isOwner} candidates={candidates} busy={memberBusy} setBusy={setMemberBusy} refresh={refreshMembers} error={actionError} setError={setActionError} /> : null}
           {section === "notifications" ? <NotificationSettings canManage={canManage} /> : null}
           {section === "repository" ? <RepositorySettings /> : null}
@@ -420,6 +434,127 @@ export function SettingsWorkspace({ section = "general" }: { section?: SettingsS
         <section className="settings-section-block"><h3>일정 변경</h3><SettingRows><SettingRow label="제출 후 일정 변경" description="제출이 있는 일정을 수정할 때 팀원에게 변경 사유를 남깁니다." value={workspaceRequiresChangeNote ? "변경 사유 필요" : "선택"} /></SettingRows></section>
         <section className="settings-section-block"><h3>점수 규칙</h3><p>현재 모든 Workspace에 동일하게 적용되는 고정 정책입니다.</p><SettingRows><SettingRow label="1차 마감 내 제출" value="10P" /><SettingRow label="2차 마감 내 제출" value="6P" /><SettingRow label="미제출 또는 최종 마감 이후" value="0P" /></SettingRows><div className="settings-info-note"><SlidersHorizontal size={17} /><span><strong>현재 변경할 수 없는 정책입니다</strong><small>점수 사용 여부와 팀 순위 표시는 아직 Workspace별 설정을 지원하지 않습니다.</small></span></div></section>
       </div>
+    );
+  }
+
+  function CommitRulesSettings({ canManage: editable }: { canManage: boolean }) {
+    const storedRules = normalizeCommitRules(workspace.settings.commitRules);
+    const [rules, setRules] = useState<CommitRules>(storedRules);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState("");
+    const templateRef = useRef<HTMLInputElement>(null);
+    const dirty = rules.submissionTemplate !== storedRules.submissionTemplate
+      || rules.submissionGuidance !== storedRules.submissionGuidance;
+    const validationError = validateCommitRules(rules);
+    const preview = renderCommitMessage(rules.submissionTemplate, {
+      action: "submit",
+      name: currentMember?.displayName ?? "김서연",
+      date: "2026-08-13",
+      item: "그래프 탐색 문제 풀이",
+      itemId: "item-a1b2c3d4",
+      session: "그래프 집중 학습",
+    });
+    useUnsavedChanges(editable && dirty && !saving);
+
+    function insertVariable(token: string) {
+      if (!editable) return;
+      const field = templateRef.current;
+      const start = field?.selectionStart ?? rules.submissionTemplate.length;
+      const end = field?.selectionEnd ?? start;
+      const next = `${rules.submissionTemplate.slice(0, start)}${token}${rules.submissionTemplate.slice(end)}`;
+      setRules((current) => ({ ...current, submissionTemplate: next }));
+      requestAnimationFrame(() => {
+        field?.focus();
+        field?.setSelectionRange(start + token.length, start + token.length);
+      });
+    }
+
+    async function submit(event: FormEvent) {
+      event.preventDefault();
+      if (!dirty || validationError) return;
+      setSaving(true);
+      setError("");
+      try {
+        await saveCommitRules({
+          submissionTemplate: rules.submissionTemplate.trim(),
+          submissionGuidance: rules.submissionGuidance.trim(),
+        });
+      } catch (requestError) {
+        setError(getUserFacingError(requestError, "커밋 규칙을 저장하지 못했습니다."));
+      } finally {
+        setSaving(false);
+      }
+    }
+
+    return (
+      <form className="settings-form" onSubmit={submit}>
+        <section className="settings-section-block">
+          <h3>자동 커밋 메시지</h3>
+          <p>학습 항목을 제출할 때 아래 규칙으로 기본 메시지를 만들며, 제출자는 저장 전에 수정할 수 있습니다.</p>
+          <div className="settings-form-fields commit-rules-fields">
+            <label>
+              <span>메시지 규칙</span>
+              <input
+                ref={templateRef}
+                type="text"
+                value={rules.submissionTemplate}
+                onChange={(event) => { setRules((current) => ({ ...current, submissionTemplate: event.target.value })); setError(""); }}
+                disabled={!editable}
+                maxLength={200}
+                aria-describedby={validationError ? "commit-template-help commit-template-error" : "commit-template-help"}
+              />
+              <small id="commit-template-help">원하는 텍스트와 아래 변수를 함께 사용할 수 있습니다.</small>
+            </label>
+            <div className="commit-rule-variables" aria-label="커밋 메시지 변수">
+              {COMMIT_RULE_VARIABLES.map((variable) => (
+                <button key={variable.key} type="button" disabled={!editable} onClick={() => insertVariable(variable.token)}>
+                  <span>{variable.label}</span><code>{variable.token}</code>
+                </button>
+              ))}
+            </div>
+            <div className="commit-rule-preview" aria-live="polite">
+              <span>미리보기</span>
+              <code>{preview || "커밋 메시지 미리보기"}</code>
+            </div>
+          </div>
+        </section>
+        <section className="settings-section-block">
+          <h3>제출 화면 안내</h3>
+          <p>사용자가 제출 화면에서 커밋 메시지를 확인하거나 수정할 때 보여줄 문구입니다.</p>
+          <div className="settings-form-fields commit-rules-fields">
+            <label>
+              <span>안내 문구</span>
+              <input
+                type="text"
+                value={rules.submissionGuidance}
+                onChange={(event) => { setRules((current) => ({ ...current, submissionGuidance: event.target.value })); setError(""); }}
+                disabled={!editable}
+                maxLength={240}
+              />
+              <small>{rules.submissionGuidance.length} / 240</small>
+            </label>
+          </div>
+        </section>
+        {validationError ? <div id="commit-template-error" className="onboarding-error" role="alert">{validationError}</div> : null}
+        {error ? <div className="onboarding-error" role="alert">{error}</div> : null}
+        {!editable ? <RestrictedSettings title="소유자와 관리자만 변경할 수 있어요" description="멤버는 현재 Workspace의 커밋 규칙을 확인할 수 있습니다." /> : null}
+        {editable ? (
+          <footer className="settings-form-actions">
+            <span className="settings-save-state" aria-live="polite">{dirty ? "저장하지 않은 변경사항이 있습니다." : "모든 변경사항이 저장되었습니다."}</span>
+            <button
+              className="button button--secondary"
+              type="button"
+              disabled={saving || (
+                !dirty
+                && rules.submissionTemplate === DEFAULT_COMMIT_RULES.submissionTemplate
+                && rules.submissionGuidance === DEFAULT_COMMIT_RULES.submissionGuidance
+              )}
+              onClick={() => { setRules(DEFAULT_COMMIT_RULES); setError(""); }}
+            >기본값으로 되돌리기</button>
+            <button className="button button--primary" type="submit" disabled={!dirty || saving || Boolean(validationError)}>{saving ? "저장 중…" : "저장"}</button>
+          </footer>
+        ) : null}
+      </form>
     );
   }
 

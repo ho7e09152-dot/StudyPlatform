@@ -91,6 +91,33 @@ test.describe("Workspace release smoke", () => {
     expect(errors).toEqual([]);
   });
 
+  test("Workspace 커밋 규칙이 제출 기본 메시지와 안내 문구에 적용된다", async ({ page }) => {
+    const errors = captureUnexpectedErrors(page);
+    await openWorkspacePage(page, "/settings/commit-rules");
+
+    await expect(page.getByRole("heading", { name: "커밋 규칙" })).toBeVisible();
+    await page.getByRole("textbox", { name: "메시지 규칙" }).fill("custom: {name} / {date} / {item}");
+    await page.getByRole("textbox", { name: "안내 문구" }).fill("팀 커밋 규칙에 맞는지 확인해 주세요.");
+    await page.getByRole("button", { name: "저장", exact: true }).click();
+    await expect(page.getByText("모든 변경사항이 저장되었습니다.")).toBeVisible();
+
+    await page.getByRole("link", { name: "오늘", exact: true }).click();
+    await expect(page).toHaveURL(/\/today$/);
+    await page.getByRole("button", { name: "계속 학습하기" }).click();
+    await page.getByText("GitLab 저장 정보", { exact: true }).click();
+    await expect(page.getByRole("textbox", { name: "커밋 메시지" })).toHaveValue(
+      "custom: 김서연 / 2026-07-23 / 프로세스",
+    );
+    await expect(page.getByText("팀 커밋 규칙에 맞는지 확인해 주세요.")).toBeVisible();
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    const horizontalOverflow = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1,
+    );
+    expect(horizontalOverflow).toBe(false);
+    expect(errors).toEqual([]);
+  });
+
   test("일정 목록은 날짜 그룹과 핵심 정보를 명확한 행으로 제공한다", async ({ page }) => {
     const errors = captureUnexpectedErrors(page);
     await openWorkspacePage(page, "/schedule");

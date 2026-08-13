@@ -85,11 +85,17 @@ export interface MemberSubmissionFile {
 export interface WorkspaceSettings {
   timezone: string;
   requireChangeNoteWhenSubmitted: boolean;
+  commitRules: CommitRules;
   notifications: {
     scheduleChanges: boolean;
     submissionMismatch: boolean;
     syncFailures: boolean;
   };
+}
+
+export interface CommitRules {
+  submissionTemplate: string;
+  submissionGuidance: string;
 }
 
 export interface Workspace {

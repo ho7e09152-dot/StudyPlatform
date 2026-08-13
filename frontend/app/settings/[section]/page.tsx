@@ -4,7 +4,7 @@ import { SettingsWorkspace, type SettingsSection } from "@/components/settings/S
 export const metadata: Metadata = { title: "설정" };
 
 const supported = new Set<SettingsSection>([
-  "general", "study-rules", "members", "notifications", "repository", "data",
+  "general", "study-rules", "commit-rules", "members", "notifications", "repository", "data",
   "profile", "accounts", "appearance", "account", "security", "danger",
 ]);
 

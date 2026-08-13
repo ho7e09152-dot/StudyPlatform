@@ -99,6 +99,7 @@
 | 422 | `SUBMISSION_TYPE_MISMATCH` | link 항목에 code 제출 등 |
 | 422 | `SUBMISSION_VALUE_INVALID` | URL, 코드 길이, 필수 값 오류 |
 | 422 | `COMMIT_MESSAGE_REQUIRED` | 빈 커밋 메시지 |
+| 400 | `INVALID_COMMIT_RULES` | 지원하지 않는 변수, 빈 규칙·안내 또는 적용 후 200자를 넘는 커밋 규칙 |
 
 ### 3.5 공통 GitLab 연동
 

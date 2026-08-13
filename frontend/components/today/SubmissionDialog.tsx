@@ -22,6 +22,10 @@ import type {
   Workspace,
 } from "@/lib/domain/types";
 import { getUserFacingError } from "@/lib/api/errors";
+import {
+  normalizeCommitRules,
+  renderCommitMessage,
+} from "@/lib/domain/commitRules";
 
 const typeIcon = {
   link: Link2,
@@ -29,15 +33,6 @@ const typeIcon = {
   code: Code2,
   mixed: FileText,
 };
-
-function getDefaultCommitMessage(
-  updating: boolean,
-  memberName: string,
-  folder: string,
-  itemId: string,
-) {
-  return `${updating ? "update" : "submit"}: ${memberName} ${folder} ${itemId}`;
-}
 
 export function SubmissionDialog({
   workspace,
@@ -68,15 +63,20 @@ export function SubmissionDialog({
   const existing = submissionFile?.submissions.find(
     (submission) => submission.itemId === selectedItem.id,
   );
+  const commitRules = normalizeCommitRules(workspace.settings.commitRules);
+  const getDefaultCommitMessage = (item: SessionItem, updating: boolean) =>
+    renderCommitMessage(commitRules.submissionTemplate, {
+      action: updating ? "update" : "submit",
+      name: me.displayName,
+      date: session.date,
+      item: item.title,
+      itemId: item.id,
+      session: session.title,
+    });
   const [value, setValue] = useState(existing?.value ?? "");
   const [language, setLanguage] = useState(existing?.language ?? "typescript");
   const [commitMessage, setCommitMessage] = useState(
-    getDefaultCommitMessage(
-      Boolean(existing),
-      me.displayName,
-      session.folder,
-      selectedItem.id,
-    ),
+    getDefaultCommitMessage(selectedItem, Boolean(existing)),
   );
   const [error, setError] = useState("");
   const [commitMessageError, setCommitMessageError] = useState("");
@@ -95,12 +95,7 @@ export function SubmissionDialog({
     setValue(next?.value ?? "");
     setLanguage(next?.language ?? "typescript");
     setCommitMessage(
-      getDefaultCommitMessage(
-        Boolean(next),
-        me.displayName,
-        session.folder,
-        item.id,
-      ),
+      getDefaultCommitMessage(item, Boolean(next)),
     );
     setError("");
     setCommitMessageError("");
@@ -278,7 +273,7 @@ export function SubmissionDialog({
             description="파일 위치와 저장 메시지"
           >
               <label className="field">
-                <span>저장 메시지</span>
+                <span>커밋 메시지</span>
                 <input
                   type="text"
                   value={commitMessage}
@@ -286,11 +281,12 @@ export function SubmissionDialog({
                     setCommitMessage(event.target.value);
                     setCommitMessageError("");
                   }}
-                  placeholder="submit: member-a 260723 item-b712dd"
+                  placeholder="submit: 사용자 이름 · 2026-07-23 · 항목 이름"
+                  maxLength={200}
                   aria-invalid={Boolean(commitMessageError)}
                 />
                 <small className="field-hint">
-                  기본 규칙을 그대로 사용하거나 알아보기 쉽게 수정할 수 있습니다.
+                  {commitRules.submissionGuidance}
                 </small>
               </label>
               {commitMessageError ? (

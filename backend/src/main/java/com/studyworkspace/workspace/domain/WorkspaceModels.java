@@ -105,11 +105,43 @@ public final class WorkspaceModels {
 	) {
 	}
 
+	public record CommitRules(
+		String submissionTemplate,
+		String submissionGuidance
+	) {
+		public static final String DEFAULT_SUBMISSION_TEMPLATE = "{action}: {name} · {date} · {item}";
+		public static final String DEFAULT_SUBMISSION_GUIDANCE =
+			"기본 규칙을 그대로 사용하거나 알아보기 쉽게 수정할 수 있습니다.";
+
+		public CommitRules {
+			submissionTemplate = submissionTemplate == null
+				? DEFAULT_SUBMISSION_TEMPLATE : submissionTemplate;
+			submissionGuidance = submissionGuidance == null
+				? DEFAULT_SUBMISSION_GUIDANCE : submissionGuidance;
+		}
+
+		public static CommitRules defaults() {
+			return new CommitRules(DEFAULT_SUBMISSION_TEMPLATE, DEFAULT_SUBMISSION_GUIDANCE);
+		}
+	}
+
 	public record WorkspaceSettings(
 		String timezone,
 		boolean requireChangeNoteWhenSubmitted,
-		Notifications notifications
+		Notifications notifications,
+		CommitRules commitRules
 	) {
+		public WorkspaceSettings {
+			commitRules = commitRules == null ? CommitRules.defaults() : commitRules;
+		}
+
+		public WorkspaceSettings(
+			String timezone,
+			boolean requireChangeNoteWhenSubmitted,
+			Notifications notifications
+		) {
+			this(timezone, requireChangeNoteWhenSubmitted, notifications, CommitRules.defaults());
+		}
 	}
 
 	public record RepositoryIdentity(

@@ -22,6 +22,7 @@ import java.util.stream.Collectors;
 
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
+import com.studyworkspace.workspace.domain.CommitRulePolicy;
 import com.studyworkspace.workspace.domain.WorkspaceException;
 import com.studyworkspace.gitlab.dto.GitLabUser;
 import com.studyworkspace.auth.security.StudyIngPrincipal;
@@ -275,10 +276,16 @@ public class WorkspaceService {
 		} catch (RuntimeException exception) {
 			throw error("INVALID_TIMEZONE", "올바른 시간대를 선택해 주세요.", 400);
 		}
+		try {
+			CommitRulePolicy.validate(settings.commitRules());
+		} catch (IllegalArgumentException exception) {
+			throw error("INVALID_COMMIT_RULES", exception.getMessage(), 400);
+		}
 		WorkspaceState updated = new WorkspaceState(
 			current.id(), name, current.gitlabProjectId(), current.gitlabProjectPath(), current.defaultBranch(),
 			current.repositoryBasePath(), current.repositorySchemaVersion(), current.importMode(), current.status(),
-			current.lastSyncedAt(), current.members(), current.sessions(), current.submissions(), settings
+			current.lastSyncedAt(), current.members(), current.sessions(), current.submissions(), settings,
+			current.repository()
 		);
 		store(updated);
 		persist();
@@ -539,7 +546,8 @@ public class WorkspaceService {
 			throw error("INVALID_REQUEST", "알림 설정이 필요합니다.", 400);
 		}
 		WorkspaceSettings settings = new WorkspaceSettings(
-			current.settings().timezone(), current.settings().requireChangeNoteWhenSubmitted(), notifications
+			current.settings().timezone(), current.settings().requireChangeNoteWhenSubmitted(), notifications,
+			current.settings().commitRules()
 		);
 		WorkspaceState updated = copy(current, current.sessions(), current.submissions(), settings, current.lastSyncedAt());
 		store(updated);

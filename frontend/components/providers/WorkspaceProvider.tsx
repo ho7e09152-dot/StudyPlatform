@@ -77,6 +77,7 @@ interface WorkspaceContextValue {
     key: keyof Workspace["settings"]["notifications"],
   ) => Promise<void>;
   saveWorkspaceGeneral: (name: string, timezone: string) => Promise<void>;
+  saveCommitRules: (rules: Workspace["settings"]["commitRules"]) => Promise<void>;
   deleteCurrentWorkspace: () => Promise<void>;
   migrateRepositoryLayout: (treeFingerprint: string) => Promise<void>;
   dismissToast: () => void;
@@ -552,6 +553,24 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     notify("Workspace 정보를 저장했습니다");
   }, [backendConnected, notify, replaceWorkspace, workspace]);
 
+  const saveCommitRules = useCallback(async (rules: Workspace["settings"]["commitRules"]) => {
+    const next = {
+      ...workspace,
+      settings: { ...workspace.settings, commitRules: rules },
+    };
+    if (!backendConnected) {
+      replaceWorkspace(next);
+      notify("커밋 규칙을 저장했습니다");
+      return;
+    }
+    const updated = await updateWorkspaceSettings(workspace.id, {
+      name: workspace.name,
+      settings: next.settings,
+    });
+    replaceWorkspace(updated);
+    notify("커밋 규칙을 저장했습니다");
+  }, [backendConnected, notify, replaceWorkspace, workspace]);
+
   const deleteCurrentWorkspace = useCallback(async () => {
     if (backendConnected) {
       await softDeleteWorkspace(workspace.id);
@@ -598,6 +617,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     cancelSession,
     toggleNotification,
     saveWorkspaceGeneral,
+    saveCommitRules,
     deleteCurrentWorkspace,
     migrateRepositoryLayout,
     dismissToast: () => setToast(null),

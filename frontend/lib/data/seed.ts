@@ -329,6 +329,10 @@ export const initialWorkspaces: Workspace[] = [
     settings: {
       timezone: "Asia/Seoul",
       requireChangeNoteWhenSubmitted: true,
+      commitRules: {
+        submissionTemplate: "{action}: {name} · {date} · {item}",
+        submissionGuidance: "기본 규칙을 그대로 사용하거나 알아보기 쉽게 수정할 수 있습니다.",
+      },
       notifications: {
         scheduleChanges: true,
         submissionMismatch: true,
@@ -362,6 +366,10 @@ export const initialWorkspaces: Workspace[] = [
     settings: {
       timezone: "Asia/Seoul",
       requireChangeNoteWhenSubmitted: true,
+      commitRules: {
+        submissionTemplate: "{action}: {name} · {date} · {item}",
+        submissionGuidance: "기본 규칙을 그대로 사용하거나 알아보기 쉽게 수정할 수 있습니다.",
+      },
       notifications: {
         scheduleChanges: true,
         submissionMismatch: true,

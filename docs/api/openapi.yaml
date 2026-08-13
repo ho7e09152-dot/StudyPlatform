@@ -2082,16 +2082,37 @@ components:
           $ref: "#/components/schemas/Workspace"
     WorkspaceSettings:
       type: object
+      required: [timezone, requireChangeNoteWhenSubmitted, notifications, commitRules]
       properties:
+        timezone:
+          type: string
+          example: Asia/Seoul
+        requireChangeNoteWhenSubmitted:
+          type: boolean
         notifications:
           type: object
+          required: [scheduleChanges, submissionMismatch, syncFailures]
           properties:
-            deadline:
+            scheduleChanges:
               type: boolean
-            submission:
+            submissionMismatch:
               type: boolean
-            sessionChanged:
+            syncFailures:
               type: boolean
+        commitRules:
+          $ref: "#/components/schemas/CommitRules"
+    CommitRules:
+      type: object
+      required: [submissionTemplate, submissionGuidance]
+      properties:
+        submissionTemplate:
+          type: string
+          description: "지원 변수: {action}, {name}, {date}, {item}, {itemId}, {session}. 적용 결과는 최대 200자입니다."
+          example: "{action}: {name} · {date} · {item}"
+        submissionGuidance:
+          type: string
+          maxLength: 240
+          example: 기본 규칙을 그대로 사용하거나 알아보기 쉽게 수정할 수 있습니다.
     CreateWorkspaceRequest:
       type: object
       required:

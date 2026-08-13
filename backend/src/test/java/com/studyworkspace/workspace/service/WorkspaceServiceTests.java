@@ -12,6 +12,7 @@ import com.studyworkspace.workspace.domain.WorkspaceModels.SubmissionRequest;
 import com.studyworkspace.workspace.domain.WorkspaceModels.WorkspaceState;
 import com.studyworkspace.workspace.domain.WorkspaceModels.WorkspaceSettings;
 import com.studyworkspace.workspace.domain.WorkspaceModels.Notifications;
+import com.studyworkspace.workspace.domain.WorkspaceModels.CommitRules;
 import com.studyworkspace.workspace.domain.WorkspaceModels.UpdateWorkspaceRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -199,6 +200,55 @@ class WorkspaceServiceTests {
 			.isInstanceOf(WorkspaceException.class)
 			.extracting("code")
 			.isEqualTo("INVALID_TIMEZONE");
+	}
+
+	@Test
+	void persistsWorkspaceCommitRulesAndGuidance() {
+		WorkspaceState workspace = service.get("workspace-evening");
+		CommitRules rules = new CommitRules(
+			"study: {name} / {date} / {item}",
+			"팀 규칙에 맞는 커밋 메시지인지 확인해 주세요."
+		);
+
+		WorkspaceState updated = service.update(
+			workspace.id(),
+			new UpdateWorkspaceRequest(
+				workspace.name(),
+				new WorkspaceSettings(
+					workspace.settings().timezone(),
+					workspace.settings().requireChangeNoteWhenSubmitted(),
+					workspace.settings().notifications(),
+					rules
+				)
+			)
+		);
+
+		assertThat(updated.settings().commitRules()).isEqualTo(rules);
+		WorkspaceService reloaded = new WorkspaceService(
+			new ObjectMapper(), temporaryDirectory.resolve("state.json").toString(), true
+		);
+		assertThat(reloaded.get(workspace.id()).settings().commitRules()).isEqualTo(rules);
+	}
+
+	@Test
+	void rejectsUnsupportedCommitRuleVariables() {
+		WorkspaceState workspace = service.get("workspace-evening");
+
+		assertThatThrownBy(() -> service.update(
+			workspace.id(),
+			new UpdateWorkspaceRequest(
+				workspace.name(),
+				new WorkspaceSettings(
+					workspace.settings().timezone(),
+					true,
+					workspace.settings().notifications(),
+					new CommitRules("submit: {unknown}", "확인해 주세요.")
+				)
+			)
+		))
+			.isInstanceOf(WorkspaceException.class)
+			.extracting("code")
+			.isEqualTo("INVALID_COMMIT_RULES");
 	}
 
 	@Test
