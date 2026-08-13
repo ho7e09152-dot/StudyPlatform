@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { getLoginNoticeState } from "../lib/auth/loginState.ts";
 import { safeAppReturnUrl } from "../lib/auth/redirects.ts";
+import { getDemoEntryUrl } from "../lib/demo/session.ts";
 
 test("safe return paths allow internal deep links and reject open redirects", () => {
   assert.equal(safeAppReturnUrl("/library/sessions/2026-07-23?member=12"), "/library/sessions/2026-07-23?member=12");
@@ -10,6 +11,12 @@ test("safe return paths allow internal deep links and reject open redirects", ()
   assert.equal(safeAppReturnUrl("//example.com"), "/today");
   assert.equal(safeAppReturnUrl("/\\example.com"), "/today");
   assert.equal(safeAppReturnUrl("/today\nLocation:https://example.com"), "/today");
+});
+
+test("demo entry keeps only safe in-app return paths", () => {
+  assert.equal(getDemoEntryUrl("/library"), "/demo?returnTo=%2Flibrary");
+  assert.equal(safeAppReturnUrl(new URL(getDemoEntryUrl("/schedule"), "http://localhost").searchParams.get("returnTo")), "/schedule");
+  assert.equal(safeAppReturnUrl("https://example.com"), "/today");
 });
 
 test("OAuth errors keep cancellation separate from authentication failure", () => {

@@ -10,11 +10,34 @@ function captureUnexpectedErrors(page: Page) {
 }
 
 async function openWorkspacePage(page: Page, path: string) {
-  await page.goto(path);
+  const publicPath = ["/", "/login", "/auth/callback", "/terms", "/privacy", "/demo"]
+    .some((candidate) => path === candidate || path.startsWith(`${candidate}?`));
+  await page.goto(publicPath ? path : `/demo?returnTo=${encodeURIComponent(path)}`);
   await page.waitForLoadState("networkidle");
 }
 
 test.describe("Workspace release smoke", () => {
+  test("demo data is available only after the explicit demo entry", async ({ browser }) => {
+    const context = await browser.newContext();
+    const realPage = await context.newPage();
+    await realPage.route("**/api/v1/auth/me", (route) => route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({ code: "AUTH_REQUIRED", message: "GitLab 로그인이 필요합니다." }),
+    }));
+    await realPage.goto("/today");
+    await expect(realPage).toHaveURL(/\/login\?oauthError=session_expired/);
+    await expect(realPage.getByRole("heading", { name: "Study-ing 시작하기" })).toBeVisible();
+
+    const demoPage = await context.newPage();
+    await demoPage.goto("/");
+    await demoPage.getByRole("link", { name: "데모 둘러보기" }).first().click();
+    await expect(demoPage).toHaveURL(/\/today$/);
+    await expect(demoPage.getByRole("heading", { name: "오늘 함께 공부하기" })).toBeVisible();
+    await expect(demoPage.getByText("저녁 스터디").first()).toBeVisible();
+    await context.close();
+  });
+
   test("오늘 페이지에서 활동함과 공통 제출 흐름이 이어진다", async ({ page }) => {
     const errors = captureUnexpectedErrors(page);
     await openWorkspacePage(page, "/today");
@@ -260,6 +283,11 @@ test.describe("Workspace release smoke", () => {
 		await expect(page.getByText("GitLab 계정", { exact: true })).toBeVisible();
 		await expect(page.getByText("GitHub 계정", { exact: true })).toHaveCount(0);
 
+		await page.route("**/api/v1/auth/me", (route) => route.fulfill({
+			status: 200,
+			contentType: "application/json",
+			body: JSON.stringify({ authenticated: false }),
+		}));
 		await openWorkspacePage(page, "/login");
 		await expect(page.getByRole("link", { name: /GitLab로 계속하기/ })).toBeVisible();
 		await expect(page.getByRole("link", { name: /GitHub/ })).toHaveCount(0);

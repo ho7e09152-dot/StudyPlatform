@@ -6,6 +6,7 @@ import { getAuthSession, updateAccountProfile, type AuthenticatedGitLabUser } fr
 import { ProfileSetupPage } from "@/components/auth/ProfileSetupPage";
 import { safeAppReturnUrl } from "@/lib/auth/redirects";
 import { getUserFacingError } from "@/lib/api/errors";
+import { isDemoSessionActive } from "@/lib/demo/session";
 
 interface AuthContextValue {
   mode: "gitlab-oauth" | "demo";
@@ -15,17 +16,21 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
-const demoMode = process.env.NEXT_PUBLIC_APP_MODE === "demo";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<"loading" | "ready" | "error">(
-    demoMode ? "ready" : "loading",
-  );
+  const [mode, setMode] = useState<AuthContextValue["mode"]>("gitlab-oauth");
+  const [state, setState] = useState<"loading" | "ready" | "error">("loading");
   const [user, setUser] = useState<AuthenticatedGitLabUser | null>(null);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (demoMode) return;
+    if (isDemoSessionActive()) {
+      const timer = window.setTimeout(() => {
+        setMode("demo");
+        setState("ready");
+      }, 0);
+      return () => window.clearTimeout(timer);
+    }
     const controller = new AbortController();
     void getAuthSession(controller.signal)
       .then((session) => {
@@ -54,8 +59,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ mode: demoMode ? "demo" : "gitlab-oauth", user, checking: state === "loading", setUser }),
-    [state, user],
+    () => ({ mode, user, checking: state === "loading", setUser }),
+    [mode, state, user],
   );
 
   if (state === "error") {
@@ -68,7 +73,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!demoMode && state === "ready" && user && !user.profileCompleted) {
+  if (state === "loading") return null;
+
+  if (mode !== "demo" && state === "ready" && user && !user.profileCompleted) {
     return <ProfileSetupPage user={user} onSubmit={async (input) => {
       setUser(await updateAccountProfile(input));
       const requested = new URLSearchParams(window.location.search).get("returnTo");

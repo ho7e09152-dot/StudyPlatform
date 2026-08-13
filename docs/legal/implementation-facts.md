@@ -40,6 +40,7 @@
 | CONFIRMED | `user_accounts` | `terms_version`, `terms_agreed_at`, `privacy_version`, `privacy_agreed_at`, `minimum_age_confirmed_at` | 최초 onboarding 동의 시 각각 기록; 일반 profile 수정은 동의 시각을 변경하지 않음 | 약관·처리방침 동의와 만 14세 이상 확인 | 없음 | 계정 row와 함께 삭제 |
 | CONFIRMED | Browser localStorage `study-workspace-theme` | theme mode, accent color | 테마 변경 시 | 즉시 화면 반영 및 demo/실패 rollback | 브라우저 저장소 평문 | 자동 expiry 없음; 사용자가 browser storage 삭제 가능 |
 | CONFIRMED | Browser localStorage `study-demo-library-documents` | demo 팀 문서 title/body/author/time | demo mode 문서 조작 | demo 기능 | 평문 | 자동 expiry 없음; 실제 OAuth Workspace 데이터와 별개 |
+| CONFIRMED | Browser sessionStorage `study-ing-demo-session` | 데모 활성 여부 | 랜딩/로그인의 명시적 데모 진입 | 현재 탭에서 실제 인증 데이터와 데모 데이터 분리 | 평문; 인증정보 아님 | 탭 종료 또는 데모 종료/로그인 진입 시 제거 |
 
 ### 3.2 OAuth credentials and sessions
 

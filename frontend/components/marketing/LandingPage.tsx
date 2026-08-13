@@ -17,8 +17,7 @@ import {
   ShieldCheck,
   X,
 } from "lucide-react";
-
-const demoMode = process.env.NEXT_PUBLIC_APP_MODE === "demo";
+import { getDemoEntryUrl } from "@/lib/demo/session";
 
 const coreValues = [
   {
@@ -158,9 +157,7 @@ export function LandingPage() {
                 <Link className="button button--primary public-primary-cta" href="/login">
                   <Gitlab size={18} aria-hidden="true" /> GitLab로 시작하기 <ArrowRight size={17} aria-hidden="true" />
                 </Link>
-                {demoMode ? (
-                  <Link className="button public-secondary-cta" href="/today">데모 둘러보기</Link>
-                ) : null}
+                <Link className="button public-secondary-cta" href={getDemoEntryUrl()}>데모 둘러보기</Link>
               </div>
               <p className="public-hero__helper"><ShieldCheck size={15} aria-hidden="true" /> GitLab OAuth로 연결하며 개인 액세스 토큰을 직접 입력할 필요가 없습니다.</p>
             </div>
@@ -249,7 +246,7 @@ export function LandingPage() {
               <div className="public-showcase-panel__copy">
                 <h3>{activeItem.title}</h3>
                 <p>{activeItem.description}</p>
-                {demoMode ? <Link href={`/${activeItem.id}`}>데모에서 확인하기 <ArrowRight size={15} aria-hidden="true" /></Link> : null}
+                <Link href={getDemoEntryUrl(`/${activeItem.id}`)}>데모에서 확인하기 <ArrowRight size={15} aria-hidden="true" /></Link>
               </div>
               <div className="public-showcase-panel__image">
                 <ProductScreenshot item={activeItem} />
@@ -282,7 +279,7 @@ export function LandingPage() {
             </div>
             <div>
               <Link className="button button--primary public-primary-cta" href="/login">GitLab로 시작하기 <ArrowRight size={17} aria-hidden="true" /></Link>
-              {demoMode ? <Link className="button public-secondary-cta" href="/today">데모 둘러보기</Link> : null}
+              <Link className="button public-secondary-cta" href={getDemoEntryUrl()}>데모 둘러보기</Link>
             </div>
           </div>
         </section>

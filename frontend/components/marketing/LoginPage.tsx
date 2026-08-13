@@ -10,12 +10,11 @@ import { AuthProviderButton } from "@/components/auth/AuthProviderButton";
 import { getAuthSession } from "@/lib/api/services/authApi";
 import { getLoginNoticeState } from "@/lib/auth/loginState";
 import { safeAppReturnUrl } from "@/lib/auth/redirects";
+import { clearDemoSession, getDemoEntryUrl } from "@/lib/demo/session";
 
 const apiBaseUrl = (
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
 ).replace(/\/+$/, "");
-
-const demoMode = process.env.NEXT_PUBLIC_APP_MODE === "demo";
 
 export function LoginPage() {
   const searchParams = useSearchParams();
@@ -27,7 +26,7 @@ export function LoginPage() {
   const policyReturnQuery = encodeURIComponent(currentLoginPath);
 
   useEffect(() => {
-    if (demoMode) return;
+    clearDemoSession();
     const controller = new AbortController();
     void getAuthSession(controller.signal)
       .then((session) => {
@@ -95,15 +94,11 @@ export function LoginPage() {
             {notice?.actionLabel ?? "GitLab로 계속하기"}
           </AuthProviderButton>
 
-          {demoMode ? (
-            <>
-              <div className="auth-entry-divider"><span>또는</span></div>
-              <Link className="auth-entry-demo" href="/today">
-                <FolderGit2 size={18} aria-hidden="true" />
-                <span>데모 Workspace 둘러보기</span>
-              </Link>
-            </>
-          ) : null}
+          <div className="auth-entry-divider"><span>또는</span></div>
+          <Link className="auth-entry-demo" href={getDemoEntryUrl(returnUrl)}>
+            <FolderGit2 size={18} aria-hidden="true" />
+            <span>데모 Workspace 둘러보기</span>
+          </Link>
 
           <div className="auth-entry-security-note">
             <ShieldCheck size={18} aria-hidden="true" />

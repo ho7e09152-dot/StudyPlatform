@@ -34,6 +34,8 @@ test("server-renders the public landing page", async () => {
   assert.doesNotMatch(html, /ssafy_icon|>STUDY</);
   assert.match(html, /스터디의 계획부터 기록까지/);
   assert.match(html, /GitLab로 시작하기/);
+  assert.match(html, /데모 둘러보기/);
+  assert.match(html, /\/demo\?returnTo=%2Ftoday/);
   assert.match(html, /Workspace 연결/);
   assert.match(html, /실제 제품 화면/);
   assert.match(html, /today-desktop\.webp/);
@@ -71,7 +73,7 @@ test("unknown public routes render the shared 404 state", async () => {
   assert.match(html, /오늘로 이동/);
 });
 
-test("login page renders the production GitLab OAuth entry point", async () => {
+test("login page renders real OAuth and an explicitly isolated demo entry", async () => {
   const response = await render("/login");
   assert.equal(response.status, 200);
 
@@ -82,9 +84,18 @@ test("login page renders the production GitLab OAuth entry point", async () => {
   assert.match(html, /함께 공부하고/);
   assert.match(html, /GitLab로 계속하기/);
   assert.doesNotMatch(html, /GitHub로 계속하기|GitHub 계정/);
-  assert.doesNotMatch(html, /데모 Workspace 둘러보기/);
+  assert.match(html, /데모 Workspace 둘러보기/);
+  assert.match(html, /\/demo\?returnTo=%2Ftoday/);
   assert.match(html, /\/api\/v1\/auth\/gitlab\/login/);
   assert.doesNotMatch(html, /CONNECTED WORKFLOW|login-background__orb|GitLab learning hub/);
+});
+
+test("demo entry is a dedicated transient route", async () => {
+  const response = await render("/demo?returnTo=%2Fschedule");
+  assert.equal(response.status, 200);
+  const html = await response.text();
+  assert.match(html, /데모 Workspace를 준비하고 있어요/);
+  assert.match(html, /aria-live="polite"/);
 });
 
 test("login states use concise shared user-facing notices", async () => {

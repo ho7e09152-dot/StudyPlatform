@@ -7,7 +7,7 @@ import { WorkspaceProvider } from "@/components/providers/WorkspaceProvider";
 import { AppShell } from "@/components/shell/AppShell";
 import { GitLabConnectionProvider } from "@/lib/api/hooks/useGitLabConnection";
 
-const publicRoutes = new Set(["/", "/login", "/auth/callback", "/terms", "/privacy"]);
+const publicRoutes = new Set(["/", "/login", "/demo", "/auth/callback", "/terms", "/privacy"]);
 const protectedPrefixes = [
   "/today",
   "/schedule",

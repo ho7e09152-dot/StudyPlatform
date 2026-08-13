@@ -27,13 +27,14 @@ cp frontend/.env.example frontend/.env.local
 
 | 영역 | 환경변수 | 용도 |
 |---|---|---|
-| Frontend | `NEXT_PUBLIC_API_BASE_URL` | Spring API 주소 |
-| Frontend | `NEXT_PUBLIC_APP_MODE` | `production` 또는 명시적인 로컬 demo/test mode |
+| Frontend | `NEXT_PUBLIC_API_BASE_URL` | Backend API의 공개 origin. 동일 origin 배포를 권장 |
 | GitLab OAuth | `GITLAB_OAUTH_*` | 로그인, 프로젝트 연결과 Repository 작업 |
 | GitHub OAuth | `GITHUB_OAUTH_*` | Settings의 Connected Account linking만 활성화 |
 | Credential | `OAUTH_TOKEN_ENCRYPTION_KEY` | Provider credential AES-GCM 암호화 |
 | Database | `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD` | 설정하지 않으면 로컬 H2 file DB |
 | Browser | `FRONTEND_URL`, `FRONTEND_ORIGINS` | redirect와 CORS 허용 주소 |
+
+데모는 빌드 모드가 아니다. 랜딩 또는 로그인 화면의 `데모 Workspace 둘러보기`가 `/demo`를 거쳐 현재 브라우저 탭의 `sessionStorage`에만 데모 세션을 활성화한다. 일반 보호 경로는 항상 실제 인증 세션과 API를 사용한다.
 
 GitHub 설정은 GitHub 로그인이나 Repository 기능을 활성화하지 않습니다. 정확한 capability 경계는 [Provider capability](architecture/providers/capabilities.md)를 따릅니다.
 

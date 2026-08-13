@@ -24,7 +24,6 @@ export default defineConfig({
   },
   webServer: {
     command: `npm run dev -- --port ${port}`,
-    env: { NEXT_PUBLIC_APP_MODE: "demo" },
     url: `http://localhost:${port}/today`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

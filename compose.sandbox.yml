@@ -64,11 +64,9 @@ services:
       context: ./frontend
       args:
         NEXT_PUBLIC_API_BASE_URL: ${SANDBOX_PUBLIC_ORIGIN}
-        NEXT_PUBLIC_APP_MODE: demo
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_BASE_URL: ${SANDBOX_PUBLIC_ORIGIN}
-      NEXT_PUBLIC_APP_MODE: demo
     expose:
       - "3000"
     healthcheck:

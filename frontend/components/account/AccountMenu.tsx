@@ -4,13 +4,16 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { ChevronUp, LogOut, Moon, Sun, UserRound } from "lucide-react";
 import { useAppTheme } from "@/components/providers/AppThemeProvider";
+import { useAuth } from "@/components/providers/AuthProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { logout } from "@/lib/api/services/authApi";
 import type { StudyMember } from "@/lib/domain/types";
 import { getUserFacingError } from "@/lib/api/errors";
+import { clearDemoSession } from "@/lib/demo/session";
 
 export function AccountMenu({ member }: { member: StudyMember }) {
   const { themeMode, setThemeMode, saving } = useAppTheme();
+  const { mode } = useAuth();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
@@ -77,13 +80,18 @@ export function AccountMenu({ member }: { member: StudyMember }) {
               type="button"
               role="menuitem"
               onClick={() => {
+                if (mode === "demo") {
+                  clearDemoSession();
+                  window.location.href = "/login";
+                  return;
+                }
                 void logout().finally(() => {
                   window.location.href = "/login";
                 });
               }}
             >
               <LogOut size={17} />
-              <span><strong>로그아웃</strong><small>현재 기기에서 세션 종료</small></span>
+              <span><strong>{mode === "demo" ? "데모 종료" : "로그아웃"}</strong><small>{mode === "demo" ? "로그인 화면으로 돌아가기" : "현재 기기에서 세션 종료"}</small></span>
             </button>
           </div>
         ) : null}
