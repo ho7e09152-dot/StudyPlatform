@@ -8,11 +8,25 @@ import { AppShell } from "@/components/shell/AppShell";
 import { GitLabConnectionProvider } from "@/lib/api/hooks/useGitLabConnection";
 
 const publicRoutes = new Set(["/", "/login", "/auth/callback", "/terms", "/privacy"]);
+const protectedPrefixes = [
+  "/today",
+  "/schedule",
+  "/records",
+  "/library",
+  "/repository",
+  "/settings",
+  "/workspaces",
+  "/onboarding",
+];
 
 export function RootShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
 
-  if (publicRoutes.has(pathname)) {
+  const protectedRoute = protectedPrefixes.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
+  );
+
+  if (publicRoutes.has(pathname) || !protectedRoute) {
     return children;
   }
 

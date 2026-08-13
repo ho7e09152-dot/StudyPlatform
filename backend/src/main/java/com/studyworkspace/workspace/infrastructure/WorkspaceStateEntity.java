@@ -1,5 +1,7 @@
 package com.studyworkspace.workspace.infrastructure;
 
+import static com.studyworkspace.policy.DataRetentionPolicy.WORKSPACE_SOFT_DELETE;
+
 import java.time.Instant;
 
 import com.studyworkspace.workspace.domain.WorkspaceModels.WorkspaceState;
@@ -89,7 +91,7 @@ public class WorkspaceStateEntity {
 			entity.deletedAt = "SOFT_DELETED".equals(state.status())
 				? previous != null && previous.deletedAt != null ? previous.deletedAt : now
 				: null;
-			entity.deletionExpiresAt = entity.deletedAt == null ? null : entity.deletedAt.plusSeconds(7 * 24 * 60 * 60L);
+			entity.deletionExpiresAt = entity.deletedAt == null ? null : entity.deletedAt.plus(WORKSPACE_SOFT_DELETE);
 			entity.lastSyncedAt = parseInstant(state.lastSyncedAt());
 			entity.stateJson = objectMapper.writeValueAsString(state);
 			return entity;
@@ -100,7 +102,13 @@ public class WorkspaceStateEntity {
 
 	public WorkspaceState toState(ObjectMapper objectMapper) {
 		try {
-			return objectMapper.readValue(stateJson, WorkspaceState.class);
+			WorkspaceState state = objectMapper.readValue(stateJson, WorkspaceState.class);
+			if (state.repository() != null || gitLabProjectId <= 0) return state;
+			return new WorkspaceState(
+				state.id(), state.name(), state.gitlabProjectId(), state.gitlabProjectPath(), state.defaultBranch(),
+				state.repositoryBasePath(), state.repositorySchemaVersion(), state.importMode(), state.status(),
+				state.lastSyncedAt(), state.members(), state.sessions(), state.submissions(), state.settings()
+			);
 		} catch (Exception exception) {
 			throw new IllegalStateException("DB의 Workspace 상태를 읽지 못했습니다: " + id, exception);
 		}

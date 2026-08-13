@@ -6,21 +6,20 @@ import {
   ArrowRight,
   CalendarDays,
   Check,
+  ChevronRight,
+  Circle,
   Clock3,
   ExternalLink,
-  MessageCircle,
-  Send,
-  Sparkles,
   Users,
 } from "lucide-react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
-import { TeamFeed } from "@/components/feed/TeamFeed";
 import { Avatar } from "@/components/ui/Avatar";
-import { Modal } from "@/components/ui/Modal";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { PreSubmissionWarning } from "@/components/review/PreSubmissionWarning";
 import { MemberDetailDialog } from "./MemberDetailDialog";
 import { SubmissionDialog } from "./SubmissionDialog";
-import { SESSION_TYPE_META, SUBMISSION_TYPE_LABEL } from "@/lib/domain/constants";
+import { TodayNotice } from "./TodayNotice";
+import { SESSION_TYPE_META } from "@/lib/domain/constants";
 import { formatDate, formatDateTime, formatTime } from "@/lib/domain/format";
 import {
   getActiveRequiredItems,
@@ -28,7 +27,7 @@ import {
   getMemberProgress,
   getSubmissionKey,
 } from "@/lib/domain/metrics";
-import type { MemberSubmissionFile, StudyMember, StudySession } from "@/lib/domain/types";
+import type { MemberProgress, StudyMember, StudySession } from "@/lib/domain/types";
 
 export function TodayWorkspace() {
   const { workspace, referenceDate } = useWorkspace();
@@ -38,7 +37,11 @@ export function TodayWorkspace() {
     return (
       <div className="page-stack">
         <header className="page-heading page-heading--today">
-          <div><p className="eyebrow">{formatDate(referenceDate, true)} · TODAY</p><h1>오늘 함께 공부하기</h1><p>내 학습과 팀의 흐름을 한곳에서 확인합니다.</p></div>
+          <div>
+            <p className="eyebrow">{formatDate(referenceDate, true)}</p>
+            <h1>오늘 함께 공부하기</h1>
+            <p>지금 해야 할 학습을 확인하고 바로 시작해 보세요.</p>
+          </div>
         </header>
         <section className="surface schedule-empty today-empty" aria-labelledby="today-empty-title">
           <CalendarDays size={30} aria-hidden="true" />
@@ -53,41 +56,52 @@ export function TodayWorkspace() {
   return <TodaySession session={session} />;
 }
 
+function getMemberStatus(progress: MemberProgress, currentUserId: string) {
+  if (progress.member.id !== currentUserId && progress.status === "COMPLETE") {
+    return { label: "리뷰 필요", tone: "warning" };
+  }
+  if (progress.status === "COMPLETE") return { label: "완료", tone: "success" };
+  if (progress.status === "PARTIAL") return { label: "진행 중", tone: "neutral" };
+  return { label: "시작 전", tone: "neutral" };
+}
+
 function TodaySession({ session }: { session: StudySession }) {
-  const { workspace, currentUserId, referenceDate, submitItem } = useWorkspace();
+  const { workspace, currentUserId, submitItem } = useWorkspace();
   const [submissionItemId, setSubmissionItemId] = useState<string | null>(null);
   const [selectedMember, setSelectedMember] = useState<StudyMember | null>(null);
   const [pendingMember, setPendingMember] = useState<StudyMember | null>(null);
 
   const requiredItems = useMemo(() => getActiveRequiredItems(session), [session]);
+  const activeItems = useMemo(
+    () => session.items.filter((item) => item.status === "active"),
+    [session.items],
+  );
   const metrics = useMemo(() => getDashboardMetrics(workspace, session), [session, workspace]);
   const members = useMemo(() => getMemberProgress(workspace, session), [session, workspace]);
   const myProgress = members.find((progress) => progress.member.id === currentUserId)!;
   const myFile = workspace.submissions[getSubmissionKey(session.folder, currentUserId)];
-  const nextItem = requiredItems.find((item) => !myFile?.submissions.some((entry) => entry.itemId === item.id));
+  const nextItem = requiredItems.find(
+    (item) => !myFile?.submissions.some((entry) => entry.itemId === item.id),
+  );
   const meta = SESSION_TYPE_META[session.type];
+  const started = Boolean(myFile?.submissions.length);
+  const focusActionLabel = nextItem
+    ? started
+      ? "계속 학습하기"
+      : "학습 시작하기"
+    : "내 제출 보기";
+  const changedBy = workspace.members.find(
+    (member) => member.id === session.updatedBy || member.username === session.updatedBy,
+  )?.displayName ?? session.updatedBy;
 
-  const submittedMembers = members
-    .map((progress) => ({
-      progress,
-      file: workspace.submissions[getSubmissionKey(session.folder, progress.member.id)],
-    }))
-    .filter((entry): entry is { progress: typeof members[number]; file: MemberSubmissionFile } => Boolean(entry.file))
-    .sort((a, b) => b.file.updatedAt.localeCompare(a.file.updatedAt));
-
-  const recommended = submittedMembers.find((entry) => entry.progress.member.id !== currentUserId);
-  const missedSessions = Object.values(workspace.sessions)
-    .filter((candidate) => candidate.status === "active" && candidate.date < referenceDate)
-    .map((candidate) => {
-      const required = getActiveRequiredItems(candidate);
-      const file = workspace.submissions[getSubmissionKey(candidate.folder, currentUserId)];
-      const missing = required.filter((item) => !file?.submissions.some((entry) => entry.itemId === item.id));
-      return { session: candidate, missing };
-    })
-    .filter((entry) => entry.missing.length)
-    .sort((a, b) => b.session.date.localeCompare(a.session.date));
+  function openFocusAction() {
+    const itemId = nextItem?.id ?? requiredItems[0]?.id ?? activeItems[0]?.id;
+    if (itemId) setSubmissionItemId(itemId);
+  }
 
   function requestMember(member: StudyMember) {
+    const file = workspace.submissions[getSubmissionKey(session.folder, member.id)];
+    if (!file) return;
     if (member.id !== currentUserId && nextItem) {
       setPendingMember(member);
       return;
@@ -99,118 +113,165 @@ function TodaySession({ session }: { session: StudySession }) {
     <div className="page-stack today-collab-page">
       <header className="page-heading page-heading--today">
         <div>
-          <p className="eyebrow">{formatDate(session.date, true)} · TOGETHER</p>
+          <p className="eyebrow">{formatDate(session.date, true)}</p>
           <h1>오늘 함께 공부하기</h1>
-          <p>내 할 일을 끝내고, 팀원의 풀이와 리뷰에서 한 번 더 배워보세요.</p>
+          <p>지금 해야 할 학습을 확인하고 가장 빠르게 다음 행동을 시작해 보세요.</p>
         </div>
-        <button type="button" className="button button--primary" onClick={() => setSubmissionItemId(nextItem?.id ?? requiredItems[0]?.id)}>
-          <Send size={17} /> {nextItem ? "이어서 제출하기" : "내 제출 확인"}
-        </button>
       </header>
 
-      <section className="today-focus" aria-labelledby="today-focus-title">
-        <div className="today-focus__icon"><Sparkles size={22} /></div>
-        <div>
-          <span>지금 가장 먼저 할 일</span>
-          <h2 id="today-focus-title">{nextItem?.title ?? "오늘 필수 학습을 모두 마쳤어요"}</h2>
-          <p>{nextItem ? `${SUBMISSION_TYPE_LABEL[nextItem.submitType]} 제출 · ${formatTime(session.deadline)} 마감` : "팀원의 제출을 읽고 짧은 리뷰를 남겨보세요."}</p>
+      <section className="surface today-focus" aria-labelledby="today-focus-title">
+        <div className="today-focus__heading">
+          <span className={`type-chip type-chip--${meta.tone}`}>{meta.label}</span>
+          <div>
+            <p>지금 해야 할 학습</p>
+            <h2 id="today-focus-title">{session.title}</h2>
+          </div>
         </div>
+
         <div className="today-focus__progress">
-          <strong>{myProgress.completedItems}/{myProgress.requiredItems}</strong>
+          <div>
+            <span>{myProgress.completedItems} / {myProgress.requiredItems} 완료</span>
+          </div>
           <ProgressBar value={myProgress.completionRate} label="내 오늘 학습 완료율" />
         </div>
-        <button type="button" className="button button--secondary" onClick={() => nextItem ? setSubmissionItemId(nextItem.id) : recommended && requestMember(recommended.progress.member)}>
-          {nextItem ? "학습 시작" : "팀 제출 보기"}<ArrowRight size={16} />
-        </button>
+
+        <div className="today-focus__next">
+          <div>
+            <small>{nextItem ? "다음 학습" : "오늘 학습"}</small>
+            <strong>{nextItem?.title ?? "필수 학습을 모두 마쳤어요"}</strong>
+            <span><Clock3 size={14} aria-hidden="true" /> 1차 마감 {formatTime(session.deadline)}</span>
+          </div>
+          <button
+            type="button"
+            className="button button--primary"
+            disabled={!activeItems.length}
+            onClick={openFocusAction}
+          >
+            {focusActionLabel}<ArrowRight size={16} aria-hidden="true" />
+          </button>
+        </div>
       </section>
 
       {session.change?.changed ? (
-        <section className="today-change-inline">
-          <strong>revision {session.revision}에서 변경됨</strong><span>{session.change.message}</span><small>{session.change.reason}</small>
-        </section>
+        <details className="today-change-notice">
+          <summary>
+            <span className="today-change-notice__marker" aria-hidden="true">!</span>
+            <span>
+              <strong>오늘 일정이 변경되었어요.</strong>
+              <small>{session.change.message}</small>
+            </span>
+            <span className="today-change-notice__action">변경 내용 보기 <ChevronRight size={15} aria-hidden="true" /></span>
+          </summary>
+          <div className="today-change-notice__details">
+            <dl>
+              <div><dt>변경 요약</dt><dd>{session.change.message}</dd></div>
+              <div><dt>변경 사유</dt><dd>{session.change.reason}</dd></div>
+              <div><dt>변경자</dt><dd>{changedBy}</dd></div>
+              <div><dt>변경 시각</dt><dd>{formatDateTime(session.updatedAt)}</dd></div>
+            </dl>
+          </div>
+        </details>
       ) : null}
 
       <div className="today-collab-grid">
         <section className="surface today-plan" aria-labelledby="today-plan-title">
           <header className="today-section-head">
-            <div><span className={`type-chip type-chip--${meta.tone}`}>{meta.short} · {meta.label}</span><h2 id="today-plan-title">{session.title}</h2><p>{session.description}</p></div>
-            <span><Clock3 size={15} /> {formatTime(session.deadline)} 마감</span>
+            <div>
+              <h2 id="today-plan-title">오늘 학습 계획</h2>
+              <p>{activeItems.length}개 학습 항목 · {formatTime(session.deadline)} 마감</p>
+            </div>
           </header>
           <div className="today-plan-list">
-            {session.items.filter((item) => item.status === "active").map((item, index) => {
+            {activeItems.map((item) => {
               const submitted = myFile?.submissions.some((entry) => entry.itemId === item.id);
+              const current = item.id === nextItem?.id;
               return (
-                <article key={item.id}>
-                  <span className={`step-number ${submitted ? "done" : ""}`}>{submitted ? <Check size={15} /> : index + 1}</span>
+                <article key={item.id} className={current ? "is-current" : undefined}>
+                  <span className={`today-plan-status ${submitted ? "is-done" : ""}`} aria-hidden="true">
+                    {submitted ? <Check size={15} /> : <Circle size={15} />}
+                  </span>
                   <div>
                     <strong>{item.title}</strong>
-                    <p>{item.source ?? "직접 학습"} · {SUBMISSION_TYPE_LABEL[item.submitType]}{!item.required ? " · 선택" : ""}</p>
-                    {item.url ? <a href={item.url} target="_blank" rel="noreferrer">학습 자료 열기 <ExternalLink size={13} /></a> : null}
+                    <span className="sr-only">{submitted ? "완료" : current ? "다음 학습" : "미제출"}{!item.required ? ", 선택 항목" : ""}</span>
+                    {item.url ? <a href={item.url} target="_blank" rel="noreferrer">학습 자료 열기 <ExternalLink size={13} aria-hidden="true" /></a> : null}
                   </div>
-                  <button type="button" className={submitted ? "button button--secondary button--small" : "button button--primary button--small"} onClick={() => setSubmissionItemId(item.id)}>{submitted ? "수정" : "제출"}</button>
+                  <button
+                    type="button"
+                    className={current ? "button button--secondary button--small" : `today-row-action${submitted ? " today-row-action--edit" : ""}`}
+                    aria-label={submitted ? `${item.title} 제출 수정` : undefined}
+                    onClick={() => setSubmissionItemId(item.id)}
+                  >
+                    {submitted ? "제출 수정" : current ? "계속하기" : "제출"}
+                  </button>
                 </article>
               );
             })}
           </div>
+          <footer className="today-section-footer">
+            <Link href="/schedule">전체 일정 보기 <ArrowRight size={15} aria-hidden="true" /></Link>
+          </footer>
         </section>
 
         <section className="surface today-team" aria-labelledby="today-team-title">
-          <header className="today-section-head">
-            <div><p className="eyebrow">TEAM ACTIVITY</p><h2 id="today-team-title">오늘의 팀 제출</h2><p>{metrics.submittedItems}/{metrics.totalRequiredSubmissions}건 제출 · {metrics.completedMembers}/{metrics.totalMembers}명 완료</p></div>
-            <Users size={20} />
+          <header className="today-section-head today-team__head">
+            <div>
+              <h2 id="today-team-title">팀 진행 상황</h2>
+              <p>{metrics.completedMembers}명 / {metrics.totalMembers}명 완료</p>
+            </div>
           </header>
+          <div className="today-team__progress">
+            <ProgressBar value={metrics.submissionRate} label="오늘 팀 전체 학습 완료율" />
+          </div>
           <div className="today-team-list">
-            {submittedMembers.length ? submittedMembers.map(({ progress, file }) => {
-              const preview = file.submissions.at(-1)?.value ?? "제출 내용을 확인해 보세요.";
+            {members.length ? members.map((progress) => {
+              const file = workspace.submissions[getSubmissionKey(session.folder, progress.member.id)];
+              const status = getMemberStatus(progress, currentUserId);
               return (
-                <button type="button" key={progress.member.id} onClick={() => requestMember(progress.member)}>
+                <button
+                  type="button"
+                  key={progress.member.id}
+                  disabled={!file}
+                  aria-label={`${progress.member.displayName}, ${progress.completedItems}/${progress.requiredItems}, ${status.label}${file ? ", 제출과 리뷰 보기" : ""}`}
+                  onClick={() => requestMember(progress.member)}
+                >
                   <Avatar member={progress.member} />
                   <span>
-                    <strong>{progress.member.displayName}{progress.member.id === currentUserId ? " (나)" : ""}<em>{progress.completedItems}/{progress.requiredItems}</em></strong>
-                    <p>{preview}</p>
-                    <small>{formatDateTime(file.updatedAt)} · 제출과 리뷰 보기</small>
+                    <strong>{progress.member.displayName}{progress.member.id === currentUserId ? " (나)" : ""}</strong>
                   </span>
-                  <ArrowRight size={17} />
+                  <em>{progress.completedItems} / {progress.requiredItems}</em>
+                  <span className={`status-badge ${status.tone}`}>{status.label}</span>
+                  {file ? <ChevronRight size={16} aria-hidden="true" /> : <span aria-hidden="true" />}
                 </button>
               );
-            }) : <div className="today-team-empty"><Users size={23} /><strong>아직 팀 제출이 없습니다</strong><p>첫 제출이 올라오면 여기에서 함께 확인할 수 있어요.</p></div>}
+            }) : (
+              <div className="today-team-empty"><Users size={23} aria-hidden="true" /><strong>팀원이 없습니다</strong><p>팀원이 참여하면 오늘 진행 상태를 함께 볼 수 있어요.</p></div>
+            )}
           </div>
         </section>
       </div>
 
-      <TeamFeed date={session.date} />
+      <TodayNotice />
 
-      <div className="today-followup-grid">
-        <section className="surface today-review-recommendation">
-          <span className="today-followup-icon"><MessageCircle size={19} /></span>
-          <div>
-            <p className="eyebrow">RECOMMENDED REVIEW</p>
-            <h2>{recommended ? `${recommended.progress.member.displayName}님의 제출을 읽어볼까요?` : "팀원의 첫 제출을 기다리고 있어요"}</h2>
-            <p>{recommended ? "풀이를 비교하고 도움이 되는 점이나 질문을 댓글로 남겨보세요." : "제출이 올라오면 바로 리뷰할 항목을 추천해 드립니다."}</p>
-          </div>
-          {recommended ? <button type="button" className="button button--secondary" onClick={() => requestMember(recommended.progress.member)}>리뷰 열기 <ArrowRight size={16} /></button> : null}
-        </section>
-
-        <section className="surface today-missed-summary">
-          <span><CalendarDays size={18} /></span>
-          <div><strong>{missedSessions.length ? `놓친 일정 ${missedSessions.length}일` : "밀린 학습 없음"}</strong><p>{missedSessions.length ? `가장 최근: ${missedSessions[0].session.title} · ${missedSessions[0].missing.length}개 남음` : "이전 필수 학습을 모두 제출했습니다."}</p></div>
-          <Link href="/schedule">확인하기 <ArrowRight size={15} /></Link>
-        </section>
-      </div>
-
-      {submissionItemId ? <SubmissionDialog workspace={workspace} session={session} currentUserId={currentUserId} initialItemId={submissionItemId} onSubmit={submitItem} onClose={() => setSubmissionItemId(null)} /> : null}
-      {selectedMember ? <MemberDetailDialog workspace={workspace} session={session} member={selectedMember} currentUserId={currentUserId} onClose={() => setSelectedMember(null)} /> : null}
-      {pendingMember ? (
-        <Modal title="내 학습을 마치기 전에 볼까요?" description="다른 사람의 답을 먼저 보면 내 풀이 과정에 영향을 받을 수 있습니다." onClose={() => setPendingMember(null)}>
-          <div className="submission-warning-dialog">
-            <p><strong>{nextItem?.title}</strong> 항목이 아직 미제출 상태입니다. 제출 후 비교해서 보는 것을 권장하지만, 지금 열어보아도 괜찮습니다.</p>
-            <div className="modal-actions">
-              <button type="button" className="button button--secondary" onClick={() => setPendingMember(null)}>내 학습으로 돌아가기</button>
-              <button type="button" className="button button--primary" onClick={() => { setSelectedMember(pendingMember); setPendingMember(null); }}>그래도 보기</button>
-            </div>
-          </div>
-        </Modal>
+      {submissionItemId ? (
+        <SubmissionDialog
+          workspace={workspace}
+          session={session}
+          currentUserId={currentUserId}
+          initialItemId={submissionItemId}
+          onSubmit={submitItem}
+          onClose={() => setSubmissionItemId(null)}
+        />
       ) : null}
+      {selectedMember ? (
+        <MemberDetailDialog
+          workspace={workspace}
+          session={session}
+          member={selectedMember}
+          currentUserId={currentUserId}
+          onClose={() => setSelectedMember(null)}
+        />
+      ) : null}
+      {pendingMember ? <PreSubmissionWarning onClose={() => setPendingMember(null)} onProceed={() => { setSelectedMember(pendingMember); setPendingMember(null); }} onContinueLearning={() => { if (nextItem) setSubmissionItemId(nextItem.id); setPendingMember(null); }} /> : null}
     </div>
   );
 }

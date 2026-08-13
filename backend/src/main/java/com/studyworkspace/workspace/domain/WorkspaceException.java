@@ -11,6 +11,12 @@ public class WorkspaceException extends RuntimeException {
 		this.status = status;
 	}
 
+	public WorkspaceException(String code, String message, int status, Throwable cause) {
+		super(message, cause);
+		this.code = code;
+		this.status = status;
+	}
+
 	public String code() {
 		return code;
 	}

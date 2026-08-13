@@ -52,7 +52,7 @@
 - 인증: 사용자가 누구인지 확인
 - 인가: 특정 Workspace에서 행동할 수 있는지 확인
 - OAuth code: token으로 교환하는 짧고 일회성인 값
-- 앱 세션: 브라우저가 Study Workspace에 로그인했음을 증명
+- 앱 세션: 브라우저가 Study-ing에 로그인했음을 증명
 - GitLab token: 백엔드가 사용자를 대신해 GitLab API를 호출할 때 사용
 - HttpOnly cookie: JavaScript에서 읽지 못하는 쿠키
 - 낙관적 잠금: version이 같을 때만 수정해 동시 덮어쓰기를 방지

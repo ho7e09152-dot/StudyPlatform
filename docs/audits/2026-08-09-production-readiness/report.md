@@ -1,4 +1,4 @@
-# Study Workspace 프로덕션 준비도 감사
+# Study-ing 프로덕션 준비도 감사
 
 - 감사일: 2026-08-09
 - 범위: 랜딩 → OAuth 로그인 → Workspace 선택/연결 → 오늘/일정/제출 → 기록 → 저장소 → 설정/삭제
@@ -162,7 +162,7 @@
 4. 약관·개인정보 동의 및 기본 프로필 확인
 5. OAuth token으로 접근 가능한 프로젝트 검색
 6. 프로젝트 선택 후 권한·기본 브랜치·보호 브랜치 검사
-7. `기존 Study Workspace 가져오기` 또는 `새 구조 초기화` 선택
+7. `기존 Study-ing Workspace 가져오기` 또는 `새 구조 초기화` 선택
 8. 저장소 스키마 스캔: 날짜 폴더, `session.yml`, 멤버 Markdown, 충돌 파일 표시
 9. Workspace 이름·timezone·멤버 파일 매핑 확인
 10. Workspace 생성 트랜잭션 및 초기 sync job 실행

@@ -1,4 +1,4 @@
-# Study Workspace TODO
+# Study-ing TODO
 
 ## 업데이트 항목 1 — 오늘 페이지의 저장소 미리보기를 팀 피드로 교체
 

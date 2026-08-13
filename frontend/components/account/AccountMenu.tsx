@@ -1,24 +1,38 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { ChevronUp, LogOut, Moon, Sun, UserRound } from "lucide-react";
 import { useAppTheme } from "@/components/providers/AppThemeProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { logout } from "@/lib/api/services/authApi";
 import type { StudyMember } from "@/lib/domain/types";
+import { getUserFacingError } from "@/lib/api/errors";
 
-export function AccountMenu({ member, onOpenProfile }: { member: StudyMember; onOpenProfile: () => void }) {
+export function AccountMenu({ member }: { member: StudyMember }) {
   const { themeMode, setThemeMode, saving } = useAppTheme();
   const [open, setOpen] = useState(false);
   const [error, setError] = useState("");
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     function closeOnOutsidePointer(event: PointerEvent) {
       if (open && rootRef.current && !rootRef.current.contains(event.target as Node)) setOpen(false);
     }
+    function closeOnEscape(event: KeyboardEvent) {
+      if (open && event.key === "Escape") {
+        event.preventDefault();
+        setOpen(false);
+        triggerRef.current?.focus();
+      }
+    }
     document.addEventListener("pointerdown", closeOnOutsidePointer);
-    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("pointerdown", closeOnOutsidePointer);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
   }, [open]);
 
   return (
@@ -30,17 +44,16 @@ export function AccountMenu({ member, onOpenProfile }: { member: StudyMember; on
               <Avatar member={member} />
               <span><strong>{member.displayName}</strong><small>@{member.username}</small></span>
             </div>
-            <button
-              type="button"
+            <Link
+              href="/settings/profile"
               role="menuitem"
               onClick={() => {
                 setOpen(false);
-                onOpenProfile();
               }}
             >
               <UserRound size={17} />
-              <span><strong>프로필 설정</strong><small>이름과 강조 색상 변경</small></span>
-            </button>
+              <span><strong>프로필 설정</strong><small>이름과 개인 시간대 관리</small></span>
+            </Link>
             <div className="account-theme-row">
               <span>{themeMode === "DARK" ? <Moon size={17} /> : <Sun size={17} />}<strong>화면 테마</strong></span>
               <button
@@ -53,7 +66,7 @@ export function AccountMenu({ member, onOpenProfile }: { member: StudyMember; on
                 onClick={() => {
                   setError("");
                   void setThemeMode(themeMode === "DARK" ? "LIGHT" : "DARK").catch((requestError) => {
-                    setError(requestError instanceof Error ? requestError.message : "테마를 저장하지 못했습니다.");
+                    setError(getUserFacingError(requestError, "테마를 저장하지 못했습니다."));
                   });
                 }}
               ><span /></button>
@@ -75,6 +88,7 @@ export function AccountMenu({ member, onOpenProfile }: { member: StudyMember; on
           </div>
         ) : null}
         <button
+          ref={triggerRef}
           type="button"
           className="account-row"
           aria-haspopup="menu"

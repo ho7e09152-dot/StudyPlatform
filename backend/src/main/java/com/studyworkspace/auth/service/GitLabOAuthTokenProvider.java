@@ -2,7 +2,7 @@ package com.studyworkspace.auth.service;
 
 import com.studyworkspace.auth.dto.GitLabOAuthSession;
 import com.studyworkspace.auth.security.AuthSessionAttributes;
-import com.studyworkspace.gitlab.dto.GitLabUser;
+import com.studyworkspace.auth.security.StudyIngPrincipal;
 import com.studyworkspace.workspace.domain.WorkspaceException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
@@ -21,17 +21,16 @@ public class GitLabOAuthTokenProvider {
 
 	public GitLabOAuthSession requireValidSession(HttpServletRequest request) {
 		HttpSession session = request.getSession(false);
-		Object stored = session == null ? null : session.getAttribute(AuthSessionAttributes.GITLAB_USER);
-		if (!(stored instanceof GitLabUser user)) {
+		Object stored = session == null ? null : session.getAttribute(AuthSessionAttributes.STUDY_ING_USER);
+		if (!(stored instanceof StudyIngPrincipal user)) {
 			throw new WorkspaceException("AUTH_REQUIRED", "GitLab 로그인이 필요합니다.", 401);
 		}
-		GitLabOAuthSession oauth = accountService.findOAuthSession(user.id())
+		GitLabOAuthSession oauth = accountService.findGitLabOAuthSessionByUserId(user.userId())
 			.orElseThrow(() -> new WorkspaceException("GITLAB_RECONNECT_REQUIRED", "GitLab 연결을 다시 승인해 주세요.", 401));
 		if (oauth.expiresWithinSeconds(60)) {
-			oauth = oauthService.refresh(oauth);
-			accountService.upsert(oauth);
-			oauth = accountService.findOAuthSession(user.id()).orElse(oauth);
-			session.setAttribute(AuthSessionAttributes.GITLAB_USER, oauth.user());
+			accountService.upsert(oauthService.refresh(oauth));
+			oauth = accountService.findGitLabOAuthSessionByUserId(user.userId()).orElse(oauth);
+			session.setAttribute(AuthSessionAttributes.STUDY_ING_USER, accountService.requirePrincipalByGitLabUserId(oauth.user().id()));
 		}
 		return oauth;
 	}

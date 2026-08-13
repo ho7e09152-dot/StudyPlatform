@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { GitCommitHorizontal, MessageCircle, RefreshCw, Send } from "lucide-react";
+import { MessageCircle, RefreshCw, Send } from "lucide-react";
 import {
   createSubmissionReview,
   getSubmissionReviews,
@@ -9,6 +9,7 @@ import {
 } from "@/lib/api/services/workspaceApi";
 import { formatDateTime } from "@/lib/domain/format";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { getUserFacingError } from "@/lib/api/errors";
 
 export function SubmissionReviewPanel({
   workspaceId,
@@ -50,7 +51,7 @@ export function SubmissionReviewPanel({
       .then(setThread)
       .catch((requestError) => {
         if (controller.signal.aborted) return;
-        setError(requestError instanceof Error ? requestError.message : "리뷰를 불러오지 못했습니다.");
+        setError(getUserFacingError(requestError, "리뷰를 불러오지 못했습니다."));
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -84,7 +85,7 @@ export function SubmissionReviewPanel({
       setThread(updated);
       setBody("");
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "리뷰를 등록하지 못했습니다.");
+      setError(getUserFacingError(requestError, "리뷰를 등록하지 못했습니다."));
     } finally {
       setSubmitting(false);
     }
@@ -95,14 +96,9 @@ export function SubmissionReviewPanel({
       <header className="submission-review__header">
         <span className="submission-review__icon"><MessageCircle size={17} /></span>
         <div>
-          <h3 id={`review-title-${memberId}`}>팀 리뷰</h3>
-          <p>이 제출의 현재 GitLab 커밋에 댓글로 남습니다.</p>
+          <h3 id={`review-title-${memberId}`}>리뷰</h3>
+          <p>제출 내용을 읽고 도움이 된 점이나 질문을 남겨보세요.</p>
         </div>
-        {thread ? (
-          <span className="submission-review__commit">
-            <GitCommitHorizontal size={13} /> {thread.commitId.slice(0, 8)}
-          </span>
-        ) : null}
       </header>
 
       {loading ? (
@@ -151,14 +147,14 @@ export function SubmissionReviewPanel({
             value={body}
             maxLength={4000}
             rows={3}
-            placeholder="풀이에서 좋았던 점이나 함께 이야기할 내용을 남겨주세요."
+            placeholder="리뷰를 남겨주세요..."
             aria-label="리뷰 댓글"
             onChange={(event) => setBody(event.target.value)}
           />
           <footer>
             <span>{body.length.toLocaleString("ko-KR")}/4,000</span>
             <button type="submit" className="button button--primary button--small" disabled={!body.trim() || submitting}>
-              <Send size={14} /> {submitting ? "등록 중…" : "댓글 남기기"}
+              <Send size={14} /> {submitting ? "전송 중…" : "리뷰 보내기"}
             </button>
           </footer>
         </form>

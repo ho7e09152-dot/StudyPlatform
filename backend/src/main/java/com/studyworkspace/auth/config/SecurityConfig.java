@@ -42,6 +42,7 @@ public class SecurityConfig {
 				.requestMatchers(
 					"/api/v1/auth/gitlab/**",
 					"/api/v1/auth/csrf",
+					"/api/v1/capabilities",
 					"/actuator/health/**",
 					"/actuator/info"
 				).permitAll()

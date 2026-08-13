@@ -13,6 +13,7 @@ export interface GitLabProject {
   defaultBranch: string | null;
   webUrl: string | null;
   visibility: string;
+  accessLevel?: number | null;
 }
 
 export interface GitLabTreeItem {

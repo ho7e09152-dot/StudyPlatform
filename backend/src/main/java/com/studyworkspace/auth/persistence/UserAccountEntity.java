@@ -17,8 +17,10 @@ public class UserAccountEntity {
 	@Column(length = 36)
 	private String id;
 
-	@Column(name = "gitlab_user_id", nullable = false, unique = true)
-	private long gitLabUserId;
+	/** Compatibility mirror. ProviderAccount is the source of truth for external identities. */
+	@Deprecated
+	@Column(name = "gitlab_user_id", unique = true)
+	private Long gitLabUserId;
 
 	@Column(nullable = false)
 	private String username;
@@ -44,8 +46,17 @@ public class UserAccountEntity {
 	@Column(name = "terms_version", length = 32)
 	private String termsVersion;
 
-	@Column(name = "terms_accepted_at")
-	private Instant termsAcceptedAt;
+	@Column(name = "terms_agreed_at")
+	private Instant termsAgreedAt;
+
+	@Column(name = "privacy_version", length = 32)
+	private String privacyVersion;
+
+	@Column(name = "privacy_agreed_at")
+	private Instant privacyAgreedAt;
+
+	@Column(name = "minimum_age_confirmed_at")
+	private Instant minimumAgeConfirmedAt;
 
 	@Column(name = "theme_mode", nullable = false, length = 16)
 	private String themeMode;
@@ -74,6 +85,20 @@ public class UserAccountEntity {
 		return entity;
 	}
 
+	public static UserAccountEntity createFromProvider(String username, String providerDisplayName, Instant now) {
+		UserAccountEntity entity = new UserAccountEntity();
+		entity.id = UUID.randomUUID().toString();
+		entity.createdAt = now;
+		entity.profileCompleted = false;
+		entity.timezone = "Asia/Seoul";
+		entity.themeMode = "LIGHT";
+		entity.accentColor = "PURPLE";
+		entity.username = username;
+		entity.displayName = providerDisplayName == null || providerDisplayName.isBlank() ? username : providerDisplayName;
+		entity.updatedAt = now;
+		return entity;
+	}
+
 	public void updateFrom(GitLabUser user, Instant now) {
 		this.gitLabUserId = user.id();
 		this.username = user.username();
@@ -89,15 +114,25 @@ public class UserAccountEntity {
 		String displayName,
 		String repositoryFileName,
 		String timezone,
-		String termsVersion,
 		Instant now
 	) {
 		this.displayName = displayName;
 		this.repositoryFileName = repositoryFileName;
 		this.timezone = timezone;
-		this.termsVersion = termsVersion;
-		this.termsAcceptedAt = now;
 		this.profileCompleted = true;
+		this.updatedAt = now;
+	}
+
+	public void agreeToPolicies(String requiredTermsVersion, String requiredPrivacyVersion, Instant now) {
+		if (!requiredTermsVersion.equals(this.termsVersion)) {
+			this.termsVersion = requiredTermsVersion;
+			this.termsAgreedAt = now;
+		}
+		if (!requiredPrivacyVersion.equals(this.privacyVersion)) {
+			this.privacyVersion = requiredPrivacyVersion;
+			this.privacyAgreedAt = now;
+		}
+		if (this.minimumAgeConfirmedAt == null) this.minimumAgeConfirmedAt = now;
 		this.updatedAt = now;
 	}
 
@@ -112,7 +147,7 @@ public class UserAccountEntity {
 	}
 
 	public long gitLabUserId() {
-		return gitLabUserId;
+		return gitLabUserId == null ? 0 : gitLabUserId;
 	}
 
 	public String username() { return username; }
@@ -123,7 +158,10 @@ public class UserAccountEntity {
 	public String repositoryFileName() { return repositoryFileName; }
 	public String timezone() { return timezone; }
 	public String termsVersion() { return termsVersion; }
-	public Instant termsAcceptedAt() { return termsAcceptedAt; }
+	public Instant termsAgreedAt() { return termsAgreedAt; }
+	public String privacyVersion() { return privacyVersion; }
+	public Instant privacyAgreedAt() { return privacyAgreedAt; }
+	public Instant minimumAgeConfirmedAt() { return minimumAgeConfirmedAt; }
 	public String themeMode() { return themeMode == null ? "LIGHT" : themeMode; }
 	public String accentColor() { return accentColor == null ? "PURPLE" : accentColor; }
 

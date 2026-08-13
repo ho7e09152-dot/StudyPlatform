@@ -16,6 +16,9 @@ export default defineConfig({
   use: {
     baseURL: `http://localhost:${port}`,
     viewport: { width: 1280, height: 900 },
+    launchOptions: process.env.CHROMIUM_PATH
+      ? { executablePath: process.env.CHROMIUM_PATH }
+      : undefined,
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
   },

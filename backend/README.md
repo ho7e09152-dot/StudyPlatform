@@ -1,6 +1,6 @@
-# Study Workspace Backend
+# Study-ing Backend
 
-Spring Boot 기반 Study Workspace 백엔드입니다. 환경변수 없이 실행되는 로컬 개발 모드와 GitLab OAuth 운영 모드를 함께 제공합니다. 일정과 제출 본문은 연결 프로젝트에 실제 커밋하고, 사용자·암호화 credential·Workspace cache와 운영 상태는 DB에 저장합니다.
+Spring Boot 기반 Study-ing 백엔드입니다. 환경변수 없이 실행되는 로컬 개발 모드와 GitLab OAuth 운영 모드를 함께 제공합니다. 일정과 제출 본문은 연결 프로젝트에 실제 커밋하고, 사용자·암호화 credential·Workspace cache와 운영 상태는 DB에 저장합니다.
 
 ## 현재 구현 범위
 
@@ -75,6 +75,9 @@ GITLAB_DEFAULT_REF=
 GITLAB_OAUTH_CLIENT_ID=GitLab_Application_ID
 GITLAB_OAUTH_CLIENT_SECRET=GitLab_Application_Secret
 GITLAB_OAUTH_REDIRECT_URI=http://localhost:8080/api/v1/auth/gitlab/callback
+GITHUB_OAUTH_CLIENT_ID=GitHub_OAuth_App_Client_ID
+GITHUB_OAUTH_CLIENT_SECRET=GitHub_OAuth_App_Client_Secret
+GITHUB_OAUTH_REDIRECT_URI=http://localhost:8080/api/v1/provider-accounts/github/callback
 OAUTH_TOKEN_ENCRYPTION_KEY=Base64로_인코딩한_32바이트_키
 DATABASE_URL=jdbc:postgresql://localhost:5432/study_workspace
 DATABASE_USERNAME=study
@@ -84,6 +87,7 @@ SERVER_PORT=8080
 ```
 
 - 일반 사용자는 PAT 없이 GitLab OAuth `api` scope로 프로젝트를 연결합니다.
+- GitHub 세 값이 모두 설정된 경우에만 Settings의 Connected Account linking capability가 활성화됩니다. 현재 Account Linking은 OAuth scope를 요청하지 않고 공개 identity만 확인하며, Login과 Repository 기능은 활성화하지 않습니다.
 - PAT 환경변수는 `dev`/`local` 프로필의 수동 연결 스파이크에서만 사용합니다.
 - `GITLAB_PROJECT_ID`는 숫자 Project ID 또는 URL 인코딩하지 않은 `group/project` 경로를 사용할 수 있습니다.
 - `GITLAB_DEFAULT_REF`가 비어 있으면 프로젝트의 기본 브랜치를 사용합니다.

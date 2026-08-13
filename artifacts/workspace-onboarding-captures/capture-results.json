@@ -1,0 +1,19 @@
+{
+  "generatedAt": "2026-08-12T06:49:53.743Z",
+  "captured": [
+    "GitLab project search and accessible list",
+    "filtered project search result",
+    "project permission/repository analysis in progress",
+    "selected project with Workspace name, default branch, completed analysis counts, and connect button",
+    "repository compatibility conflict",
+    "project permission denied",
+    "user with no Workspace",
+    "first profile setup after OAuth"
+  ],
+  "absent": [
+    "standalone /workspaces index route",
+    "explicit GitLab access-level label in onboarding"
+  ],
+  "failures": [],
+  "consoleErrors": []
+}

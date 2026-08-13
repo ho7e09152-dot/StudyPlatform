@@ -1,14 +1,21 @@
 package com.studyworkspace.auth.service;
 
+import static com.studyworkspace.policy.LegalDocumentPolicy.PRIVACY_VERSION;
+import static com.studyworkspace.policy.LegalDocumentPolicy.TERMS_VERSION;
+
 import java.time.Instant;
 import java.util.Optional;
 
 import com.studyworkspace.auth.dto.GitLabOAuthSession;
 import com.studyworkspace.auth.persistence.OAuthCredentialEntity;
 import com.studyworkspace.auth.persistence.OAuthCredentialRepository;
+import com.studyworkspace.auth.persistence.ProviderAccountEntity;
+import com.studyworkspace.auth.persistence.ProviderAccountRepository;
 import com.studyworkspace.auth.persistence.UserAccountEntity;
 import com.studyworkspace.auth.persistence.UserAccountRepository;
 import com.studyworkspace.auth.security.TokenCipher;
+import com.studyworkspace.auth.security.StudyIngPrincipal;
+import com.studyworkspace.workspace.domain.RepositoryProvider;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -16,8 +23,6 @@ import com.studyworkspace.workspace.domain.WorkspaceException;
 
 @Service
 public class OAuthAccountService {
-	public static final String CURRENT_TERMS_VERSION = "2026-08-10";
-
 	public record AccountProfile(
 		long id,
 		String username,
@@ -28,44 +33,91 @@ public class OAuthAccountService {
 		String repositoryFileName,
 		String timezone,
 		String termsVersion,
-		Instant termsAcceptedAt,
+		Instant termsAgreedAt,
+		String privacyVersion,
+		Instant privacyAgreedAt,
+		Instant minimumAgeConfirmedAt,
+		boolean requiresReconsent,
 		String themeMode,
-		String accentColor
+		String accentColor,
+		String userId
+	) {
+		public AccountProfile(
+			long id, String username, String name, String avatarUrl, String webUrl,
+			boolean profileCompleted, String repositoryFileName, String timezone,
+			String termsVersion, Instant termsAgreedAt, String privacyVersion, Instant privacyAgreedAt,
+			Instant minimumAgeConfirmedAt, boolean requiresReconsent, String themeMode, String accentColor
+		) {
+			this(id, username, name, avatarUrl, webUrl, profileCompleted, repositoryFileName, timezone,
+				termsVersion, termsAgreedAt, privacyVersion, privacyAgreedAt, minimumAgeConfirmedAt,
+				requiresReconsent, themeMode, accentColor, null);
+		}
+	}
+
+	public record ProviderAccountView(
+		String id,
+		RepositoryProvider provider,
+		String externalUserId,
+		String username,
+		String displayName,
+		String avatarUrl,
+		String webUrl,
+		String status
 	) { }
 
 	public record UpdateProfileRequest(
 		String displayName,
 		String repositoryFileName,
 		String timezone,
-		boolean acceptTerms
+		boolean acceptTerms,
+		boolean acceptPrivacy,
+		boolean confirmMinimumAge
 	) { }
 
 	public record UpdatePreferencesRequest(String themeMode, String accentColor) { }
 
 	private final UserAccountRepository userRepository;
+	private final ProviderAccountRepository providerAccountRepository;
 	private final OAuthCredentialRepository credentialRepository;
 	private final TokenCipher tokenCipher;
 
 	public OAuthAccountService(
 		UserAccountRepository userRepository,
+		ProviderAccountRepository providerAccountRepository,
 		OAuthCredentialRepository credentialRepository,
 		TokenCipher tokenCipher
 	) {
 		this.userRepository = userRepository;
+		this.providerAccountRepository = providerAccountRepository;
 		this.credentialRepository = credentialRepository;
 		this.tokenCipher = tokenCipher;
 	}
 
 	@Transactional
-	public void upsert(GitLabOAuthSession oauth) {
+	public StudyIngPrincipal upsert(GitLabOAuthSession oauth) {
 		Instant now = Instant.now();
-		UserAccountEntity user = userRepository.findByGitLabUserId(oauth.user().id())
-			.orElseGet(() -> UserAccountEntity.create(oauth.user(), now));
-		user.updateFrom(oauth.user(), now);
-		userRepository.save(user);
+		ProviderAccountEntity providerAccount = providerAccountRepository
+			.findByProviderAndExternalUserId(RepositoryProvider.GITLAB.name(), Long.toString(oauth.user().id()))
+			.orElse(null);
+		UserAccountEntity user;
+		if (providerAccount == null) {
+			user = userRepository.findByGitLabUserId(oauth.user().id())
+				.orElseGet(() -> UserAccountEntity.create(oauth.user(), now));
+			user.updateFrom(oauth.user(), now);
+			user = userRepository.save(user);
+			providerAccount = ProviderAccountEntity.createGitLab(user.id(), oauth.user(), now);
+		} else {
+			user = userRepository.findById(providerAccount.userId())
+				.orElseThrow(() -> new WorkspaceException("ACCOUNT_NOT_FOUND", "사용자 계정을 찾을 수 없습니다.", 404));
+			user.updateFrom(oauth.user(), now);
+			userRepository.save(user);
+			providerAccount.updateGitLab(oauth.user(), now);
+		}
+		providerAccount = providerAccountRepository.save(providerAccount);
 
-		OAuthCredentialEntity credential = credentialRepository.findById(user.id())
-			.orElseGet(() -> OAuthCredentialEntity.create(user.id()));
+		String providerAccountId = providerAccount.id();
+		OAuthCredentialEntity credential = credentialRepository.findById(providerAccountId)
+			.orElseGet(() -> OAuthCredentialEntity.create(providerAccountId));
 		credential.rotate(
 			tokenCipher.encrypt(oauth.accessToken()),
 			tokenCipher.encrypt(oauth.refreshToken()),
@@ -74,71 +126,157 @@ public class OAuthAccountService {
 			now
 		);
 		credentialRepository.save(credential);
+		return principal(user, providerAccount);
 	}
 
 	@Transactional(readOnly = true)
 	public AccountProfile requireProfile(long gitLabUserId) {
-		return userRepository.findByGitLabUserId(gitLabUserId)
-			.map(OAuthAccountService::profile)
+		return providerAccountRepository.findByProviderAndExternalUserId(RepositoryProvider.GITLAB.name(), Long.toString(gitLabUserId))
+			.flatMap(account -> userRepository.findById(account.userId()).map(user -> profile(user, account)))
 			.orElseThrow(() -> new WorkspaceException("ACCOUNT_NOT_FOUND", "사용자 계정을 찾을 수 없습니다.", 404));
+	}
+
+	@Transactional(readOnly = true)
+	public AccountProfile requireProfileByUserId(String userId) {
+		UserAccountEntity user = userRepository.findById(userId)
+			.orElseThrow(() -> new WorkspaceException("ACCOUNT_NOT_FOUND", "사용자 계정을 찾을 수 없습니다.", 404));
+		ProviderAccountEntity account = requireProviderAccount(userId, RepositoryProvider.GITLAB);
+		return profile(user, account);
 	}
 
 	@Transactional
 	public AccountProfile updateProfile(long gitLabUserId, UpdateProfileRequest request) {
-		if (request == null || !request.acceptTerms()) {
-			throw new WorkspaceException("TERMS_ACCEPTANCE_REQUIRED", "이용약관과 개인정보 처리 안내에 동의해 주세요.", 400);
-		}
+		ProviderAccountEntity account = providerAccountRepository
+			.findByProviderAndExternalUserId(RepositoryProvider.GITLAB.name(), Long.toString(gitLabUserId))
+			.orElseThrow(() -> new WorkspaceException("ACCOUNT_NOT_FOUND", "사용자 계정을 찾을 수 없습니다.", 404));
+		return updateProfileByUserId(account.userId(), request);
+	}
+
+	@Transactional
+	public AccountProfile updateProfileByUserId(String userId, UpdateProfileRequest request) {
+		if (request == null) throw new WorkspaceException("INVALID_PROFILE", "프로필 정보가 필요합니다.", 400);
 		String displayName = normalizeDisplayName(request.displayName());
 		String repositoryFileName = normalizeRepositoryFileName(request.repositoryFileName(), displayName);
 		String timezone = normalizeTimezone(request.timezone());
-		UserAccountEntity user = userRepository.findByGitLabUserId(gitLabUserId)
+		UserAccountEntity user = userRepository.findById(userId)
 			.orElseThrow(() -> new WorkspaceException("ACCOUNT_NOT_FOUND", "사용자 계정을 찾을 수 없습니다.", 404));
-		user.completeProfile(displayName, repositoryFileName, timezone, CURRENT_TERMS_VERSION, Instant.now());
-		return profile(userRepository.save(user));
+		Instant now = Instant.now();
+		if (!user.profileCompleted()) {
+			if (!request.confirmMinimumAge()) {
+				throw new WorkspaceException("MINIMUM_AGE_CONFIRMATION_REQUIRED", "Study-ing은 만 14세 이상부터 이용할 수 있습니다.", 400);
+			}
+			if (!request.acceptTerms()) {
+				throw new WorkspaceException("TERMS_ACCEPTANCE_REQUIRED", "이용약관에 동의해 주세요.", 400);
+			}
+			if (!request.acceptPrivacy()) {
+				throw new WorkspaceException("PRIVACY_ACCEPTANCE_REQUIRED", "개인정보 처리 안내에 동의해 주세요.", 400);
+			}
+			user.agreeToPolicies(TERMS_VERSION, PRIVACY_VERSION, now);
+		}
+		user.completeProfile(displayName, repositoryFileName, timezone, now);
+		return profile(userRepository.save(user), requireProviderAccount(userId, RepositoryProvider.GITLAB));
 	}
 
 	@Transactional
 	public AccountProfile updatePreferences(long gitLabUserId, UpdatePreferencesRequest request) {
+		ProviderAccountEntity account = providerAccountRepository
+			.findByProviderAndExternalUserId(RepositoryProvider.GITLAB.name(), Long.toString(gitLabUserId))
+			.orElseThrow(() -> new WorkspaceException("ACCOUNT_NOT_FOUND", "사용자 계정을 찾을 수 없습니다.", 404));
+		return updatePreferencesByUserId(account.userId(), request);
+	}
+
+	@Transactional
+	public AccountProfile updatePreferencesByUserId(String userId, UpdatePreferencesRequest request) {
 		if (request == null) {
 			throw new WorkspaceException("INVALID_PREFERENCES", "테마 설정이 필요합니다.", 400);
 		}
 		String themeMode = normalizeChoice(request.themeMode(), "LIGHT", "DARK");
 		String accentColor = normalizeChoice(request.accentColor(), "PURPLE", "BLUE", "TEAL", "ORANGE", "ROSE");
-		UserAccountEntity user = userRepository.findByGitLabUserId(gitLabUserId)
+		UserAccountEntity user = userRepository.findById(userId)
 			.orElseThrow(() -> new WorkspaceException("ACCOUNT_NOT_FOUND", "사용자 계정을 찾을 수 없습니다.", 404));
 		user.updatePreferences(themeMode, accentColor, Instant.now());
-		return profile(userRepository.save(user));
+		return profile(userRepository.save(user), requireProviderAccount(userId, RepositoryProvider.GITLAB));
 	}
 
 	@Transactional
 	public void deleteCredential(long gitLabUserId) {
-		userRepository.findByGitLabUserId(gitLabUserId)
-			.ifPresent(user -> credentialRepository.deleteById(user.id()));
+		providerAccountRepository.findByProviderAndExternalUserId(RepositoryProvider.GITLAB.name(), Long.toString(gitLabUserId))
+			.ifPresent(account -> credentialRepository.deleteById(account.id()));
 	}
 
 	@Transactional
-	public void deleteAccount(long gitLabUserId) {
-		userRepository.findByGitLabUserId(gitLabUserId).ifPresent(userRepository::delete);
+	public void deleteCredential(String userId, RepositoryProvider provider) {
+		providerAccountRepository.findByUserIdAndProvider(userId, provider.name())
+			.ifPresent(account -> credentialRepository.deleteById(account.id()));
 	}
 
 	@Transactional(readOnly = true)
 	public Optional<GitLabOAuthSession> findOAuthSession(long gitLabUserId) {
-		return userRepository.findByGitLabUserId(gitLabUserId).flatMap(user ->
-			credentialRepository.findById(user.id()).map(credential -> new GitLabOAuthSession(
-				user.toGitLabUser(),
+		return providerAccountRepository.findByProviderAndExternalUserId(RepositoryProvider.GITLAB.name(), Long.toString(gitLabUserId)).flatMap(account ->
+			userRepository.findById(account.userId()).flatMap(user -> credentialRepository.findById(account.id()).map(credential -> new GitLabOAuthSession(
+				new com.studyworkspace.gitlab.dto.GitLabUser(Long.parseLong(account.externalUserId()), account.username(), user.displayName(), account.avatarUrl(), account.webUrl()),
 				tokenCipher.decrypt(credential.accessTokenCiphertext()),
 				tokenCipher.decrypt(credential.refreshTokenCiphertext()),
 				credential.expiresAt(),
 				credential.scope()
-			))
+			)))
 		);
 	}
 
-	private static AccountProfile profile(UserAccountEntity user) {
+	@Transactional(readOnly = true)
+	public Optional<GitLabOAuthSession> findGitLabOAuthSessionByUserId(String userId) {
+		return providerAccountRepository.findByUserIdAndProvider(userId, RepositoryProvider.GITLAB.name()).flatMap(account ->
+			userRepository.findById(userId).flatMap(user -> credentialRepository.findById(account.id()).map(credential -> new GitLabOAuthSession(
+				new com.studyworkspace.gitlab.dto.GitLabUser(Long.parseLong(account.externalUserId()), account.username(), user.displayName(), account.avatarUrl(), account.webUrl()), tokenCipher.decrypt(credential.accessTokenCiphertext()),
+				tokenCipher.decrypt(credential.refreshTokenCiphertext()), credential.expiresAt(), credential.scope()
+			)))
+		);
+	}
+
+	@Transactional(readOnly = true)
+	public StudyIngPrincipal requirePrincipalByGitLabUserId(long gitLabUserId) {
+		ProviderAccountEntity account = providerAccountRepository
+			.findByProviderAndExternalUserId(RepositoryProvider.GITLAB.name(), Long.toString(gitLabUserId))
+			.orElseThrow(() -> new WorkspaceException("ACCOUNT_NOT_FOUND", "사용자 계정을 찾을 수 없습니다.", 404));
+		UserAccountEntity user = userRepository.findById(account.userId())
+			.orElseThrow(() -> new WorkspaceException("ACCOUNT_NOT_FOUND", "사용자 계정을 찾을 수 없습니다.", 404));
+		return principal(user, account);
+	}
+
+	@Transactional(readOnly = true)
+	public java.util.List<ProviderAccountView> listProviderAccounts(String userId) {
+		return providerAccountRepository.findAllByUserIdOrderByProvider(userId).stream()
+			.map(account -> new ProviderAccountView(account.id(), account.provider(), account.externalUserId(), account.username(),
+				account.displayName(), account.avatarUrl(), account.webUrl(), account.status()))
+			.toList();
+	}
+
+	@Transactional(readOnly = true)
+	public ProviderAccountView requireProviderAccountView(String userId, RepositoryProvider provider) {
+		ProviderAccountEntity account = requireProviderAccount(userId, provider);
+		return new ProviderAccountView(account.id(), account.provider(), account.externalUserId(), account.username(),
+			account.displayName(), account.avatarUrl(), account.webUrl(), account.status());
+	}
+
+	private ProviderAccountEntity requireProviderAccount(String userId, RepositoryProvider provider) {
+		return providerAccountRepository.findByUserIdAndProvider(userId, provider.name())
+			.orElseThrow(() -> new WorkspaceException("PROVIDER_ACCOUNT_REQUIRED", provider.name() + " 계정 연결이 필요합니다.", 401));
+	}
+
+	private static StudyIngPrincipal principal(UserAccountEntity user, ProviderAccountEntity account) {
+		return new StudyIngPrincipal(user.id(), account.id(), account.provider(), account.externalUserId(), account.username(),
+			user.displayName(), account.avatarUrl(), account.webUrl());
+	}
+
+	private static AccountProfile profile(UserAccountEntity user, ProviderAccountEntity account) {
+		boolean requiresReconsent = !TERMS_VERSION.equals(user.termsVersion())
+			|| !PRIVACY_VERSION.equals(user.privacyVersion())
+			|| user.minimumAgeConfirmedAt() == null;
 		return new AccountProfile(
-			user.gitLabUserId(), user.username(), user.displayName(), user.avatarUrl(), user.webUrl(),
-			user.profileCompleted(), user.repositoryFileName(), user.timezone(), user.termsVersion(), user.termsAcceptedAt(),
-			user.themeMode(), user.accentColor()
+			Long.parseLong(account.externalUserId()), account.username(), user.displayName(), account.avatarUrl(), account.webUrl(),
+			user.profileCompleted(), user.repositoryFileName(), user.timezone(), user.termsVersion(), user.termsAgreedAt(),
+			user.privacyVersion(), user.privacyAgreedAt(), user.minimumAgeConfirmedAt(), requiresReconsent,
+			user.themeMode(), user.accentColor(), user.id()
 		);
 	}
 

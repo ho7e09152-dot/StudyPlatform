@@ -26,7 +26,7 @@ import {
 } from "@/lib/api/services/workspaceApi";
 import { formatDate, formatDateTime } from "@/lib/domain/format";
 
-const demoAnnouncements: WorkspaceAnnouncement[] = [{
+export const demoAnnouncements: WorkspaceAnnouncement[] = [{
   id: "demo-announcement",
   authorName: "박민지",
   title: "이번 주 스터디 회의 안내",
@@ -175,7 +175,7 @@ export function TeamFeed({ date }: { date: string }) {
   return (
     <section id="team-feed" className="surface team-feed" aria-labelledby="team-feed-title">
       <header className="team-feed-header">
-        <div><p className="eyebrow">TEAM SPACE</p><h2 id="team-feed-title">공지와 팀 대화</h2><p>회의 안내를 공유하고, 학습 중 질문이나 짧은 응원을 남겨보세요.</p></div>
+        <div><p className="eyebrow">팀 공간</p><h2 id="team-feed-title">공지와 팀 대화</h2><p>회의 안내를 공유하고, 학습 중 질문이나 짧은 응원을 남겨보세요.</p></div>
         <button type="button" className="icon-button" aria-label="팀 피드 새로고침" disabled={refreshing} onClick={() => void load()}><RefreshCw className={refreshing ? "spin" : undefined} size={18} /></button>
       </header>
 
@@ -203,7 +203,7 @@ export function TeamFeed({ date }: { date: string }) {
 
       {error ? <div className="team-feed-error" role="alert">{error}</div> : null}
 
-      <div className="team-message-list">
+      <div key={tab} className="team-message-list motion-content-swap">
         {messages.length ? messages.map((message, index) => {
           const showDate = tab === "all" && messages[index - 1]?.contextDate !== message.contextDate;
           return <div key={message.id}>{showDate ? <div className="team-message-date"><span>{formatDate(message.contextDate, true)}</span></div> : null}<article>

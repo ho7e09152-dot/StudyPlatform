@@ -15,6 +15,8 @@ public class WorkspaceAccessService {
 		this.workspaceService = workspaceService;
 	}
 
+	public WorkspaceState workspace(String workspaceId) { return workspaceService.get(workspaceId); }
+
 	public StudyMember requireActiveMember(String workspaceId, long gitLabUserId, boolean allowDeleted) {
 		WorkspaceState workspace = workspaceService.get(workspaceId);
 		StudyMember member = workspace.members().stream()

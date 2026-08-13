@@ -1,4 +1,4 @@
-# Study Workspace Frontend
+# Study-ing Frontend
 
 GitLab 저장소를 원본으로 사용하는 팀 학습 일정·제출 관리 프론트엔드입니다.
 
@@ -35,7 +35,8 @@ components/notifications/    밀린 학습과 인앱 알림 활동함
 components/review/           GitLab 제출 commit 리뷰
 components/schedule/         일정 생성·수정과 revision 처리
 components/records/          저장소 데이터 기반 학습 통계
-components/repository/       세션 아카이브와 DB 기반 팀 문서
+components/library/          학습 세션 아카이브와 DB 기반 팀 문서 UI
+components/repository/       기존 import 호환과 Repository 직렬화 UI 경계
 components/settings/         연결·멤버·보안 설정
 components/ui/               공통 UI 컴포넌트
 lib/api/                     Spring Boot API 클라이언트·타입·연결 hook
@@ -52,7 +53,11 @@ lib/repository/              YAML·Markdown 직렬화
 /today        인증 후 오늘의 학습
 /schedule     일정
 /records      기록과 점수
-/repository   학습 라이브러리와 팀 문서
+/library      학습 라이브러리와 팀 문서
+/library/sessions/:date          학습 세션 아카이브
+/library/docs/new                새 팀 문서
+/library/docs/:documentId        팀 문서 열람
+/library/docs/:documentId/edit   팀 문서 편집
 /settings     Workspace 설정
 ```
 

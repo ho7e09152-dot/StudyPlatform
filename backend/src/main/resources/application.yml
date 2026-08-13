@@ -16,6 +16,7 @@ spring:
     store-type: jdbc
     jdbc:
       initialize-schema: always
+      cleanup-cron: "0 * * * * *"
     timeout: 8h
 
 server:
@@ -40,6 +41,8 @@ management:
 
 app:
   frontend-url: ${FRONTEND_URL:http://localhost:3000}
+  workspace:
+    repository-membership-verification-ttl: ${REPOSITORY_MEMBERSHIP_VERIFICATION_TTL:5m}
   demo:
     persistence-path: ${WORKSPACE_STATE_FILE:.data/workspaces-production.json}
     seed-enabled: ${DEMO_SEED_ENABLED:false}
@@ -62,4 +65,14 @@ app:
       client-secret: ${GITLAB_OAUTH_CLIENT_SECRET:}
       redirect-uri: ${GITLAB_OAUTH_REDIRECT_URI:http://localhost:8080/api/v1/auth/gitlab/callback}
       scope: api
+      state-ttl: 10m
+  github:
+    oauth:
+      client-id: ${GITHUB_OAUTH_CLIENT_ID:}
+      client-secret: ${GITHUB_OAUTH_CLIENT_SECRET:}
+      redirect-uri: ${GITHUB_OAUTH_REDIRECT_URI:http://localhost:8080/api/v1/provider-accounts/github/callback}
+      scope: ${GITHUB_OAUTH_SCOPE:}
+      authorization-base-url: ${GITHUB_AUTHORIZATION_BASE_URL:https://github.com}
+      api-base-url: ${GITHUB_API_BASE_URL:https://api.github.com}
+      request-timeout: 10s
       state-ttl: 10m

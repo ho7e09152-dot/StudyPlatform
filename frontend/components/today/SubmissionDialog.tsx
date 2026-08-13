@@ -10,6 +10,8 @@ import {
   Link2,
 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
+import { StorageDetails } from "@/components/ui/StorageDetails";
+import { getStorageDetailsCopy } from "@/lib/domain/storage";
 import { SUBMISSION_TYPE_LABEL } from "@/lib/domain/constants";
 import { getSubmissionKey } from "@/lib/domain/metrics";
 import { getSubmissionRepositoryPath } from "@/lib/domain/format";
@@ -19,6 +21,7 @@ import type {
   SubmissionDraft,
   Workspace,
 } from "@/lib/domain/types";
+import { getUserFacingError } from "@/lib/api/errors";
 
 const typeIcon = {
   link: Link2,
@@ -141,11 +144,7 @@ export function SubmissionDialog({
       if (next) selectItem(next);
       else onClose();
     } catch (submissionError) {
-      setError(
-        submissionError instanceof Error
-          ? submissionError.message
-          : "제출에 실패했습니다.",
-      );
+      setError(getUserFacingError(submissionError, "제출에 실패했습니다."));
     } finally {
       setSaving(false);
     }
@@ -156,7 +155,7 @@ export function SubmissionDialog({
   return (
     <Modal
       title="학습 항목 제출"
-      description="한 항목씩 저장소 파일에 병합하고 로그인한 GitLab 계정으로 커밋합니다."
+      description="제출 내용을 저장하면 팀 진행 상황에 바로 반영됩니다."
       onClose={onClose}
       size="large"
     >
@@ -183,6 +182,26 @@ export function SubmissionDialog({
             );
           })}
         </aside>
+
+        <div className="submission-mobile-selector">
+          <span>항목 {items.findIndex((item) => item.id === selectedItem.id) + 1} / {items.length}</span>
+          <label className="field">
+            <span>제출할 학습 항목</span>
+            <select
+              value={selectedItem.id}
+              onChange={(event) => {
+                const item = items.find((candidate) => candidate.id === event.target.value);
+                if (item) selectItem(item);
+              }}
+            >
+              {items.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {completedItemIds.has(item.id) ? "완료 · " : "미제출 · "}{item.title}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
 
         <div className="submission-form">
           <div className="submission-title-row">
@@ -254,46 +273,50 @@ export function SubmissionDialog({
           </label>
           {error ? <p className="field-error" role="alert">{error}</p> : null}
 
-          <label className="field">
-            <span>커밋 메시지</span>
-            <input
-              type="text"
-              value={commitMessage}
-              onChange={(event) => {
-                setCommitMessage(event.target.value);
-                setCommitMessageError("");
-              }}
-              placeholder="submit: member-a 260723 item-b712dd"
-              aria-invalid={Boolean(commitMessageError)}
-            />
-            <small className="field-hint">
-              기본 규칙을 그대로 사용하거나 제출 내용을 알아보기 쉽게 수정할 수 있습니다.
-            </small>
-          </label>
-          {commitMessageError ? (
-            <p className="field-error" role="alert">{commitMessageError}</p>
-          ) : null}
+          <StorageDetails
+            title={getStorageDetailsCopy(workspace.repository?.provider ?? "GITLAB").title}
+            description="파일 위치와 저장 메시지"
+          >
+              <label className="field">
+                <span>저장 메시지</span>
+                <input
+                  type="text"
+                  value={commitMessage}
+                  onChange={(event) => {
+                    setCommitMessage(event.target.value);
+                    setCommitMessageError("");
+                  }}
+                  placeholder="submit: member-a 260723 item-b712dd"
+                  aria-invalid={Boolean(commitMessageError)}
+                />
+                <small className="field-hint">
+                  기본 규칙을 그대로 사용하거나 알아보기 쉽게 수정할 수 있습니다.
+                </small>
+              </label>
+              {commitMessageError ? (
+                <p className="field-error" role="alert">{commitMessageError}</p>
+              ) : null}
 
-          <section className="commit-preview">
-            <div>
-              <strong>커밋 미리보기</strong>
-              <span>GitLab Repository Files API</span>
-            </div>
-            <dl>
-              <div>
-                <dt>파일</dt>
-                <dd>{getSubmissionRepositoryPath(workspace, session, me.fileName)}</dd>
-              </div>
-              <div>
-                <dt>작성자</dt>
-                <dd>{me.displayName}</dd>
-              </div>
-              <div>
-                <dt>메시지</dt>
-                <dd>{commitMessage || "커밋 메시지를 입력해 주세요."}</dd>
-              </div>
-            </dl>
-          </section>
+              <section className="commit-preview">
+                <div>
+                  <strong>저장 위치 미리보기</strong>
+                </div>
+                <dl>
+                  <div>
+                    <dt>파일</dt>
+                    <dd>{getSubmissionRepositoryPath(workspace, session, me.fileName)}</dd>
+                  </div>
+                  <div>
+                    <dt>작성자</dt>
+                    <dd>{me.displayName}</dd>
+                  </div>
+                  <div>
+                    <dt>메시지</dt>
+                    <dd>{commitMessage || "저장 메시지를 입력해 주세요."}</dd>
+                  </div>
+                </dl>
+              </section>
+          </StorageDetails>
 
           <div className="modal-actions">
             <button type="button" className="button button--ghost" onClick={onClose}>
@@ -305,7 +328,7 @@ export function SubmissionDialog({
               onClick={submit}
               disabled={saving}
             >
-              {saving ? "커밋 중…" : existing ? "수정하여 커밋" : "이 항목 제출"}
+              {saving ? "저장 중…" : "제출하기"}
             </button>
           </div>
         </div>

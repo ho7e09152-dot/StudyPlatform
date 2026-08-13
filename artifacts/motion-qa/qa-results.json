@@ -1,0 +1,282 @@
+{
+  "baseURL": "https://sandbox.withroro.com",
+  "generatedAt": "2026-08-13T10:03:31.547Z",
+  "captures": [
+    {
+      "viewport": "desktop",
+      "name": "01-today-settled",
+      "file": "/work/artifacts/motion-qa/desktop/01-today-settled.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "route": "/today",
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "desktop",
+      "name": "02-route-enter",
+      "file": "/work/artifacts/motion-qa/desktop/02-route-enter.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "route": "/today",
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "desktop",
+      "name": "03-schedule-settled",
+      "file": "/work/artifacts/motion-qa/desktop/03-schedule-settled.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "route": "/today",
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "desktop",
+      "name": "04-modal-enter",
+      "file": "/work/artifacts/motion-qa/desktop/04-modal-enter.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "route": "/today",
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "desktop",
+      "name": "05-modal-settled",
+      "file": "/work/artifacts/motion-qa/desktop/05-modal-settled.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "route": "/today",
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "desktop",
+      "name": "06-modal-exit",
+      "file": "/work/artifacts/motion-qa/desktop/06-modal-exit.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "route": "/today",
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "desktop",
+      "name": "07-drawer-enter",
+      "file": "/work/artifacts/motion-qa/desktop/07-drawer-enter.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "route": "/today",
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "desktop",
+      "name": "08-tab-transition",
+      "file": "/work/artifacts/motion-qa/desktop/08-tab-transition.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "route": "/today",
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "desktop",
+      "name": "09-drawer-exit",
+      "file": "/work/artifacts/motion-qa/desktop/09-drawer-exit.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "route": "/today",
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "desktop",
+      "name": "10-workspace-menu",
+      "file": "/work/artifacts/motion-qa/desktop/10-workspace-menu.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "route": "/today",
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "desktop",
+      "name": "11-theme-transition",
+      "file": "/work/artifacts/motion-qa/desktop/11-theme-transition.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "route": "/settings/appearance",
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "desktop",
+      "name": "12-settings-dark-settled",
+      "file": "/work/artifacts/motion-qa/desktop/12-settings-dark-settled.png",
+      "width": 1440,
+      "scrollWidth": 1440,
+      "route": "/settings/appearance",
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "mobile",
+      "name": "01-mobile-nav-enter",
+      "file": "/work/artifacts/motion-qa/mobile/01-mobile-nav-enter.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "route": "/today",
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "mobile",
+      "name": "02-mobile-nav-exit",
+      "file": "/work/artifacts/motion-qa/mobile/02-mobile-nav-exit.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "route": "/today",
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "mobile",
+      "name": "03-mobile-sheet-enter",
+      "file": "/work/artifacts/motion-qa/mobile/03-mobile-sheet-enter.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "route": "/today",
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "mobile",
+      "name": "04-mobile-sheet-settled",
+      "file": "/work/artifacts/motion-qa/mobile/04-mobile-sheet-settled.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "route": "/today",
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "mobile",
+      "name": "05-mobile-activity-enter",
+      "file": "/work/artifacts/motion-qa/mobile/05-mobile-activity-enter.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "route": "/today",
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "mobile",
+      "name": "06-mobile-activity-settled",
+      "file": "/work/artifacts/motion-qa/mobile/06-mobile-activity-settled.png",
+      "width": 390,
+      "scrollWidth": 390,
+      "route": "/today",
+      "horizontalOverflow": false
+    }
+  ],
+  "transitions": [
+    {
+      "viewport": "desktop",
+      "name": "route-enter",
+      "selector": ".motion-page",
+      "animationName": "motion-page-enter",
+      "animationDuration": "0.2s",
+      "animationTimingFunction": "cubic-bezier(0.2, 0, 0, 1)",
+      "transform": "matrix(1, 0, 0, 1, 0, 0)",
+      "opacity": "1"
+    },
+    {
+      "viewport": "desktop",
+      "name": "modal-enter",
+      "selector": ".modal-panel",
+      "animationName": "motion-dialog-enter",
+      "animationDuration": "0.2s",
+      "animationTimingFunction": "cubic-bezier(0.2, 0, 0, 1)",
+      "transform": "matrix(0.999845, 0, 0, 0.999845, 0, 0.0824312)",
+      "opacity": "0.989696"
+    },
+    {
+      "viewport": "desktop",
+      "name": "modal-exit",
+      "selector": ".modal-panel",
+      "animationName": "motion-dialog-exit",
+      "animationDuration": "0.15s",
+      "animationTimingFunction": "cubic-bezier(0.4, 0, 1, 1)",
+      "transform": "matrix(0.997332, 0, 0, 0.997332, 0, 1.06709)",
+      "opacity": "0.733227"
+    },
+    {
+      "viewport": "desktop",
+      "name": "drawer-enter",
+      "selector": ".activity-inbox-panel",
+      "animationName": "motion-drawer-enter",
+      "animationDuration": "0.24s",
+      "animationTimingFunction": "cubic-bezier(0.2, 0, 0, 1)",
+      "transform": "matrix(1, 0, 0, 1, 73.1962, 0)",
+      "opacity": "1"
+    },
+    {
+      "viewport": "desktop",
+      "name": "drawer-exit",
+      "selector": ".activity-inbox-panel",
+      "animationName": "motion-drawer-exit",
+      "animationDuration": "0.2s",
+      "animationTimingFunction": "cubic-bezier(0.4, 0, 1, 1)",
+      "transform": "matrix(1, 0, 0, 1, 95.5826, 0)",
+      "opacity": "1"
+    },
+    {
+      "viewport": "desktop",
+      "name": "workspace-menu",
+      "selector": ".workspace-menu",
+      "animationName": "motion-popover-enter",
+      "animationDuration": "0.14s",
+      "animationTimingFunction": "cubic-bezier(0.2, 0, 0, 1)",
+      "transform": "matrix(1, 0, 0, 1, 0, -0.962348)",
+      "opacity": "0.759413"
+    },
+    {
+      "viewport": "mobile",
+      "name": "mobile-nav-enter",
+      "selector": ".mobile-drawer",
+      "animationName": "motion-mobile-nav-enter",
+      "animationDuration": "0.24s",
+      "animationTimingFunction": "cubic-bezier(0.2, 0, 0, 1)",
+      "transform": "matrix(1, 0, 0, 1, -58.5273, 0)",
+      "opacity": "1"
+    },
+    {
+      "viewport": "mobile",
+      "name": "mobile-nav-exit",
+      "selector": ".mobile-drawer",
+      "animationName": "motion-mobile-nav-exit",
+      "animationDuration": "0.2s",
+      "animationTimingFunction": "cubic-bezier(0.4, 0, 1, 1)",
+      "transform": "matrix(1, 0, 0, 1, -31.5571, 0)",
+      "opacity": "1"
+    },
+    {
+      "viewport": "mobile",
+      "name": "mobile-sheet-enter",
+      "selector": ".modal-panel",
+      "animationName": "motion-dialog-enter",
+      "animationDuration": "0.22s",
+      "animationTimingFunction": "cubic-bezier(0.2, 0, 0, 1)",
+      "transform": "matrix(0.996733, 0, 0, 0.996733, 0, 1.74235)",
+      "opacity": "0.782206"
+    },
+    {
+      "viewport": "reduced-motion",
+      "name": "route",
+      "selector": ".motion-page",
+      "animationName": "motion-page-enter",
+      "animationDuration": "0.001s",
+      "animationTimingFunction": "cubic-bezier(0.2, 0, 0, 1)",
+      "transform": "none",
+      "opacity": "1"
+    },
+    {
+      "viewport": "reduced-motion",
+      "name": "modal",
+      "selector": ".modal-panel",
+      "animationName": "motion-dialog-enter",
+      "animationDuration": "0.001s",
+      "animationTimingFunction": "cubic-bezier(0.2, 0, 0, 1)",
+      "transform": "none",
+      "opacity": "1"
+    }
+  ],
+  "consoleErrors": [],
+  "pageErrors": []
+}

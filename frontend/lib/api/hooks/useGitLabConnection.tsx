@@ -13,6 +13,7 @@ import { getGitLabConnection } from "@/lib/api/services/gitlabApi";
 import type { GitLabConnection } from "@/lib/api/types/gitlab";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { ApiError } from "@/lib/api/client/http";
 
 export type GitLabConnectionState = "loading" | "ready" | "error";
 
@@ -20,6 +21,7 @@ interface GitLabConnectionContextValue {
   data: GitLabConnection | null;
   state: GitLabConnectionState;
   error: string | null;
+  errorCode: string | null;
   reload: () => void;
 }
 
@@ -37,8 +39,13 @@ export function GitLabConnectionProvider({
   const [data, setData] = useState<GitLabConnection | null>(null);
   const [state, setState] = useState<GitLabConnectionState>("loading");
   const [error, setError] = useState<string | null>(null);
+  const [errorCode, setErrorCode] = useState<string | null>(null);
 
   const load = useCallback(async (signal?: AbortSignal) => {
+    setData(null);
+    setState("loading");
+    setError(null);
+    setErrorCode(null);
     try {
       if (mode === "demo") {
         await Promise.resolve();
@@ -48,7 +55,13 @@ export function GitLabConnectionProvider({
           status: "CONNECTED",
           message: "데모 모드의 가상 GitLab 연결입니다.",
           checkedAt: new Date().toISOString(),
-          user,
+          user: user ? {
+            id: user.legacyGitLabUserId,
+            username: user.username,
+            name: user.name,
+            avatarUrl: user.avatarUrl,
+            webUrl: user.webUrl,
+          } : null,
           project: {
             id: workspace.gitlabProjectId,
             name: workspace.name,
@@ -63,11 +76,13 @@ export function GitLabConnectionProvider({
         return;
       }
       const connection = await getGitLabConnection(workspace.gitlabProjectId, signal);
+      if (signal?.aborted) return;
       setData(connection);
       setState("ready");
     } catch (requestError) {
       if (signal?.aborted) return;
       setData(null);
+      setErrorCode(requestError instanceof ApiError ? requestError.code : null);
       setError(
         requestError instanceof Error
           ? requestError.message
@@ -75,57 +90,21 @@ export function GitLabConnectionProvider({
       );
       setState("error");
     }
-  }, [mode, user, workspace]);
+  }, [mode, user, workspace.defaultBranch, workspace.gitlabProjectId, workspace.name, workspace.gitlabProjectPath]);
 
   useEffect(() => {
     const controller = new AbortController();
-    if (mode === "demo") {
-      const demoConnection: GitLabConnection = {
-        configured: true,
-        status: "CONNECTED",
-        message: "데모 모드의 가상 GitLab 연결입니다.",
-        checkedAt: new Date().toISOString(),
-        user,
-        project: {
-          id: workspace.gitlabProjectId,
-          name: workspace.name,
-          pathWithNamespace: workspace.gitlabProjectPath,
-          defaultBranch: workspace.defaultBranch,
-          webUrl: null,
-          visibility: "private",
-        },
-        repositoryTree: [],
-      };
-      void Promise.resolve(demoConnection).then((connection) => {
-        if (controller.signal.aborted) return;
-        setData(connection);
-        setState("ready");
-      });
-    } else {
-      void getGitLabConnection(workspace.gitlabProjectId, controller.signal)
-        .then((connection) => {
-          setData(connection);
-          setState("ready");
-        })
-        .catch((requestError) => {
-          if (controller.signal.aborted) return;
-          setData(null);
-          setError(requestError instanceof Error ? requestError.message : "GitLab 연결 상태를 확인하지 못했습니다.");
-          setState("error");
-        });
-    }
-    return () => controller.abort();
-  }, [mode, user, workspace]);
+    const timer = window.setTimeout(() => void load(controller.signal), 0);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [load]);
 
   const reload = useCallback(() => {
-    setState("loading");
-    setError(null);
     void load();
   }, [load]);
 
   const value = useMemo(
-    () => ({ data, state, error, reload }),
-    [data, error, reload, state],
+    () => ({ data, state, error, errorCode, reload }),
+    [data, error, errorCode, reload, state],
   );
 
   return (

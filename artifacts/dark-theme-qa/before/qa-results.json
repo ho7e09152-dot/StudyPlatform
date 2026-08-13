@@ -1,0 +1,94 @@
+{
+  "baseURL": "http://127.0.0.1:3210",
+  "screenshots": [
+    {
+      "viewport": "desktop",
+      "route": "/settings/appearance",
+      "file": "/home/roro/study_platform/artifacts/dark-theme-qa/before/desktop/settings.png",
+      "viewportWidth": 1440,
+      "scrollWidth": 1440,
+      "frameBackground": "rgb(39, 37, 45)",
+      "sidebarBackground": "rgb(48, 45, 54)",
+      "surfaceBackground": null,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/today",
+      "file": "/home/roro/study_platform/artifacts/dark-theme-qa/before/desktop/today.png",
+      "viewportWidth": 1440,
+      "scrollWidth": 1440,
+      "frameBackground": "rgb(47, 45, 53)",
+      "sidebarBackground": "rgb(48, 45, 54)",
+      "surfaceBackground": "rgb(48, 45, 54)",
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/records",
+      "file": "/home/roro/study_platform/artifacts/dark-theme-qa/before/desktop/records.png",
+      "viewportWidth": 1440,
+      "scrollWidth": 1440,
+      "frameBackground": "rgb(41, 39, 47)",
+      "sidebarBackground": "rgb(48, 45, 54)",
+      "surfaceBackground": "rgb(48, 45, 54)",
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/settings/appearance",
+      "file": "/home/roro/study_platform/artifacts/dark-theme-qa/before/mobile/settings.png",
+      "viewportWidth": 390,
+      "scrollWidth": 390,
+      "frameBackground": "rgb(39, 37, 45)",
+      "sidebarBackground": "rgb(48, 45, 54)",
+      "surfaceBackground": null,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/today",
+      "file": "/home/roro/study_platform/artifacts/dark-theme-qa/before/mobile/today.png",
+      "viewportWidth": 390,
+      "scrollWidth": 390,
+      "frameBackground": "rgb(41, 39, 47)",
+      "sidebarBackground": "rgb(48, 45, 54)",
+      "surfaceBackground": "rgb(48, 45, 54)",
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/records",
+      "file": "/home/roro/study_platform/artifacts/dark-theme-qa/before/mobile/records.png",
+      "viewportWidth": 390,
+      "scrollWidth": 390,
+      "frameBackground": "rgb(47, 45, 53)",
+      "sidebarBackground": "rgb(48, 45, 54)",
+      "surfaceBackground": "rgb(48, 45, 54)",
+      "horizontalOverflow": false
+    }
+  ],
+  "consoleErrors": [
+    {
+      "viewport": "desktop",
+      "route": "/today",
+      "message": "A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n- Date formatting in a user's locale which doesn't match the server.\n- External changing data without sending a snapshot of it along with the HTML.\n- Invalid HTML tag nesting.\n\nIt can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n\n%s%s https://react.dev/link/hydration-mismatch \n\n  ...\n    <default>\n      <link>\n      <link>\n      <link>\n      <RemoveDuplicateServerCss>\n      <default>\n        <RootLayout>\n          <html lang=\"ko\">\n            ...\n              <AuthProvider>\n                <WorkspaceProvider>\n                  <GitLabConnectionProvider>\n                    <AppShell>\n                      <AppThemeProvider>\n                        <ThemedAppShell>\n                          <div\n                            className=\"app-frame\"\n+                           data-theme=\"dark\"\n-                           data-theme=\"light\"\n                            data-accent=\"purple\"\n                          >\n                            <aside>\n                            <header>\n                            ...\n                              <div className=\"settings-s...\">\n                                <section className=\"settings-s...\">\n                                  <h3>\n                                  <div className=\"settings-m...\" role=\"radiogroup\" aria-label=\"화면 테마\">\n                                    <button\n                                      type=\"button\"\n                                      role=\"radio\"\n+                                     aria-checked={false}\n-                                     aria-checked=\"true\"\n                                      disabled={false}\n                                      onClick={function onClick}\n                                    >\n                                    <button\n                                      type=\"button\"\n                                      role=\"radio\"\n+                                     aria-checked={true}\n-                                     aria-checked=\"false\"\n                                      disabled={false}\n                                      onClick={function onClick}\n                                    >\n                                ...\n"
+    },
+    {
+      "viewport": "desktop",
+      "route": "/records",
+      "message": "A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n- Date formatting in a user's locale which doesn't match the server.\n- External changing data without sending a snapshot of it along with the HTML.\n- Invalid HTML tag nesting.\n\nIt can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n\n%s%s https://react.dev/link/hydration-mismatch \n\n  ...\n    <default>\n      <link>\n      <link>\n      <link>\n      <RemoveDuplicateServerCss>\n      <default>\n        <RootLayout>\n          <html lang=\"ko\">\n            ...\n              <AuthProvider>\n                <WorkspaceProvider>\n                  <GitLabConnectionProvider>\n                    <AppShell>\n                      <AppThemeProvider>\n                        <ThemedAppShell>\n                          <div\n                            className=\"app-frame\"\n+                           data-theme=\"dark\"\n-                           data-theme=\"light\"\n                            data-accent=\"purple\"\n                          >\n                            <aside>\n                            <header>\n                            ...\n                              <div className=\"settings-s...\">\n                                <section className=\"settings-s...\">\n                                  <h3>\n                                  <div className=\"settings-m...\" role=\"radiogroup\" aria-label=\"화면 테마\">\n                                    <button\n                                      type=\"button\"\n                                      role=\"radio\"\n+                                     aria-checked={false}\n-                                     aria-checked=\"true\"\n                                      disabled={false}\n                                      onClick={function onClick}\n                                    >\n                                    <button\n                                      type=\"button\"\n                                      role=\"radio\"\n+                                     aria-checked={true}\n-                                     aria-checked=\"false\"\n                                      disabled={false}\n                                      onClick={function onClick}\n                                    >\n                                ...\n"
+    },
+    {
+      "viewport": "mobile",
+      "route": "/today",
+      "message": "A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n- Date formatting in a user's locale which doesn't match the server.\n- External changing data without sending a snapshot of it along with the HTML.\n- Invalid HTML tag nesting.\n\nIt can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n\n%s%s https://react.dev/link/hydration-mismatch \n\n  ...\n    <default>\n      <link>\n      <link>\n      <link>\n      <RemoveDuplicateServerCss>\n      <default>\n        <RootLayout>\n          <html lang=\"ko\">\n            ...\n              <AuthProvider>\n                <WorkspaceProvider>\n                  <GitLabConnectionProvider>\n                    <AppShell>\n                      <AppThemeProvider>\n                        <ThemedAppShell>\n                          <div\n                            className=\"app-frame\"\n+                           data-theme=\"dark\"\n-                           data-theme=\"light\"\n                            data-accent=\"purple\"\n                          >\n                            <aside>\n                            <header>\n                            ...\n                              <div className=\"settings-s...\">\n                                <section className=\"settings-s...\">\n                                  <h3>\n                                  <div className=\"settings-m...\" role=\"radiogroup\" aria-label=\"화면 테마\">\n                                    <button\n                                      type=\"button\"\n                                      role=\"radio\"\n+                                     aria-checked={false}\n-                                     aria-checked=\"true\"\n                                      disabled={false}\n                                      onClick={function onClick}\n                                    >\n                                    <button\n                                      type=\"button\"\n                                      role=\"radio\"\n+                                     aria-checked={true}\n-                                     aria-checked=\"false\"\n                                      disabled={false}\n                                      onClick={function onClick}\n                                    >\n                                ...\n"
+    },
+    {
+      "viewport": "mobile",
+      "route": "/records",
+      "message": "A tree hydrated but some attributes of the server rendered HTML didn't match the client properties. This won't be patched up. This can happen if a SSR-ed Client Component used:\n\n- A server/client branch `if (typeof window !== 'undefined')`.\n- Variable input such as `Date.now()` or `Math.random()` which changes each time it's called.\n- Date formatting in a user's locale which doesn't match the server.\n- External changing data without sending a snapshot of it along with the HTML.\n- Invalid HTML tag nesting.\n\nIt can also happen if the client has a browser extension installed which messes with the HTML before React loaded.\n\n%s%s https://react.dev/link/hydration-mismatch \n\n  ...\n    <default>\n      <link>\n      <link>\n      <link>\n      <RemoveDuplicateServerCss>\n      <default>\n        <RootLayout>\n          <html lang=\"ko\">\n            ...\n              <AuthProvider>\n                <WorkspaceProvider>\n                  <GitLabConnectionProvider>\n                    <AppShell>\n                      <AppThemeProvider>\n                        <ThemedAppShell>\n                          <div\n                            className=\"app-frame\"\n+                           data-theme=\"dark\"\n-                           data-theme=\"light\"\n                            data-accent=\"purple\"\n                          >\n                            <aside>\n                            <header>\n                            ...\n                              <div className=\"settings-s...\">\n                                <section className=\"settings-s...\">\n                                  <h3>\n                                  <div className=\"settings-m...\" role=\"radiogroup\" aria-label=\"화면 테마\">\n                                    <button\n                                      type=\"button\"\n                                      role=\"radio\"\n+                                     aria-checked={false}\n-                                     aria-checked=\"true\"\n                                      disabled={false}\n                                      onClick={function onClick}\n                                    >\n                                    <button\n                                      type=\"button\"\n                                      role=\"radio\"\n+                                     aria-checked={true}\n-                                     aria-checked=\"false\"\n                                      disabled={false}\n                                      onClick={function onClick}\n                                    >\n                                ...\n"
+    }
+  ],
+  "pageErrors": []
+}

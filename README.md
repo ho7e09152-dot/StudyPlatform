@@ -1,8 +1,8 @@
-# Study Workspace
+# Study-ing
 
 > GitLab 저장소를 학습 기록의 원본으로 유지하면서, 팀원의 진행 상황과 일정·제출·기록을 웹에서 편하게 관리하는 스터디 플랫폼
 
-![Study Workspace 랜딩 페이지](docs/images/screenshots/landing.png)
+![Study-ing 랜딩 페이지](docs/images/screenshots/landing.png)
 
 ## 프로젝트를 시작한 배경
 
@@ -19,7 +19,7 @@ SSAFY 입과 후 교육을 받으며 팀원들과 알고리즘 스터디를 시�
 - Git에 익숙하지 않아도 웹에서 제출하고 자신의 계정으로 커밋하는 기능
 - 알고리즘뿐 아니라 영어, CS, 자유주제 스터디에도 적용할 수 있는 공통 구조
 
-Study Workspace는 GitLab을 대체하는 서비스가 아닙니다. GitLab 저장소를 원본으로 유지하고, 사용자가 저장소의 내용을 더 쉽게 읽고 수정할 수 있는 인터페이스를 제공하는 것이 목표입니다.
+Study-ing은 GitLab을 대체하는 서비스가 아닙니다. GitLab 저장소를 원본으로 유지하고, 사용자가 저장소의 내용을 더 쉽게 읽고 수정할 수 있는 인터페이스를 제공하는 것이 목표입니다.
 
 ## 해결하려는 문제
 
@@ -32,7 +32,7 @@ Study Workspace는 GitLab을 대체하는 서비스가 아닙니다. GitLab 저�
 - Git 사용이 익숙하지 않은 팀원에게는 반복적인 커밋과 푸시가 부담이 될 수 있습니다.
 - 1차·2차 마감이 있어도 최종 제출 여부 외에는 참여 시점을 비교하기 어렵습니다.
 
-Study Workspace는 이 과정을 `일정 생성 → 항목별 제출 → GitLab 커밋 → 진행률·점수 집계` 흐름으로 연결합니다.
+Study-ing은 이 과정을 `일정 생성 → 항목별 제출 → GitLab 커밋 → 진행률·점수 집계` 흐름으로 연결합니다.
 
 ## 핵심 설계 원칙
 
@@ -114,7 +114,7 @@ Study Workspace는 이 과정을 `일정 생성 → 항목별 제출 → GitLab 
 
 GitLab 파일 트리를 전면에 노출하지 않고, 팀이 쌓아온 세션과 제출을 검색 가능한 학습 자료로 재구성합니다. 세션 상세에서 모든 멤버의 제출과 GitLab 리뷰를 확인하고, 팀 문서 탭에서는 Markdown 기반 학습 문서를 작성합니다. 문서는 모든 활성 멤버가 읽을 수 있지만 만든 사람만 수정·삭제할 수 있습니다.
 
-![저장소 페이지 — GitLab Markdown 미리보기](docs/images/screenshots/repository.png)
+![학습 라이브러리 — 세션과 팀 문서](docs/images/screenshots/repository.png)
 
 ### 설정
 
@@ -163,7 +163,7 @@ AI 도구는 디자인과 구현을 구체화하는 협업 도구로 사용했�
 
 ## 예정 아키텍처
 
-![Study Workspace 예정 서비스 아키텍처](docs/images/study-workspace-architecture.png)
+![Study-ing 예정 서비스 아키텍처](docs/images/study-workspace-architecture.png)
 
 > 편집 가능한 원본: [study-workspace-architecture.svg](docs/images/study-workspace-architecture.svg)
 

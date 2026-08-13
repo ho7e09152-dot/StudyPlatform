@@ -1,0 +1,12 @@
+{
+  "failures": [],
+  "consoleErrors": [],
+  "captures": [
+    "/workspace/artifacts/workspace-discovery-qa/desktop/01-workspace-discovery.png",
+    "/workspace/artifacts/workspace-discovery-qa/desktop/02-repository-join.png",
+    "/workspace/artifacts/workspace-discovery-qa/desktop/03-join-success-today.png",
+    "/workspace/artifacts/workspace-discovery-qa/mobile/01-workspace-discovery.png",
+    "/workspace/artifacts/workspace-discovery-qa/mobile/02-repository-join.png",
+    "/workspace/artifacts/workspace-discovery-qa/mobile/03-join-success-today.png"
+  ]
+}

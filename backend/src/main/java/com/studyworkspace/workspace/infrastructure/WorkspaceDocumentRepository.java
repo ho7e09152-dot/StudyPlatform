@@ -5,10 +5,15 @@ import java.util.List;
 
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface WorkspaceDocumentRepository extends JpaRepository<WorkspaceDocumentEntity, String> {
+	@Modifying
+	@Query("update WorkspaceDocumentEntity document set document.authorUserId = null, document.authorDisplayName = '탈퇴한 사용자' where document.authorUserId = :userId")
+	int anonymizeAuthor(@Param("userId") String userId);
+
 	@Query("""
 		select document from WorkspaceDocumentEntity document
 		where document.workspaceId = :workspaceId

@@ -4,6 +4,7 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
@@ -40,14 +41,28 @@ function readDemoPreferences() {
 
 export function AppThemeProvider({ children }: { children: ReactNode }) {
   const { mode, user, setUser } = useAuth();
-  const demoPreferences = mode === "demo" ? readDemoPreferences() : null;
   const [themeMode, setThemeModeState] = useState<ThemeMode>(
-    user?.themeMode ?? demoPreferences?.themeMode ?? "LIGHT",
+    user?.themeMode ?? "LIGHT",
   );
   const [accentColor, setAccentColorState] = useState<AccentColor>(
-    user?.accentColor ?? demoPreferences?.accentColor ?? "PURPLE",
+    user?.accentColor ?? "PURPLE",
   );
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      if (user) {
+        setThemeModeState(user.themeMode);
+        setAccentColorState(user.accentColor);
+        return;
+      }
+      if (mode !== "demo") return;
+      const preferences = readDemoPreferences();
+      if (preferences?.themeMode) setThemeModeState(preferences.themeMode);
+      if (preferences?.accentColor) setAccentColorState(preferences.accentColor);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [mode, user]);
 
   const save = useCallback(async (nextTheme: ThemeMode, nextAccent: AccentColor) => {
     const previousTheme = themeMode;

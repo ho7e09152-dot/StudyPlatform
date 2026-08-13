@@ -1,39 +1,36 @@
 "use client";
 
+import Link from "next/link";
 import { useMemo, useState, type CSSProperties, type ReactNode } from "react";
 import {
+  BarChart3,
   BookOpenCheck,
   CalendarCheck2,
-  CalendarDays,
   CalendarRange,
   CalendarX2,
   ChevronLeft,
   ChevronRight,
   Medal,
-  Trophy,
   Users,
-  MessageCircle,
 } from "lucide-react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { Modal } from "@/components/ui/Modal";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { MemberDetailDialog } from "@/components/today/MemberDetailDialog";
-import {
-  SESSION_TYPE_META,
-  SUBMISSION_TYPE_LABEL,
-} from "@/lib/domain/constants";
+import { SESSION_TYPE_META } from "@/lib/domain/constants";
 import { formatDate } from "@/lib/domain/format";
 import {
   getDashboardMetrics,
   getMemberProgress,
   getScoreboard,
   SCORE_RULES,
+  WORKSPACE_SCORE_POLICY,
 } from "@/lib/domain/metrics";
-import type { StudyMember, StudySession, Workspace } from "@/lib/domain/types";
+import type { StudySession, Workspace } from "@/lib/domain/types";
+import { APP_ROUTES } from "@/lib/routes";
 
 const weekdays = ["일", "월", "화", "수", "목", "금", "토"];
-type RecordsView = "day" | "month";
+type RecordsView = "week" | "month";
 
 function dateFromKey(date: string) {
   return new Date(`${date}T12:00:00Z`);
@@ -82,582 +79,246 @@ function getWeekDates(anchor: string) {
   });
 }
 
-function RecordDetail({
-  workspace,
-  session,
-  selectedDate,
-  onOpenMember,
-}: {
-  workspace: Workspace;
-  session?: StudySession;
-  selectedDate: string;
-  onOpenMember: (session: StudySession, member: StudyMember) => void;
-}) {
-  if (!session) {
-    return (
-      <section
-        className="surface record-detail record-detail--empty"
-        aria-labelledby="record-detail-title"
-      >
-        <CalendarX2 size={24} aria-hidden="true" />
-        <h2 id="record-detail-title">{formatDate(selectedDate, true)}</h2>
-        <h3>등록된 학습 기록이 없습니다</h3>
-        <p>다른 날짜로 이동하거나 월별 보기에서 기록이 있는 날짜를 선택해 주세요.</p>
-      </section>
-    );
-  }
+function formatWeekRange(dates: string[]) {
+  const start = dateFromKey(dates[0]);
+  const end = dateFromKey(dates.at(-1)!);
+  const startLabel = `${start.getUTCMonth() + 1}월 ${start.getUTCDate()}일`;
+  const endLabel = `${end.getUTCMonth() + 1}월 ${end.getUTCDate()}일`;
+  return `${startLabel} - ${endLabel}`;
+}
 
-  const activeItems = session.items
-    .filter((item) => item.status === "active")
-    .sort((a, b) => a.order - b.order);
+function SummaryMetric({ icon, value, label, detail, onClick }: {
+  icon: ReactNode;
+  value: string;
+  label: string;
+  detail?: string;
+  onClick?: () => void;
+}) {
+  const body = <><span aria-hidden="true">{icon}</span><div><strong>{value}</strong><p>{label}</p>{detail ? <small>{detail}</small> : null}</div>{onClick ? <ChevronRight size={16} aria-hidden="true" /> : null}</>;
+  return onClick ? (
+    <button type="button" className="records-summary-metric records-summary-metric--interactive" onClick={onClick} aria-label={`${label} ${value}${detail ? `, ${detail}` : ""}, 상세 보기`}>{body}</button>
+  ) : <article className="records-summary-metric">{body}</article>;
+}
+
+function TeamLearningStatus({ workspace, sessions, currentUserId, periodLabel }: {
+  workspace: Workspace;
+  sessions: StudySession[];
+  currentUserId: string;
+  periodLabel: string;
+}) {
+  const memberAverages = workspace.members
+    .filter((member) => member.status === "ACTIVE")
+    .map((member) => {
+      const rates = sessions.map((session) => getMemberProgress(workspace, session).find((progress) => progress.member.id === member.id)?.completionRate ?? 0);
+      return { member, average: rates.length ? Math.round(rates.reduce((sum, rate) => sum + rate, 0) / rates.length) : null };
+    });
 
   return (
-    <section className="surface record-detail" aria-labelledby="record-detail-title">
-      <span className={`type-chip type-chip--${SESSION_TYPE_META[session.type].tone}`}>
-        {SESSION_TYPE_META[session.type].label}
-      </span>
-      <h2 id="record-detail-title">{formatDate(session.date, true)}</h2>
-      <h3>{session.title}</h3>
-      <p>{session.description}</p>
-      <div className="record-detail__items" aria-label="학습 항목">
-        <header>
-          <strong>학습 항목</strong>
-          <span>{activeItems.length}개</span>
-        </header>
-        {activeItems.map((item) => (
-          <article key={item.id}>
-            <span className="record-detail__item-order">{item.order}</span>
-            <span>
-              <strong>{item.title}</strong>
-              <small>
-                {item.source ? `${item.source} · ` : ""}
-                {SUBMISSION_TYPE_LABEL[item.submitType]} 제출
-              </small>
-            </span>
-            <em>{item.required ? "필수" : "선택"}</em>
-          </article>
-        ))}
-      </div>
-      <div className="record-detail__members">
-        {getMemberProgress(workspace, session).map((progress) => (
-          <button
-            type="button"
-            key={progress.member.id}
-            disabled={!workspace.submissions[`${session.folder}/${progress.member.id}`]}
-            onClick={() => onOpenMember(session, progress.member)}
-          >
-            <Avatar member={progress.member} size="small" />
-            <span>
-              <strong>{progress.member.displayName}</strong>
-              <small>
-                {progress.completedItems}/{progress.requiredItems} 완료
-              </small>
-            </span>
-            <strong>{progress.completionRate}%</strong>
-            <MessageCircle size={14} aria-label="리뷰 보기" />
-          </button>
-        ))}
-      </div>
+    <section className="records-panel records-team-status" aria-labelledby="records-team-title">
+      <header className="records-section-heading"><div><h2 id="records-team-title">팀 학습 현황</h2><p>일정이 있는 날의 필수 항목 완료율 평균입니다.</p></div><span>{periodLabel}</span></header>
+      {sessions.length ? <div className="records-member-list">{memberAverages.map(({ member, average }) => (
+        <div className="records-member-row" key={member.id}>
+          <Avatar member={member} />
+          <span><strong>{member.displayName}{member.id === currentUserId ? " (나)" : ""}</strong></span>
+          <ProgressBar value={average ?? 0} label={`${member.displayName} 평균 완료율`} />
+          <strong>{average}%</strong>
+        </div>
+      ))}</div> : <div className="records-inline-empty"><CalendarX2 size={22} /><p>이 기간에는 학습 기록이 없어요.</p></div>}
     </section>
   );
 }
 
-function StatCard({
-  icon,
-  value,
-  label,
-  detail,
-  className,
-  onClick,
-  actionLabel,
-}: {
-  icon: ReactNode;
-  value: string;
-  label: string;
-  detail: string;
-  className?: string;
-  onClick?: () => void;
-  actionLabel?: string;
+function WeeklyChart({ workspace, dates, selectedDate, onSelectDate }: {
+  workspace: Workspace;
+  dates: string[];
+  selectedDate: string;
+  onSelectDate: (date: string) => void;
 }) {
-  const content = (
-    <>
-      <span>{icon}</span>
-      <strong>{value}</strong>
-      <p>{label}</p>
-      <small>{detail}</small>
-    </>
+  const sessions = dates.map((date) => workspace.sessions[date]).filter((session): session is StudySession => Boolean(session && session.status === "active"));
+  return (
+    <section className="records-panel records-weekly-chart" aria-labelledby="records-weekly-title">
+      <header className="records-section-heading"><div><h2 id="records-weekly-title">이번 주 완료율</h2><p>팀 전체 필수 항목의 일별 완료 흐름입니다.</p></div><span>{formatWeekRange(dates)}</span></header>
+      {sessions.length ? <div className="records-bar-chart" role="group" aria-label={`${formatWeekRange(dates)} 일별 완료율`}>
+        {dates.map((date) => {
+          const session = workspace.sessions[date]?.status === "active" ? workspace.sessions[date] : undefined;
+          const metrics = session ? getDashboardMetrics(workspace, session) : undefined;
+          const rate = metrics?.submissionRate ?? null;
+          const label = rate === null
+            ? `${formatDate(date, true)}, 학습 일정 없음`
+            : `${formatDate(date, true)}, 완료율 ${rate}%, ${metrics?.submittedItems} / ${metrics?.totalRequiredSubmissions}개 필수 항목 완료${selectedDate === date ? ", 선택됨" : ""}`;
+          return (
+            <button type="button" key={date} className={`${selectedDate === date ? "selected" : ""} ${rate === null ? "no-data" : ""}`} onClick={() => onSelectDate(date)} aria-label={label} title={label}>
+              <span aria-hidden="true">{rate === null ? <><span className="records-no-data-full">일정 없음</span><span className="records-no-data-compact">—</span></> : `${rate}%`}</span>
+              <i className="records-bar-track"><b style={{ height: `${rate === null ? 0 : Math.max(rate, 4)}%` }} /></i>
+              <strong>{weekdays[dateFromKey(date).getUTCDay()]}</strong>
+              <small>{Number(date.slice(8))}</small>
+            </button>
+          );
+        })}
+      </div> : <div className="records-period-empty"><CalendarX2 size={26} /><strong>이 기간에는 학습 기록이 없어요.</strong></div>}
+    </section>
+  );
+}
+
+function MonthlyCalendar({ workspace, month, selectedDate, referenceDate, onSelectDate }: {
+  workspace: Workspace;
+  month: string;
+  selectedDate: string;
+  referenceDate: string;
+  onSelectDate: (date: string) => void;
+}) {
+  const calendar = getMonthCalendar(month);
+  return (
+    <section className="records-panel records-calendar" aria-labelledby="records-calendar-title">
+      <header className="records-section-heading"><div><h2 id="records-calendar-title">학습 캘린더</h2><p>배경 농도는 해당 날짜의 팀 완료율을 나타냅니다.</p></div><span>{formatMonth(month)}</span></header>
+      <div className="records-calendar-weekdays">{weekdays.map((day) => <span key={day}>{day}</span>)}</div>
+      <div className="records-calendar-grid">
+        {Array.from({ length: calendar.firstDay }, (_, index) => <span key={`blank-${index}`} aria-hidden="true" />)}
+        {Array.from({ length: calendar.days }, (_, index) => index + 1).map((day) => {
+          const date = `${month}-${String(day).padStart(2, "0")}`;
+          const session = workspace.sessions[date]?.status === "active" ? workspace.sessions[date] : undefined;
+          const rate = session ? getDashboardMetrics(workspace, session).submissionRate : null;
+          const selected = selectedDate === date;
+          const today = referenceDate === date;
+          const label = `${formatDate(date, true)}, ${rate === null ? "학습 일정 없음" : `완료율 ${rate}%`}${today ? ", 오늘" : ""}${selected ? ", 선택됨" : ""}`;
+          return (
+            <button type="button" key={date} className={`${rate === null ? "no-data" : "has-data"} ${rate === 0 ? "zero-completion" : ""} ${selected ? "selected" : ""} ${today ? "today" : ""}`} onClick={() => onSelectDate(date)} aria-label={label} aria-pressed={selected} title={label} style={rate === null ? undefined : ({ "--records-heat": `${0.1 + rate * 0.0036}` } as CSSProperties)}>
+              <strong>{day}</strong>{rate !== null ? <small>{rate}%</small> : null}
+            </button>
+          );
+        })}
+      </div>
+      <div className="records-calendar-legend" aria-label="완료율 색상 범례"><span><i className="empty" />일정 없음</span><span>낮음 <i className="low" /><i className="medium" /><i className="high" /> 높음</span></div>
+    </section>
+  );
+}
+
+function SelectedDateSummary({ workspace, session, selectedDate, currentUserId }: {
+  workspace: Workspace;
+  session?: StudySession;
+  selectedDate: string;
+  currentUserId: string;
+}) {
+  if (!session) return (
+    <section className="records-panel records-date-summary records-date-summary--empty" aria-labelledby="records-date-title">
+      <CalendarX2 size={25} aria-hidden="true" /><h2 id="records-date-title">{formatDate(selectedDate, true)}</h2><strong>이 날에는 학습 일정이 없어요.</strong>
+    </section>
   );
 
+  const metrics = getDashboardMetrics(workspace, session);
+  const progress = getMemberProgress(workspace, session);
+  const mine = progress.find((entry) => entry.member.id === currentUserId);
+  const submittedMembers = progress.filter((entry) => entry.completedItems > 0).length;
+  const activeItems = session.items.filter((item) => item.status === "active");
+  const meta = SESSION_TYPE_META[session.type];
   return (
-    <article
-      className={`${className ?? ""} ${onClick ? "record-stat-card--interactive" : ""}`.trim()}
-    >
-      {onClick ? (
-        <button
-          type="button"
-          className="record-stat-card__trigger"
-          onClick={onClick}
-          aria-label={actionLabel ?? `${label} 상세 보기`}
-        >
-          {content}
-          <span className="record-stat-card__open">
-            순위 보기 <ChevronRight size={13} aria-hidden="true" />
-          </span>
-        </button>
-      ) : (
-        content
-      )}
-    </article>
+    <section className="records-panel records-date-summary" aria-labelledby="records-date-title">
+      <header><div><span className={`type-chip type-chip--${meta.tone}`}>{meta.label}</span><p>{formatDate(session.date, true)}</p><h2 id="records-date-title">{session.title}</h2></div></header>
+      <dl className="records-date-metrics">
+        <div><dt>완료율</dt><dd>{metrics.submissionRate}%</dd></div>
+        <div><dt>내 완료</dt><dd>{mine?.completedItems ?? 0} / {mine?.requiredItems ?? 0}</dd></div>
+        <div><dt>팀 제출</dt><dd>{submittedMembers} / {progress.length}명</dd></div>
+        <div><dt>학습 항목</dt><dd>{activeItems.length}개</dd></div>
+      </dl>
+      <Link href={APP_ROUTES.librarySession(session.date)} className="records-library-link">학습 세션 보기 <ChevronRight size={15} /></Link>
+    </section>
   );
 }
 
 export function RecordsWorkspace() {
   const { workspace, currentUserId, referenceDate } = useWorkspace();
-  const sessions = useMemo(
-    () =>
-      Object.values(workspace.sessions)
-        .filter((session) => session.status === "active")
-        .sort((a, b) => a.date.localeCompare(b.date)),
-    [workspace.sessions],
-  );
+  const sessions = useMemo(() => Object.values(workspace.sessions).filter((session) => session.status === "active").sort((a, b) => a.date.localeCompare(b.date)), [workspace.sessions]);
   const initialDate = sessions.at(-1)?.date ?? referenceDate;
-  const [view, setView] = useState<RecordsView>("month");
+  const [view, setView] = useState<RecordsView>("week");
   const [selectedDate, setSelectedDate] = useState(initialDate);
   const [selectedMonth, setSelectedMonth] = useState(initialDate.slice(0, 7));
-  const [reviewTarget, setReviewTarget] = useState<{ session: StudySession; member: StudyMember } | null>(null);
   const [isScoreModalOpen, setIsScoreModalOpen] = useState(false);
 
-  const selected =
-    workspace.sessions[selectedDate]?.status === "active"
-      ? workspace.sessions[selectedDate]
-      : undefined;
-  const monthSessions = useMemo(
-    () => sessions.filter((session) => session.date.startsWith(`${selectedMonth}-`)),
-    [selectedMonth, sessions],
-  );
-  const scopedSessions = view === "day" ? (selected ? [selected] : []) : monthSessions;
-  const scoreboard = getScoreboard(workspace, scopedSessions);
-  const myScore = scoreboard.find(
-    (score) => score.member.id === currentUserId,
-  );
-  const sessionMetrics = scopedSessions.map((session) => ({
-    session,
-    metrics: getDashboardMetrics(workspace, session),
-  }));
-  const average = sessionMetrics.length
-    ? Math.round(
-        sessionMetrics.reduce((total, item) => total + item.metrics.submissionRate, 0) /
-          sessionMetrics.length,
-      )
-    : 0;
-  const totalSubmissions = sessionMetrics.reduce(
-    (total, item) => total + item.metrics.submittedItems,
-    0,
-  );
-  const best = sessionMetrics
-    .slice()
-    .sort((a, b) => b.metrics.submissionRate - a.metrics.submissionRate)[0];
-  const selectedMetrics = selected
-    ? getDashboardMetrics(workspace, selected)
-    : undefined;
-  const periodLabel =
-    view === "day" ? formatDate(selectedDate, true) : formatMonth(selectedMonth);
-  const periodCaption = view === "day" ? "일간 기록" : "월간 요약";
-  const isCurrentPeriod =
-    view === "day"
-      ? selectedDate === referenceDate
-      : selectedMonth === referenceDate.slice(0, 7);
-  const periodKey = view === "day" ? selectedDate : selectedMonth;
-  const calendar = getMonthCalendar(selectedMonth);
   const weekDates = getWeekDates(selectedDate);
-  const weekLabel = `${Number(weekDates[0].slice(5, 7))}.${Number(weekDates[0].slice(8))} – ${Number(weekDates[6].slice(5, 7))}.${Number(weekDates[6].slice(8))}`;
+  const currentWeekDates = getWeekDates(referenceDate);
+  const monthSessions = sessions.filter((session) => session.date.startsWith(`${selectedMonth}-`));
+  const weekSessions = sessions.filter((session) => session.date >= weekDates[0] && session.date <= weekDates.at(-1)!);
+  const scopedSessions = view === "week" ? weekSessions : monthSessions;
+  const periodLabel = view === "week" ? formatWeekRange(weekDates) : formatMonth(selectedMonth);
+  const selectedSession = workspace.sessions[selectedDate]?.status === "active" ? workspace.sessions[selectedDate] : undefined;
+  const sessionMetrics = scopedSessions.map((session) => getDashboardMetrics(workspace, session));
+  const averageCompletion = sessionMetrics.length ? Math.round(sessionMetrics.reduce((sum, metrics) => sum + metrics.submissionRate, 0) / sessionMetrics.length) : null;
+  const totalSubmissions = sessionMetrics.reduce((sum, metrics) => sum + metrics.submittedItems, 0);
+  const scoreboard = getScoreboard(workspace, scopedSessions);
+  const myScore = scoreboard.find((score) => score.member.id === currentUserId);
+  const currentPeriod = view === "week" ? weekDates[0] === currentWeekDates[0] : selectedMonth === referenceDate.slice(0, 7);
+  const canMoveNext = view === "week" ? weekDates[0] < currentWeekDates[0] : selectedMonth < referenceDate.slice(0, 7);
 
-  const memberAverages = workspace.members.map((member) => {
-    const rates = scopedSessions.map(
-      (session) =>
-        getMemberProgress(workspace, session).find(
-          (progress) => progress.member.id === member.id,
-        )?.completionRate ?? 0,
-    );
-    return {
-      member,
-      average: rates.length
-        ? Math.round(rates.reduce((total, rate) => total + rate, 0) / rates.length)
-        : 0,
-    };
-  });
-
-  const selectDate = (date: string) => {
+  function selectDate(date: string) {
     setSelectedDate(date);
     setSelectedMonth(date.slice(0, 7));
-  };
+  }
 
-  const changeView = (nextView: RecordsView) => {
+  function changePeriod(amount: number) {
+    if (view === "week") selectDate(moveDate(weekDates[0], amount * 7));
+    else {
+      const nextMonth = moveMonth(selectedMonth, amount);
+      const available = sessions.filter((session) => session.date.startsWith(`${nextMonth}-`));
+      setSelectedMonth(nextMonth);
+      setSelectedDate((amount < 0 ? available.at(-1) : available[0])?.date ?? `${nextMonth}-01`);
+    }
+  }
+
+  function changeView(nextView: RecordsView) {
     setView(nextView);
-    if (nextView === "month") {
-      setSelectedMonth(selectedDate.slice(0, 7));
-    }
-  };
-
-  const changePeriod = (amount: number) => {
-    if (view === "day") {
-      selectDate(moveDate(selectedDate, amount));
-      return;
-    }
-
-    const nextMonth = moveMonth(selectedMonth, amount);
-    const available = sessions.filter((session) =>
-      session.date.startsWith(`${nextMonth}-`),
-    );
-    setSelectedMonth(nextMonth);
-    setSelectedDate(
-      (amount < 0 ? available.at(-1) : available[0])?.date ?? `${nextMonth}-01`,
-    );
-  };
-
-  const goToToday = () => {
-    selectDate(referenceDate);
-  };
+    if (nextView === "month") setSelectedMonth(selectedDate.slice(0, 7));
+  }
 
   return (
-    <div className="page-stack">
-      <header className="page-heading records-page-heading">
-        <div>
-          <p className="eyebrow">REPOSITORY-DERIVED ANALYTICS</p>
-          <h1>학습 기록</h1>
-          <p>고정 통계 없이 실제 session.yml과 멤버 제출 파일에서 계산합니다.</p>
-        </div>
+    <div className="page-stack records-workspace">
+      <header className="page-heading records-page-heading"><div><h1>학습 기록</h1><p>스터디의 학습 흐름과 참여 현황을 확인하세요.</p></div></header>
 
-        <div className="records-toolbar" aria-label="기록 조회 컨트롤">
-          <div
-            className={`records-view-toggle records-view-toggle--${view}`}
-            role="group"
-            aria-label="기록 보기 방식"
-          >
-            <button
-              type="button"
-              className={view === "day" ? "active" : undefined}
-              aria-pressed={view === "day"}
-              onClick={() => changeView("day")}
-            >
-              <CalendarDays size={15} aria-hidden="true" />
-              <span>일별</span>
-            </button>
-            <button
-              type="button"
-              className={view === "month" ? "active" : undefined}
-              aria-pressed={view === "month"}
-              onClick={() => changeView("month")}
-            >
-              <CalendarRange size={15} aria-hidden="true" />
-              <span>월별</span>
-            </button>
-          </div>
-          <span className="records-toolbar-divider" aria-hidden="true" />
-          <div className="records-period-nav">
-            <button
-              type="button"
-              className="icon-button"
-              aria-label={view === "day" ? "이전 날짜" : "이전 달"}
-              onClick={() => changePeriod(-1)}
-            >
-              <ChevronLeft size={18} />
-            </button>
-            <span className="records-period-title" aria-live="polite">
-              <small>{periodCaption}</small>
-              <strong>{periodLabel}</strong>
-            </span>
-            <button
-              type="button"
-              className="icon-button"
-              aria-label={view === "day" ? "다음 날짜" : "다음 달"}
-              onClick={() => changePeriod(1)}
-            >
-              <ChevronRight size={18} />
-            </button>
-          </div>
-          <button
-            type="button"
-            className={`records-today-button ${isCurrentPeriod ? "current" : ""}`}
-            aria-current={isCurrentPeriod ? "date" : undefined}
-            onClick={goToToday}
-          >
-            <CalendarCheck2 size={14} aria-hidden="true" />
-            오늘
-          </button>
+      <section className="records-controls" aria-label="기록 기간 설정">
+        <div className="records-period-switch" role="group" aria-label="기록 기간 단위">
+          <button type="button" aria-pressed={view === "week"} onClick={() => changeView("week")}><BarChart3 size={16} /> 주간</button>
+          <button type="button" aria-pressed={view === "month"} onClick={() => changeView("month")}><CalendarRange size={16} /> 월간</button>
         </div>
-      </header>
-
-      <section
-        key={`stats-${periodKey}`}
-        className="record-stat-grid record-stat-grid--scored record-switch-animation"
-        aria-label={`${periodLabel} 학습 기록 요약`}
-      >
-        <StatCard
-          icon={<BookOpenCheck size={19} />}
-          value={`${average}%`}
-          label="평균 제출률"
-          detail={periodLabel}
-        />
-        <StatCard
-          icon={<CalendarCheck2 size={19} />}
-          value={`${scopedSessions.length}일`}
-          label="학습한 날"
-          detail={view === "day" ? (selected ? "학습 일정 있음" : "학습 일정 없음") : periodLabel}
-        />
-        <StatCard
-          icon={<Users size={19} />}
-          value={`${totalSubmissions}건`}
-          label="총 제출 수"
-          detail="필수 활성 항목 기준"
-        />
-        <StatCard
-          icon={<Trophy size={19} />}
-          value={
-            view === "day"
-              ? `${selectedMetrics?.completedMembers ?? 0}명`
-              : `${best?.metrics.submissionRate ?? 0}%`
-          }
-          label={view === "day" ? "완료 멤버" : "최고 완료일"}
-          detail={
-            view === "day"
-              ? `전체 ${workspace.members.length}명`
-              : best
-                ? formatDate(best.session.date)
-                : "기록 없음"
-          }
-        />
-        <StatCard
-          className="record-score-card"
-          icon={<Medal size={19} />}
-          value={`${myScore?.points ?? 0}P`}
-          label="내 현재 점수"
-          detail={`${myScore?.primaryCount ?? 0}건 1차 · ${myScore?.secondaryCount ?? 0}건 2차`}
-          onClick={() => setIsScoreModalOpen(true)}
-          actionLabel={`${periodLabel} 내 점수와 멤버 순위 보기`}
-        />
+        <div className="records-period-navigation">
+          <button type="button" className="icon-button" onClick={() => changePeriod(-1)} aria-label={view === "week" ? "이전 주" : "이전 달"}><ChevronLeft size={18} /></button>
+          <strong aria-live="polite">{periodLabel}</strong>
+          <button type="button" className="icon-button" disabled={!canMoveNext} onClick={() => changePeriod(1)} aria-label={view === "week" ? "다음 주" : "다음 달"}><ChevronRight size={18} /></button>
+        </div>
+        <button type="button" className="button button--secondary button--small" disabled={currentPeriod} onClick={() => { selectDate(referenceDate); setSelectedMonth(referenceDate.slice(0, 7)); }}>{view === "week" ? "이번 주" : "이번 달"}</button>
       </section>
 
-      {isScoreModalOpen ? (
-        <Modal
-          title="점수 상세"
-          description={`${periodLabel} 마감 단계와 필수 항목 제출 시각을 기준으로 계산한 점수입니다.`}
-          onClose={() => setIsScoreModalOpen(false)}
-          size="large"
-        >
-          <div className="score-modal-body">
-            <section className="score-modal-summary" aria-label="내 점수 요약">
-              <span className="score-modal-summary__icon">
-                <Medal size={22} aria-hidden="true" />
-              </span>
-              <div>
-                <small>{periodLabel}</small>
-                <strong>{myScore?.points ?? 0}P</strong>
-                <p>
-                  1차 {myScore?.primaryCount ?? 0}건 · 2차{" "}
-                  {myScore?.secondaryCount ?? 0}건
-                </p>
-              </div>
-              <span className="score-modal-summary__rank">
-                {myScore?.rank ?? "-"}위
-              </span>
-            </section>
+      <section className={`records-summary-grid ${WORKSPACE_SCORE_POLICY.enabled ? "records-summary-grid--scored" : ""}`} aria-label={`${periodLabel} 요약`}>
+        <SummaryMetric icon={<BookOpenCheck size={19} />} value={averageCompletion === null ? "—" : `${averageCompletion}%`} label="팀 평균 완료율" />
+        <SummaryMetric icon={<CalendarCheck2 size={19} />} value={`${scopedSessions.length}일`} label="학습한 날" />
+        <SummaryMetric icon={<Users size={19} />} value={`${totalSubmissions}건`} label="완료 항목" />
+        {WORKSPACE_SCORE_POLICY.enabled ? <SummaryMetric icon={<Medal size={19} />} value={`${myScore?.points ?? 0}P`} label="내 점수" detail={`${myScore?.primaryCount ?? 0}건 1차 · ${myScore?.secondaryCount ?? 0}건 2차`} onClick={() => setIsScoreModalOpen(true)} /> : null}
+      </section>
+      <p className="records-summary-context">선택한 기간의 일정과 팀 필수 항목을 기준으로 계산합니다.</p>
 
-            <div className="score-rule" aria-label="점수 계산 기준">
-              <span><i className="primary" />1차 마감 내 <strong>+{SCORE_RULES.primary}P</strong></span>
-              <span><i className="secondary" />2차 마감 내 <strong>+{SCORE_RULES.secondary}P</strong></span>
-              <span><i className="missed" />미제출·기한 초과 <strong>0P</strong></span>
-            </div>
-
-            <div className="score-modal-ranking-heading">
-              <div>
-                <p className="eyebrow">POINT RANKING</p>
-                <h3>멤버 점수 순위</h3>
-              </div>
-              <span>{workspace.members.length}명</span>
-            </div>
-
-            <ol className="score-ranking__list">
-              {scoreboard.map((score) => {
-                const scoreRate = score.maxPoints
-                  ? Math.round((score.points / score.maxPoints) * 100)
-                  : 0;
-                const isMe = score.member.id === currentUserId;
-                return (
-                  <li key={score.member.id} className={isMe ? "is-me" : undefined}>
-                    <span className={`score-rank score-rank--${Math.min(score.rank, 3)}`}>
-                      {score.rank}
-                    </span>
-                    <Avatar member={score.member} />
-                    <span className="score-member">
-                      <strong>
-                        {score.member.displayName}
-                        {isMe ? <em>나</em> : null}
-                      </strong>
-                      <small>
-                        1차 {score.primaryCount}건 · 2차 {score.secondaryCount}건
-                      </small>
-                    </span>
-                    <span
-                      className="score-bar"
-                      role="progressbar"
-                      aria-label={`${score.member.displayName} 점수`}
-                      aria-valuemin={0}
-                      aria-valuemax={score.maxPoints}
-                      aria-valuenow={score.points}
-                    >
-                      <i
-                        style={{
-                          width: `${scoreRate}%`,
-                          backgroundColor: score.member.color,
-                        }}
-                      />
-                    </span>
-                    <strong className="score-points">
-                      {score.points}P
-                      <small>/{score.maxPoints}P</small>
-                    </strong>
-                  </li>
-                );
-              })}
-            </ol>
+      <div key={`${view}-${periodLabel}`} className="motion-content-swap">
+        {view === "week" ? (
+          <div className="records-weekly-layout">
+          <WeeklyChart workspace={workspace} dates={weekDates} selectedDate={selectedDate} onSelectDate={selectDate} />
+          <TeamLearningStatus workspace={workspace} sessions={weekSessions} currentUserId={currentUserId} periodLabel={periodLabel} />
           </div>
-        </Modal>
-      ) : null}
-
-      <div
-        key={`overview-${view}-${periodKey}`}
-        className="records-columns record-switch-animation"
-      >
-        <section className="surface weekly-chart" aria-labelledby="weekly-title">
-          <header className="section-heading">
-            <div>
-              <p className="eyebrow">WEEKLY</p>
-              <h2 id="weekly-title">선택 주 제출률</h2>
-            </div>
-            <span>{weekLabel}</span>
-          </header>
-          <div className="bar-chart">
-            {weekDates.map((date) => {
-              const day = Number(date.slice(8));
-              const session =
-                workspace.sessions[date]?.status === "active"
-                  ? workspace.sessions[date]
-                  : undefined;
-              const rate = session
-                ? getDashboardMetrics(workspace, session).submissionRate
-                : 0;
-              return (
-                <button
-                  type="button"
-                  key={date}
-                  className={selectedDate === date ? "active" : undefined}
-                  onClick={() => selectDate(date)}
-                  aria-label={`${formatDate(date, true)} ${session ? `${rate}%` : "기록 없음"}`}
-                >
-                  <span>{session ? `${rate}%` : "—"}</span>
-                  <i style={{ height: `${session ? Math.max(10, rate) : 3}%` }} />
-                  <strong>{weekdays[dateFromKey(date).getUTCDay()]}</strong>
-                  <small>{day}</small>
-                </button>
-              );
-            })}
+        ) : monthSessions.length ? (
+          <div className="records-monthly-layout">
+          <MonthlyCalendar workspace={workspace} month={selectedMonth} selectedDate={selectedDate} referenceDate={referenceDate} onSelectDate={selectDate} />
+          <SelectedDateSummary workspace={workspace} session={selectedSession} selectedDate={selectedDate} currentUserId={currentUserId} />
           </div>
-        </section>
-
-        <section className="surface member-averages" aria-labelledby="average-title">
-          <header className="section-heading">
-            <div>
-              <p className="eyebrow">MEMBERS</p>
-              <h2 id="average-title">멤버별 평균</h2>
-            </div>
-            <span>{view === "day" ? "선택 날짜" : "선택 월"}</span>
-          </header>
-          {memberAverages.map(({ member, average: rate }) => (
-            <div className="average-row" key={member.id}>
-              <Avatar member={member} />
-              <span>
-                <strong>{member.displayName}</strong>
-                <small>{member.fileName}</small>
-              </span>
-              <ProgressBar value={rate} color={member.color} label={`${member.displayName} 평균`} />
-              <strong>{rate}%</strong>
-            </div>
-          ))}
-        </section>
+        ) : <section className="records-period-empty records-period-empty--standalone"><CalendarX2 size={28} /><strong>이 기간에는 학습 기록이 없어요.</strong></section>}
       </div>
 
-      <div
-        key={`detail-${view}-${selectedDate}`}
-        className="records-bottom record-switch-animation"
-      >
-        <section className="surface calendar-card" aria-labelledby="calendar-title">
-          <header className="section-heading">
-            <div>
-              <p className="eyebrow">{view === "day" ? "DATE PICKER" : "MONTHLY"}</p>
-              <h2 id="calendar-title">{formatMonth(selectedMonth)}</h2>
-            </div>
-            <span>
-              {view === "day" ? "날짜를 선택해 일별 기록 이동" : "날짜를 선택해 상세 보기"}
-            </span>
-          </header>
-          <div className="calendar-weekdays">
-            {weekdays.map((day) => (
-              <span key={day}>{day}</span>
-            ))}
-          </div>
-          <div className="calendar-grid">
-            {Array.from({ length: calendar.firstDay }, (_, index) => (
-              <span key={`blank-${index}`} />
-            ))}
-            {Array.from({ length: calendar.days }, (_, index) => index + 1).map(
-              (day) => {
-                const date = `${selectedMonth}-${String(day).padStart(2, "0")}`;
-                const session =
-                  workspace.sessions[date]?.status === "active"
-                    ? workspace.sessions[date]
-                    : undefined;
-                const rate = session
-                  ? getDashboardMetrics(workspace, session).submissionRate
-                  : null;
-                return (
-                  <button
-                    key={date}
-                    type="button"
-                    className={`${selectedDate === date ? "selected" : ""} ${rate === null ? "empty" : ""}`}
-                    onClick={() => selectDate(date)}
-                    aria-label={`${formatDate(date, true)} ${rate === null ? "기록 없음" : `${rate}%`}`}
-                    style={
-                      rate === null
-                        ? undefined
-                        : ({ "--heat": `${0.08 + rate / 125}` } as CSSProperties)
-                    }
-                  >
-                    {day}
-                    {rate !== null ? <small>{rate}%</small> : null}
-                  </button>
-                );
-              },
-            )}
-          </div>
-        </section>
-
-        <RecordDetail
-          workspace={workspace}
-          session={selected}
-          selectedDate={selectedDate}
-          onOpenMember={(session, member) => setReviewTarget({ session, member })}
-        />
-      </div>
-      {reviewTarget ? (
-        <MemberDetailDialog
-          workspace={workspace}
-          session={reviewTarget.session}
-          member={reviewTarget.member}
-          currentUserId={currentUserId}
-          onClose={() => setReviewTarget(null)}
-        />
-      ) : null}
+      {isScoreModalOpen ? <Modal title="점수 상세" description={periodLabel} onClose={() => setIsScoreModalOpen(false)} size="large">
+        <div className="records-score-dialog">
+          <section className="records-score-summary" aria-label="내 점수"><span><Medal size={20} /></span><div><small>내 점수</small><strong>{myScore?.points ?? 0}P</strong></div>{WORKSPACE_SCORE_POLICY.rankingEnabled ? <em>팀 {myScore?.rank ?? "-"}위</em> : null}</section>
+          <section className="records-score-breakdown" aria-labelledby="score-breakdown-title"><h3 id="score-breakdown-title">점수 구성</h3><dl>
+            <div><dt>1차 마감 내 제출</dt><dd>{myScore?.primaryCount ?? 0}건 × +{SCORE_RULES.primary}P</dd></div>
+            <div><dt>2차 마감 내 제출</dt><dd>{myScore?.secondaryCount ?? 0}건 × +{SCORE_RULES.secondary}P</dd></div>
+            <div><dt>점수 없는 항목</dt><dd>{myScore?.missedCount ?? 0}건 × 0P</dd></div>
+          </dl></section>
+          {WORKSPACE_SCORE_POLICY.rankingEnabled ? <section className="records-score-team" aria-labelledby="score-team-title"><header><h3 id="score-team-title">팀 점수 현황</h3><span>{scoreboard.length}명</span></header><ol>{scoreboard.map((score) => <li key={score.member.id} className={score.member.id === currentUserId ? "is-me" : ""}><span>{score.rank}</span><Avatar member={score.member} /><strong>{score.member.displayName}{score.member.id === currentUserId ? " (나)" : ""}</strong><small>1차 {score.primaryCount}건 · 2차 {score.secondaryCount}건</small><em>{score.points}P</em></li>)}</ol></section> : null}
+        </div>
+      </Modal> : null}
     </div>
   );
 }

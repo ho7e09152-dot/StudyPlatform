@@ -1,0 +1,327 @@
+{
+  "baseURL": "https://sandbox.withroro.com",
+  "capturedAt": "2026-08-13T10:36:10.067Z",
+  "captures": [
+    {
+      "viewport": "desktop",
+      "state": "Schedule Calendar",
+      "file": "desktop-calendar.png"
+    },
+    {
+      "viewport": "desktop",
+      "state": "Schedule Calendar Long Title",
+      "file": "desktop-calendar-long-title.png"
+    },
+    {
+      "viewport": "desktop",
+      "state": "Schedule List",
+      "file": "desktop-list.png"
+    },
+    {
+      "viewport": "desktop",
+      "state": "Schedule Create",
+      "file": "desktop-create.png"
+    },
+    {
+      "viewport": "desktop",
+      "state": "Schedule Edit",
+      "file": "desktop-edit.png"
+    },
+    {
+      "viewport": "desktop",
+      "state": "Schedule Edit Step 2",
+      "file": "desktop-edit-step2.png"
+    },
+    {
+      "viewport": "desktop",
+      "state": "Schedule Detail",
+      "file": "desktop-detail.png"
+    },
+    {
+      "viewport": "desktop",
+      "state": "Submission",
+      "file": "desktop-submission.png"
+    },
+    {
+      "viewport": "desktop",
+      "state": "Team Review",
+      "file": "desktop-team-review.png"
+    },
+    {
+      "viewport": "mobile",
+      "state": "Schedule Calendar",
+      "file": "mobile-calendar.png"
+    },
+    {
+      "viewport": "mobile",
+      "state": "Schedule Calendar Long Title",
+      "file": "mobile-calendar-long-title.png"
+    },
+    {
+      "viewport": "mobile",
+      "state": "Schedule List",
+      "file": "mobile-list.png"
+    },
+    {
+      "viewport": "mobile",
+      "state": "Schedule Create",
+      "file": "mobile-create.png"
+    },
+    {
+      "viewport": "mobile",
+      "state": "Schedule Edit",
+      "file": "mobile-edit.png"
+    },
+    {
+      "viewport": "mobile",
+      "state": "Schedule Edit Step 2",
+      "file": "mobile-edit-step2.png"
+    },
+    {
+      "viewport": "mobile",
+      "state": "Schedule Detail",
+      "file": "mobile-detail.png"
+    },
+    {
+      "viewport": "mobile",
+      "state": "Submission",
+      "file": "mobile-submission.png"
+    }
+  ],
+  "consoleErrors": [],
+  "pageErrors": [
+    {
+      "viewport": "mobile",
+      "text": "locator.click: Error: strict mode violation: getByRole('button', { name: '닫기', exact: true }) resolved to 2 elements:\n    1) <button type=\"button\" aria-label=\"닫기\" class=\"icon-button\">…</button> aka getByRole('dialog', { name: '이 일정을 취소할까요?' }).getByLabel('닫기')\n    2) <button type=\"button\" aria-label=\"닫기\" class=\"icon-button\">…</button> aka getByRole('dialog', { name: '학습 항목 제출' }).getByLabel('닫기')\n\nCall log:\n  - waiting for getByRole('button', { name: '닫기', exact: true })\n\n    at runViewport (/work/scripts/capture-schedule-qa.mjs:90:63)\n    at async file:///work/scripts/capture-schedule-qa.mjs:108:5"
+    }
+  ],
+  "overflow": [
+    {
+      "viewport": "desktop",
+      "state": "Schedule Calendar",
+      "width": 1440,
+      "clientWidth": 1440,
+      "overflow": false
+    },
+    {
+      "viewport": "desktop",
+      "state": "Schedule Calendar Long Title",
+      "width": 1440,
+      "clientWidth": 1440,
+      "overflow": false
+    },
+    {
+      "viewport": "desktop",
+      "state": "Schedule List",
+      "width": 1440,
+      "clientWidth": 1440,
+      "overflow": false
+    },
+    {
+      "viewport": "desktop",
+      "state": "Schedule Create",
+      "width": 1440,
+      "clientWidth": 1440,
+      "overflow": false
+    },
+    {
+      "viewport": "desktop",
+      "state": "Schedule Edit",
+      "width": 1440,
+      "clientWidth": 1440,
+      "overflow": false
+    },
+    {
+      "viewport": "desktop",
+      "state": "Schedule Edit Step 2",
+      "width": 1440,
+      "clientWidth": 1440,
+      "overflow": false
+    },
+    {
+      "viewport": "desktop",
+      "state": "Schedule Detail",
+      "width": 1440,
+      "clientWidth": 1440,
+      "overflow": false
+    },
+    {
+      "viewport": "desktop",
+      "state": "Submission",
+      "width": 1440,
+      "clientWidth": 1440,
+      "overflow": false
+    },
+    {
+      "viewport": "desktop",
+      "state": "Team Review",
+      "width": 1440,
+      "clientWidth": 1440,
+      "overflow": false
+    },
+    {
+      "viewport": "mobile",
+      "state": "Schedule Calendar",
+      "width": 390,
+      "clientWidth": 390,
+      "overflow": false
+    },
+    {
+      "viewport": "mobile",
+      "state": "Schedule Calendar Long Title",
+      "width": 390,
+      "clientWidth": 390,
+      "overflow": false
+    },
+    {
+      "viewport": "mobile",
+      "state": "Schedule List",
+      "width": 390,
+      "clientWidth": 390,
+      "overflow": false
+    },
+    {
+      "viewport": "mobile",
+      "state": "Schedule Create",
+      "width": 390,
+      "clientWidth": 390,
+      "overflow": false
+    },
+    {
+      "viewport": "mobile",
+      "state": "Schedule Edit",
+      "width": 390,
+      "clientWidth": 390,
+      "overflow": false
+    },
+    {
+      "viewport": "mobile",
+      "state": "Schedule Edit Step 2",
+      "width": 390,
+      "clientWidth": 390,
+      "overflow": false
+    },
+    {
+      "viewport": "mobile",
+      "state": "Schedule Detail",
+      "width": 390,
+      "clientWidth": 390,
+      "overflow": false
+    },
+    {
+      "viewport": "mobile",
+      "state": "Submission",
+      "width": 390,
+      "clientWidth": 390,
+      "overflow": false
+    }
+  ],
+  "interactions": [
+    {
+      "viewport": "desktop",
+      "action": "Owner schedule-create CTA visible",
+      "passed": true
+    },
+    {
+      "viewport": "desktop",
+      "action": "Long calendar title truncation",
+      "passed": true,
+      "detail": {
+        "clientWidth": 139,
+        "scrollWidth": 484,
+        "clientHeight": 28,
+        "scrollHeight": 28,
+        "pageOverflow": false,
+        "title": "운영체제 스케줄링 정리"
+      }
+    },
+    {
+      "viewport": "desktop",
+      "action": "Calendar event keyboard navigation",
+      "passed": true
+    },
+    {
+      "viewport": "desktop",
+      "action": "Calendar/List toggle",
+      "passed": true
+    },
+    {
+      "viewport": "desktop",
+      "action": "Stepper marks current basic-information step",
+      "passed": true
+    },
+    {
+      "viewport": "desktop",
+      "action": "Stepper distinguishes completed/current/upcoming",
+      "passed": true
+    },
+    {
+      "viewport": "desktop",
+      "action": "Owner/Manager cancel confirmation",
+      "passed": true
+    },
+    {
+      "viewport": "desktop",
+      "action": "Detail to shared Submission",
+      "passed": true
+    },
+    {
+      "viewport": "desktop",
+      "action": "Team row to shared Review",
+      "passed": true
+    },
+    {
+      "viewport": "desktop",
+      "action": "Review closes with Escape",
+      "passed": true
+    },
+    {
+      "viewport": "mobile",
+      "action": "Owner schedule-create CTA visible",
+      "passed": true
+    },
+    {
+      "viewport": "mobile",
+      "action": "Long calendar title truncation",
+      "passed": true,
+      "detail": {
+        "clientWidth": 324,
+        "scrollWidth": 324,
+        "clientHeight": 48,
+        "scrollHeight": 48,
+        "pageOverflow": false,
+        "title": "큐와 배열 집중 학습"
+      }
+    },
+    {
+      "viewport": "mobile",
+      "action": "Calendar event keyboard navigation",
+      "passed": true
+    },
+    {
+      "viewport": "mobile",
+      "action": "Calendar/List toggle",
+      "passed": true
+    },
+    {
+      "viewport": "mobile",
+      "action": "Stepper marks current basic-information step",
+      "passed": true
+    },
+    {
+      "viewport": "mobile",
+      "action": "Stepper distinguishes completed/current/upcoming",
+      "passed": true
+    },
+    {
+      "viewport": "mobile",
+      "action": "Owner/Manager cancel confirmation",
+      "passed": true
+    },
+    {
+      "viewport": "mobile",
+      "action": "Detail to shared Submission",
+      "passed": true
+    }
+  ]
+}

@@ -69,6 +69,16 @@ public class GitLabOAuthProjectService {
 			}));
 	}
 
+	public List<GitLabProject> listAllMembershipProjects(String accessToken) {
+		List<GitLabProject> result = new ArrayList<>();
+		for (int page = 1; page <= 100; page++) {
+			List<GitLabProject> projects = listProjects(accessToken, null, page, 100);
+			result.addAll(projects);
+			if (projects.size() < 100) return List.copyOf(result);
+		}
+		throw new GitLabApiException("GITLAB_PROJECT_LIST_TOO_LARGE", "접근 가능한 프로젝트 목록이 허용 범위를 초과했습니다.", 413);
+	}
+
 	public GitLabProject getProject(String accessToken, long projectId) {
 		try {
 			return execute(webClient.get()

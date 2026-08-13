@@ -3111,7 +3111,7 @@ a {
   gap: 12px;
 }
 
-.editor-items__heading > div {
+.editor-items__heading > .editor-step__heading > div {
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -8388,6 +8388,8 @@ a {
 .profile-setup-summary { display: grid; gap: 8px; padding: 15px; border-radius: 14px; background: #f4f6f9; color: #555a68; font-size: 13px; }
 .profile-setup-summary span { display: flex; align-items: center; gap: 8px; }
 .profile-setup-summary svg { color: #23845c; }
+.profile-consents { display: grid; gap: 10px; min-width: 0; margin: 0; padding: 0; border: 0; }
+.profile-consents legend { margin-bottom: 8px; color: #303440; font-size: 14px; font-weight: 750; }
 .profile-terms { display: flex; align-items: flex-start; gap: 10px; color: #626674; font-size: 13px; line-height: 1.5; }
 .profile-terms input { margin-top: 3px; }
 .profile-terms a { color: #3f548a; font-weight: 700; }
@@ -9211,77 +9213,134 @@ a {
 
 .app-frame[data-theme="dark"] {
   color-scheme: dark;
-  --app-background: #26242c;
-  --app-surface: #302d36;
-  --app-surface-soft: #37333e;
-  --app-surface-muted: #423d49;
-  --app-text: #f2eef5;
-  --app-text-soft: #c5becb;
-  --app-text-faint: #99919f;
-  --app-border: #48424f;
-  --app-border-strong: #5b5463;
-  --app-overlay: rgba(15, 13, 18, 0.64);
-  --app-code: #211f27;
-  --app-code-gutter: #1b1920;
-  --app-code-text: #f0ebf3;
-  --app-code-muted: #91889a;
-  --app-input: #2b2931;
-  --content-canvas: #2a2730;
-  --content-surface: #322f38;
-  --content-surface-hover: #3a3641;
-  --content-muted: #3b3742;
-  --content-code-surface: #28252e;
-  --content-text: #f0ecf2;
-  --content-text-soft: #c8c1cd;
-  --content-text-faint: #9d95a3;
-  --content-border: #48424f;
-  --content-border-strong: #625a6a;
+  --app-background: #121214;
+  --app-sidebar: #17171a;
+  --app-surface: #1d1d21;
+  --app-surface-soft: #222226;
+  --app-surface-muted: #28282d;
+  --app-text: #f5f5f7;
+  --app-text-soft: #bdbdc4;
+  --app-text-faint: #909099;
+  --app-border: #303036;
+  --app-border-strong: #414149;
+  --app-overlay: rgba(7, 7, 9, 0.72);
+  --app-code: #111114;
+  --app-code-gutter: #141417;
+  --app-code-text: #ededf0;
+  --app-code-muted: #7e7e88;
+  --app-input: #19191d;
+  --content-canvas: #121214;
+  --content-surface: #1d1d21;
+  --content-surface-hover: #222226;
+  --content-muted: #28282d;
+  --content-code-surface: #17171a;
+  --content-text: #f5f5f7;
+  --content-text-soft: #bdbdc4;
+  --content-text-faint: #909099;
+  --content-border: #303036;
+  --content-border-strong: #414149;
   --content-danger: #f08b99;
-  --app-shadow-color: rgba(10, 8, 13, 0.3);
-  --app-shadow-soft-color: rgba(10, 8, 13, 0.2);
+  --app-shadow-color: rgba(0, 0, 0, 0.34);
+  --app-shadow-soft-color: rgba(0, 0, 0, 0.22);
   --success: #67c49e;
-  --success-soft: #263f37;
+  --success-soft: #17332b;
   --warning: #e7a75f;
-  --warning-soft: #493929;
+  --warning-soft: #382a1d;
   --danger: #ec8795;
-  --danger-soft: #4b2d34;
+  --danger-soft: #3b242b;
   --info: #8eb9df;
-  --info-soft: #2d3a47;
+  --info-soft: #182735;
+  --ds-color-canvas: var(--app-background);
+  --ds-color-surface: var(--app-surface);
+  --ds-color-surface-secondary: var(--app-surface-soft);
+  --ds-color-surface-muted: var(--app-surface-muted);
+  --ds-color-text-primary: var(--app-text);
+  --ds-color-text-secondary: var(--app-text-soft);
+  --ds-color-text-tertiary: var(--app-text-faint);
+  --ds-color-border: var(--app-border);
+  --ds-color-border-strong: var(--app-border-strong);
+  --ds-color-primary: var(--primary);
+  --ds-color-primary-hover: var(--primary-strong);
+  --ds-color-primary-soft: var(--primary-soft);
+  --ds-shadow-subtle: 0 1px 2px rgba(0, 0, 0, 0.24);
+  --ds-shadow-floating: 0 18px 44px rgba(0, 0, 0, 0.4);
 }
 
 .app-frame[data-theme="dark"][data-accent="purple"] {
-  --primary: #a98ade;
-  --primary-strong: #bea5e7;
-  --primary-soft: #40364f;
-  --brand-shadow: rgba(169, 138, 222, 0.2);
+  --accent-base: #7c5cff;
+  --primary: #9277ff;
+  --primary-strong: #a18cff;
+  --primary-action: #7858fa;
+  --primary-action-hover: #6f4fed;
+  --primary-soft: rgba(124, 92, 255, 0.12);
+  --primary-border: rgba(124, 92, 255, 0.3);
+  --brand-shadow: transparent;
 }
 
 .app-frame[data-theme="dark"][data-accent="blue"] {
   --primary: #829bf6;
   --primary-strong: #a3b4fa;
-  --primary-soft: #303a55;
-  --brand-shadow: rgba(130, 155, 246, 0.2);
+  --primary-action: #4c65c7;
+  --primary-action-hover: #4058b5;
+  --primary-soft: rgba(130, 155, 246, 0.12);
+  --primary-border: rgba(130, 155, 246, 0.3);
+  --brand-shadow: transparent;
 }
 
 .app-frame[data-theme="dark"][data-accent="teal"] {
   --primary: #63c5ae;
   --primary-strong: #85d3c0;
-  --primary-soft: #29443e;
-  --brand-shadow: rgba(99, 197, 174, 0.2);
+  --primary-action: #237e6b;
+  --primary-action-hover: #1c6f5e;
+  --primary-soft: rgba(99, 197, 174, 0.12);
+  --primary-border: rgba(99, 197, 174, 0.3);
+  --brand-shadow: transparent;
 }
 
 .app-frame[data-theme="dark"][data-accent="orange"] {
   --primary: #e5a158;
   --primary-strong: #efb777;
-  --primary-soft: #493a2c;
-  --brand-shadow: rgba(229, 161, 88, 0.2);
+  --primary-action: #a95f1d;
+  --primary-action-hover: #934f15;
+  --primary-soft: rgba(229, 161, 88, 0.12);
+  --primary-border: rgba(229, 161, 88, 0.3);
+  --brand-shadow: transparent;
 }
 
 .app-frame[data-theme="dark"][data-accent="rose"] {
   --primary: #e585a4;
   --primary-strong: #efa4bb;
-  --primary-soft: #4b323d;
-  --brand-shadow: rgba(229, 133, 164, 0.2);
+  --primary-action: #b64b70;
+  --primary-action-hover: #a13e61;
+  --primary-soft: rgba(229, 133, 164, 0.12);
+  --primary-border: rgba(229, 133, 164, 0.3);
+  --brand-shadow: transparent;
+}
+
+.app-frame[data-theme="dark"] .sidebar,
+.app-frame[data-theme="dark"] .mobile-header {
+  background: var(--app-sidebar);
+  backdrop-filter: none;
+}
+
+.app-frame[data-theme="dark"] .settings-subnav {
+  background: var(--app-surface);
+  backdrop-filter: none;
+}
+
+.app-frame[data-theme="dark"] :focus-visible {
+  outline-color: color-mix(in srgb, var(--primary) 52%, transparent);
+}
+
+.app-frame[data-theme="dark"] .button--primary,
+.app-frame[data-theme="dark"] .editor-progress button.is-active > span {
+  background: var(--primary-action);
+  box-shadow: none;
+}
+
+.app-frame[data-theme="dark"] .button--primary:hover {
+  background: var(--primary-action-hover);
+  box-shadow: none;
 }
 
 .app-frame .sidebar {

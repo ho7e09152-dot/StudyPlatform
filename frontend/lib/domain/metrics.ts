@@ -11,6 +11,14 @@ export const SCORE_RULES = {
   secondary: 6,
 } as const;
 
+// The current Backend/Workspace contract exposes no score or ranking toggle.
+// Keep this fixed product policy in the domain layer until Study Rules provides
+// a configurable policy; records UI must not invent a client-only setting.
+export const WORKSPACE_SCORE_POLICY = {
+  enabled: true,
+  rankingEnabled: true,
+} as const;
+
 export interface MemberScore {
   member: StudyMember;
   points: number;

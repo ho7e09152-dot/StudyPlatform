@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -20,6 +21,7 @@ import {
 } from "lucide-react";
 import { Modal } from "@/components/ui/Modal";
 import { ApiError } from "@/lib/api/client/http";
+import { getUserFacingError } from "@/lib/api/errors";
 import {
   SESSION_TYPE_META,
   SUBMISSION_TYPE_LABEL,
@@ -84,7 +86,7 @@ function makeDraft(session: StudySession | undefined, referenceDate: string): Se
   };
 }
 
-export function SessionEditorDialog({
+export function SessionEditorPage({
   workspace,
   session,
   referenceDate,
@@ -105,6 +107,9 @@ export function SessionEditorDialog({
   const [saving, setSaving] = useState(false);
   const [showValidation, setShowValidation] = useState(false);
   const [error, setError] = useState("");
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const initialDraft = useMemo(() => makeDraft(session, referenceDate), [referenceDate, session]);
+  const dirty = JSON.stringify(draft) !== JSON.stringify(initialDraft);
   const submissionCount = useMemo(
     () =>
       session
@@ -114,6 +119,15 @@ export function SessionEditorDialog({
         : 0,
     [session, workspace],
   );
+
+  useEffect(() => {
+    function warnBeforeUnload(event: BeforeUnloadEvent) {
+      if (!dirty) return;
+      event.preventDefault();
+    }
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, [dirty]);
 
   function patchDraft(patch: Partial<SessionDraft>) {
     setDraft((current) => ({ ...current, ...patch }));
@@ -213,9 +227,7 @@ export function SessionEditorDialog({
               ? "현재 GitLab 계정에 이 브랜치로 커밋할 권한이 없습니다."
               : code === "GITLAB_RATE_LIMITED"
                 ? "GitLab 요청 제한에 도달했습니다. 잠시 후 다시 시도해 주세요."
-                : saveError instanceof ApiError
-                  ? saveError.message
-                  : "일정을 저장하지 못했습니다.",
+                : getUserFacingError(saveError, "일정을 저장하지 못했습니다."),
       );
     } finally {
       setSaving(false);
@@ -244,29 +256,36 @@ export function SessionEditorDialog({
     free: Tag,
   };
 
+  function requestClose() {
+    if (dirty) setConfirmCancel(true);
+    else onClose();
+  }
+
   return (
-    <Modal
-      title={session ? "학습 일정 편집" : "새 학습 일정 만들기"}
-      description={
-        session
-          ? `${formatDate(session.date, true)} · revision ${session.revision}`
-          : "스터디 일정과 제출 항목을 설정합니다."
-      }
-      onClose={onClose}
-      size="editor"
-    >
-      <div className="session-editor session-editor--wizard">
+    <div className="page-stack schedule-editor-page">
+      <header className="schedule-page-back">
+        <Link href="/schedule" aria-label="학습 일정으로 돌아가기"><ArrowLeft size={17} /> 학습 일정</Link>
+      </header>
+      <div className="schedule-editor-heading">
+        <div>
+          <p className="eyebrow">{session ? formatDate(session.date, true) : "새로운 학습 계획"}</p>
+          <h1>{session ? "학습 일정 편집" : "새 학습 일정"}</h1>
+          <p>{session ? "변경 내용을 정리해 팀의 학습 계획을 업데이트하세요." : "기본 정보와 학습 항목을 순서대로 설정하세요."}</p>
+        </div>
+      </div>
+      <section className="surface session-editor session-editor--wizard" aria-label={session ? "학습 일정 편집 양식" : "새 학습 일정 양식"}>
         <nav className="editor-progress" aria-label="일정 만들기 단계">
           <button
             type="button"
             className={step === 1 ? "is-active" : "is-complete"}
+            aria-current={step === 1 ? "step" : undefined}
             onClick={() => setStep(1)}
           >
             <span>{step === 2 ? <Check size={15} /> : "1"}</span>
             기본 정보
           </button>
-          <i aria-hidden="true" />
-          <button type="button" className={step === 2 ? "is-active" : ""} onClick={goToItems}>
+          <i className={step === 2 ? "is-complete" : undefined} aria-hidden="true" />
+          <button type="button" className={step === 2 ? "is-active" : "is-upcoming"} aria-current={step === 2 ? "step" : undefined} onClick={goToItems}>
             <span>2</span>
             학습 항목
           </button>
@@ -312,9 +331,10 @@ export function SessionEditorDialog({
                   <strong className="editor-card__title">일정 기간</strong>
                   <div className="form-grid">
                     <label className="field">
-                      <span>시작일 <b>*</b></span>
+                      <span>학습 날짜 <b>*</b></span>
                       <input
                         type="date"
+                        lang="ko-KR"
                         value={draft.date}
                         disabled={Boolean(session)}
                         aria-invalid={showValidation && !draft.date}
@@ -325,6 +345,7 @@ export function SessionEditorDialog({
                       <span>1차 마감 <b>*</b></span>
                       <input
                         type="datetime-local"
+                        lang="ko-KR"
                         value={draft.deadline.slice(0, 16)}
                         aria-invalid={showValidation && !draft.deadline}
                         onChange={(event) => patchDraft({ deadline: event.target.value })}
@@ -357,6 +378,7 @@ export function SessionEditorDialog({
                       <span>2차 마감</span>
                       <input
                         type="datetime-local"
+                        lang="ko-KR"
                         value={draft.secondaryDeadline.slice(0, 16)}
                         aria-invalid={showValidation && draft.secondaryDeadline <= draft.deadline}
                         onChange={(event) => patchDraft({ secondaryDeadline: event.target.value })}
@@ -474,7 +496,7 @@ export function SessionEditorDialog({
                                 />
                               </label>
                               <label className="field">
-                                <span>학습 URL <small>(선택)</small></span>
+                                <span>자료 URL <small>(선택)</small></span>
                                 <input
                                   type="url"
                                   value={item.url ?? ""}
@@ -522,7 +544,6 @@ export function SessionEditorDialog({
                                   <small>완료하지 않으면 일정이 완료되지 않습니다.</small>
                                 </span>
                               </label>
-                              <code>{item.id}</code>
                             </div>
                           </div>
                         ) : null}
@@ -537,7 +558,7 @@ export function SessionEditorDialog({
                       <span><GitCommitHorizontal size={16} /></span>
                       <div>
                         <strong id="reason-section-title">변경 사유</strong>
-                        <small>{submissionCount > 0 ? "기존 제출이 있어 필수입니다." : "팀원에게 변경 내용을 알려주세요."}</small>
+                        <small>{submissionCount > 0 ? "기존 제출이 있어 필수입니다." : "변경 내용을 팀원에게 간단히 알려주세요."}</small>
                       </div>
                     </header>
                     <label className="field">
@@ -559,7 +580,7 @@ export function SessionEditorDialog({
         <footer className="session-editor__footer">
           {error ? <p className="field-error" role="alert">{error}</p> : <span />}
           <div className="modal-actions">
-            <button type="button" className="button button--ghost" onClick={onClose}>취소</button>
+            <button type="button" className="button button--ghost" onClick={requestClose}>취소</button>
             {step === 2 ? (
               <button type="button" className="button button--secondary" onClick={() => setStep(1)}>
                 <ArrowLeft size={15} /> 이전 단계
@@ -579,7 +600,18 @@ export function SessionEditorDialog({
             </button>
           </div>
         </footer>
-      </div>
-    </Modal>
+      </section>
+      {confirmCancel ? (
+        <Modal title="작성 중인 변경사항을 닫을까요?" description="저장하지 않은 내용은 사라집니다." onClose={() => setConfirmCancel(false)}>
+          <div className="schedule-unsaved-dialog">
+            <p>계속 작성하거나, 변경사항을 버리고 학습 일정으로 돌아갈 수 있습니다.</p>
+            <div className="modal-actions">
+              <button type="button" className="button button--ghost" onClick={() => setConfirmCancel(false)}>계속 작성</button>
+              <button type="button" className="button button--danger" onClick={onClose}>변경사항 버리기</button>
+            </div>
+          </div>
+        </Modal>
+      ) : null}
+    </div>
   );
 }

@@ -6,6 +6,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -13,6 +14,7 @@ import {
   addWorkspaceMember,
   cancelWorkspaceSession,
   listWorkspaces,
+	joinWorkspace as joinWorkspaceApi,
   saveWorkspaceSession,
   softDeleteWorkspace,
   migrateRepositorySchema,
@@ -20,14 +22,18 @@ import {
   syncWorkspaceMembers,
   updateWorkspaceMemberRole,
   updateNotifications,
+  updateWorkspaceSettings,
   upsertSubmission,
 } from "@/lib/api/services/workspaceApi";
 import { useAuth } from "@/components/providers/AuthProvider";
-import { WorkspaceOnboarding } from "@/components/onboarding/WorkspaceOnboarding";
+import { WorkspaceEntryGate } from "@/components/workspaces/WorkspaceEntryGate";
+import { usePathname } from "next/navigation";
 import { initialWorkspaces } from "@/lib/data/seed";
 import { REFERENCE_DATE } from "@/lib/domain/constants";
 import { getSubmissionKey } from "@/lib/domain/metrics";
-import { getDateKeyInTimeZone, getSessionRepositoryPath, toFolderName } from "@/lib/domain/format";
+import { getDateKeyInTimeZone, toFolderName } from "@/lib/domain/format";
+import { APP_ROLE_LABEL, canManageSchedules } from "@/lib/domain/permissions";
+import { getUserFacingError } from "@/lib/api/errors";
 import type {
   SessionDraft,
   StudySession,
@@ -49,7 +55,10 @@ interface WorkspaceContextValue {
   syncing: boolean;
   lastSyncFailures: Array<{ path: string; code: string; message: string }>;
   toast: ToastMessage | null;
+	notify: (title: string, detail?: string) => void;
   switchWorkspace: (workspaceId: string) => void;
+	activateWorkspace: (workspace: Workspace, message?: string) => void;
+	joinDiscoveredWorkspace: (workspaceId: string) => Promise<Workspace>;
   syncWorkspace: () => Promise<void>;
   syncMembers: () => Promise<void>;
   addMember: (gitlabUserId: number) => Promise<void>;
@@ -66,7 +75,8 @@ interface WorkspaceContextValue {
   cancelSession: (date: string) => Promise<void>;
   toggleNotification: (
     key: keyof Workspace["settings"]["notifications"],
-  ) => void;
+  ) => Promise<void>;
+  saveWorkspaceGeneral: (name: string, timezone: string) => Promise<void>;
   deleteCurrentWorkspace: () => Promise<void>;
   migrateRepositoryLayout: (treeFingerprint: string) => Promise<void>;
   dismissToast: () => void;
@@ -106,6 +116,7 @@ function reconcileItems(
 }
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
+	const pathname = usePathname();
   const { mode, user, checking: checkingAuth } = useAuth();
   const demoMode = mode === "demo";
   const [workspaces, setWorkspaces] = useState<Workspace[]>(() =>
@@ -122,6 +133,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [lastSyncFailures, setLastSyncFailures] = useState<
     Array<{ path: string; code: string; message: string }>
   >([]);
+  const workspaceScopeVersion = useRef(0);
 
   const selectedWorkspace = useMemo(
     () =>
@@ -133,7 +145,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const currentUserId = demoMode
     ? "member-a"
     : selectedWorkspace?.members.find(
-        (member) => member.gitlabUserId === user?.id && member.status === "ACTIVE",
+        (member) => (member.userId === user?.id || member.gitlabUserId === user?.legacyGitLabUserId) && member.status === "ACTIVE",
       )?.id ?? "";
 
   const notify = useCallback((title: string, detail?: string) => {
@@ -159,11 +171,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       .catch((requestError) => {
         if (controller.signal.aborted) return;
         setBackendConnected(false);
-        setLoadError(
-          requestError instanceof Error
-            ? requestError.message
-            : "Workspace를 불러오지 못했습니다.",
-        );
+        setLoadError(getUserFacingError(requestError, "Workspace를 불러오지 못했습니다."));
         setLoading(false);
       });
 
@@ -191,26 +199,50 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 
   const switchWorkspace = useCallback(
     (workspaceId: string) => {
+      if (workspaceId === currentWorkspaceId) return;
+      workspaceScopeVersion.current += 1;
+      setLastSyncFailures([]);
+      setSyncing(false);
       setCurrentWorkspaceId(workspaceId);
       const next = workspaces.find((candidate) => candidate.id === workspaceId);
       notify("Workspace를 전환했습니다", next?.gitlabProjectPath);
     },
-    [notify, workspaces],
+    [currentWorkspaceId, notify, workspaces],
   );
+
+	const activateWorkspace = useCallback((next: Workspace, message = "Workspace를 전환했습니다") => {
+		workspaceScopeVersion.current += 1;
+		setWorkspaces((current) => [
+			...current.filter((candidate) => candidate.id !== next.id),
+			next,
+		]);
+		setCurrentWorkspaceId(next.id);
+		setBackendConnected(true);
+		setLastSyncFailures([]);
+		setSyncing(false);
+		notify(message, next.name);
+	}, [notify]);
+
+	const joinDiscoveredWorkspace = useCallback(async (workspaceId: string) => {
+		const result = await joinWorkspaceApi(workspaceId);
+		activateWorkspace(result.workspace, result.joined ? "Workspace에 참여했어요" : "이미 참여 중인 Workspace입니다");
+		return result.workspace;
+	}, [activateWorkspace]);
 
   const syncWorkspace = useCallback(async () => {
     if (syncing) return;
+    const scopeVersion = workspaceScopeVersion.current;
     setSyncing(true);
     try {
       if (backendConnected) {
         const result = await syncWorkspaceApi(workspace.id);
         replaceWorkspace(result.workspace);
+        if (workspaceScopeVersion.current !== scopeVersion) return;
         setLastSyncFailures(result.failures);
         if (result.failures.length > 0) {
-          const firstFailure = result.failures[0];
           notify(
             "일부 일정 동기화 실패",
-            `일정 ${result.importedSessions}개 · 제출 ${result.importedSubmissions}개 반영 · ${result.failures.length}개 실패 (${firstFailure.path}: ${firstFailure.message})`,
+            `일정 ${result.importedSessions}개 · 제출 ${result.importedSubmissions}개 반영 · 확인할 파일 ${result.failures.length}개`,
           );
         } else {
           notify(
@@ -227,19 +259,20 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         notify("데모 동기화 완료", "데모 Workspace의 동기화 시간을 갱신했습니다.");
       }
     } catch (error) {
+      if (workspaceScopeVersion.current !== scopeVersion) return;
       setLastSyncFailures([
         {
           path: workspace.gitlabProjectPath,
           code: "SYNC_FAILED",
-          message: error instanceof Error ? error.message : "GitLab 일정을 불러오지 못했습니다.",
+          message: getUserFacingError(error, "GitLab 일정을 불러오지 못했습니다."),
         },
       ]);
       notify(
         "GitLab 일정 동기화 실패",
-        error instanceof Error ? error.message : "GitLab 일정을 불러오지 못했습니다.",
+        getUserFacingError(error, "GitLab 일정을 불러오지 못했습니다."),
       );
     } finally {
-      setSyncing(false);
+      if (workspaceScopeVersion.current === scopeVersion) setSyncing(false);
     }
   }, [backendConnected, notify, replaceWorkspace, syncing, updateCurrentWorkspace, workspace.gitlabProjectPath, workspace.id]);
 
@@ -267,7 +300,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     if (!backendConnected) return;
     const updated = await updateWorkspaceMemberRole(workspace.id, memberId, role);
     replaceWorkspace(updated);
-    notify("멤버 역할을 변경했습니다", role);
+    notify("멤버 역할을 변경했습니다", APP_ROLE_LABEL[role]);
   }, [backendConnected, notify, replaceWorkspace, workspace.id]);
 
   const submitItem = useCallback(
@@ -309,12 +342,9 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           },
         );
         replaceWorkspace(updatedWorkspace);
-        const updatedFile = updatedWorkspace.submissions[
-          getSubmissionKey(session.folder, member.id)
-        ];
         notify(
           previousEntry ? "제출을 수정했습니다" : "항목을 제출했습니다",
-          `${commitMessage} · ${updatedFile?.lastCommitId?.slice(0, 12) ?? "commit SHA 확인 중"}`,
+          commitMessage,
         );
         return;
       }
@@ -379,6 +409,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         (member) => member.id === currentUserId,
       );
       if (!actor) throw new Error("WORKSPACE_ACCESS_DENIED");
+      if (!canManageSchedules(actor)) throw new Error("WORKSPACE_MANAGER_REQUIRED");
 
       const hasSubmissions = current
         ? Object.keys(workspace.submissions).some((key) =>
@@ -395,11 +426,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           draft,
           expectedRevision,
         );
-        const nextSession = updated.sessions[draft.date];
         replaceWorkspace(updated);
         notify(
           current ? "일정을 수정했습니다" : "새 일정을 만들었습니다",
-          `${getSessionRepositoryPath(updated, nextSession)} · ${nextSession.lastCommitId.slice(0, 8)} · revision ${nextSession.revision}`,
+          "팀 학습 일정에 반영했습니다.",
         );
         return;
       }
@@ -442,7 +472,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
       await new Promise((resolve) => setTimeout(resolve, 350));
       notify(
         current ? "일정을 수정했습니다" : "새 일정을 만들었습니다",
-        `${getSessionRepositoryPath(workspace, nextSession)} · revision ${nextSession.revision}`,
+        "팀 학습 일정에 반영했습니다.",
       );
     },
     [backendConnected, currentUserId, notify, replaceWorkspace, updateCurrentWorkspace, workspace],
@@ -452,11 +482,13 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     async (date: string) => {
       const session = workspace.sessions[date];
       if (!session) return;
+      const actor = workspace.members.find((member) => member.id === currentUserId);
+      if (!canManageSchedules(actor)) throw new Error("WORKSPACE_MANAGER_REQUIRED");
       if (backendConnected) {
         replaceWorkspace(
           await cancelWorkspaceSession(workspace.id, date, session.revision),
         );
-        notify("일정을 취소했습니다", "파일은 삭제하지 않고 cancelled 상태로 보존합니다.");
+        notify("일정을 취소했습니다", "일정 기록은 삭제하지 않고 취소 상태로 보존합니다.");
         return;
       }
       updateCurrentWorkspace((current) => ({
@@ -472,32 +504,53 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           },
         },
       }));
-      notify("일정을 취소했습니다", "파일은 삭제하지 않고 cancelled 상태로 보존합니다.");
+      notify("일정을 취소했습니다", "일정 기록은 삭제하지 않고 취소 상태로 보존합니다.");
     },
-    [backendConnected, notify, replaceWorkspace, updateCurrentWorkspace, workspace.id, workspace.sessions],
+    [backendConnected, currentUserId, notify, replaceWorkspace, updateCurrentWorkspace, workspace.id, workspace.members, workspace.sessions],
   );
 
   const toggleNotification = useCallback(
-    (key: keyof Workspace["settings"]["notifications"]) => {
+    async (key: keyof Workspace["settings"]["notifications"]) => {
       const notifications = {
         ...workspace.settings.notifications,
         [key]: !workspace.settings.notifications[key],
       };
-      updateCurrentWorkspace((current) => ({
-        ...current,
-        settings: {
-          ...current.settings,
-          notifications,
-        },
-      }));
-      if (backendConnected) {
-        void updateNotifications(workspace.id, notifications)
-          .then(replaceWorkspace)
-          .catch(() => notify("알림 설정 저장 실패", "잠시 후 다시 시도해 주세요."));
+      try {
+        if (backendConnected) {
+          replaceWorkspace(await updateNotifications(workspace.id, notifications));
+        } else {
+          updateCurrentWorkspace((current) => ({
+            ...current,
+            settings: { ...current.settings, notifications },
+          }));
+        }
+        notify("알림 설정을 저장했습니다");
+      } catch (error) {
+        notify("알림 설정 저장 실패", "잠시 후 다시 시도해 주세요.");
+        throw error;
       }
     },
     [backendConnected, notify, replaceWorkspace, updateCurrentWorkspace, workspace.id, workspace.settings.notifications],
   );
+
+  const saveWorkspaceGeneral = useCallback(async (name: string, timezone: string) => {
+    const next = {
+      ...workspace,
+      name: name.trim(),
+      settings: { ...workspace.settings, timezone: timezone.trim() },
+    };
+    if (!backendConnected) {
+      replaceWorkspace(next);
+      notify("Workspace 정보를 저장했습니다");
+      return;
+    }
+    const updated = await updateWorkspaceSettings(workspace.id, {
+      name: next.name,
+      settings: next.settings,
+    });
+    replaceWorkspace(updated);
+    notify("Workspace 정보를 저장했습니다");
+  }, [backendConnected, notify, replaceWorkspace, workspace]);
 
   const deleteCurrentWorkspace = useCallback(async () => {
     if (backendConnected) {
@@ -532,7 +585,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     syncing,
     lastSyncFailures,
     toast,
+		notify,
     switchWorkspace,
+		activateWorkspace,
+		joinDiscoveredWorkspace,
     syncWorkspace,
     syncMembers,
     addMember,
@@ -541,6 +597,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     saveSession,
     cancelSession,
     toggleNotification,
+    saveWorkspaceGeneral,
     deleteCurrentWorkspace,
     migrateRepositoryLayout,
     dismissToast: () => setToast(null),
@@ -561,11 +618,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }
 
   if (!selectedWorkspace || !currentUserId) {
-    return <WorkspaceOnboarding onCreated={(created) => {
-      setWorkspaces((current) => [...current, created]);
-      setCurrentWorkspaceId(created.id);
-      setBackendConnected(true);
-    }} />;
+		return <WorkspaceEntryGate forceConnection={pathname === "/workspaces/new"} onWorkspaceReady={(created) => {
+			setWorkspaces((current) => [...current.filter((candidate) => candidate.id !== created.id), created]);
+			setCurrentWorkspaceId(created.id);
+			setBackendConnected(true);
+		}} />;
   }
 
   return (

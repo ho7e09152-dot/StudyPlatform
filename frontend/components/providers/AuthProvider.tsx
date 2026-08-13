@@ -4,6 +4,8 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { ApiError } from "@/lib/api/client/http";
 import { getAuthSession, updateAccountProfile, type AuthenticatedGitLabUser } from "@/lib/api/services/authApi";
 import { ProfileSetupPage } from "@/components/auth/ProfileSetupPage";
+import { safeAppReturnUrl } from "@/lib/auth/redirects";
+import { getUserFacingError } from "@/lib/api/errors";
 
 interface AuthContextValue {
   mode: "gitlab-oauth" | "demo";
@@ -31,6 +33,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           window.location.replace("/login?oauthError=session_expired");
           return;
         }
+        if (!session.user.profileCompleted && window.location.pathname !== "/onboarding/profile") {
+          const returnTo = `${window.location.pathname}${window.location.search}`;
+          window.location.replace(`/onboarding/profile?returnTo=${encodeURIComponent(returnTo)}`);
+          return;
+        }
         setUser(session.user);
         setState("ready");
       })
@@ -40,7 +47,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           window.location.replace("/login?oauthError=session_expired");
           return;
         }
-        setError(requestError instanceof Error ? requestError.message : "로그인 상태를 확인하지 못했습니다.");
+        setError(getUserFacingError(requestError, "로그인 상태를 확인하지 못했습니다."));
         setState("error");
       });
     return () => controller.abort();
@@ -62,7 +69,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   if (!demoMode && state === "ready" && user && !user.profileCompleted) {
-    return <ProfileSetupPage user={user} onSubmit={async (input) => setUser(await updateAccountProfile(input))} />;
+    return <ProfileSetupPage user={user} onSubmit={async (input) => {
+      setUser(await updateAccountProfile(input));
+      const requested = new URLSearchParams(window.location.search).get("returnTo");
+      window.location.replace(safeAppReturnUrl(requested));
+    }} />;
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

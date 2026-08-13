@@ -7,30 +7,33 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   CalendarDays,
   ChartNoAxesColumnIncreasing,
-  Check,
-  ChevronDown,
+  AlertTriangle,
   FolderGit2,
   LayoutDashboard,
   Menu,
   RefreshCw,
   Settings,
   X,
-  Plus,
 } from "lucide-react";
 import { AccountMenu } from "@/components/account/AccountMenu";
-import { ProfileSettingsDialog } from "@/components/account/ProfileSettingsDialog";
 import { ActivityInbox } from "@/components/notifications/ActivityInbox";
 import { AppThemeProvider, useAppTheme } from "@/components/providers/AppThemeProvider";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { Toast } from "@/components/ui/Toast";
+import { PageTransition } from "@/components/ui/PageTransition";
+import { WorkspaceSwitcher } from "@/components/shell/WorkspaceSwitcher";
 import { useGitLabConnection } from "@/lib/api/hooks/useGitLabConnection";
+import { APP_ROUTES } from "@/lib/routes";
+import { getWorkspaceRepositoryConnection, REPOSITORY_PROVIDER_LABEL } from "@/lib/domain/repository";
+import type { StudyMember } from "@/lib/domain/types";
+import { useExitTransition } from "@/lib/motion/useExitTransition";
 
 const navigation = [
   { href: "/today", label: "오늘", icon: LayoutDashboard },
   { href: "/schedule", label: "일정", icon: CalendarDays },
   { href: "/records", label: "기록", icon: ChartNoAxesColumnIncreasing },
-  { href: "/repository", label: "학습 라이브러리", icon: FolderGit2 },
+  { href: APP_ROUTES.learningLibrary, label: "학습 라이브러리", icon: FolderGit2 },
   { href: "/settings", label: "설정", icon: Settings },
 ];
 
@@ -44,6 +47,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 function ThemedAppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const scheduleEditorRoute = pathname === APP_ROUTES.scheduleNew
+    || /^\/schedule\/[^/]+\/edit$/.test(pathname);
   const { themeMode, accentColor } = useAppTheme();
   const {
     workspaces,
@@ -54,107 +59,54 @@ function ThemedAppShell({ children }: { children: ReactNode }) {
     dismissToast,
   } = useWorkspace();
   const connection = useGitLabConnection();
-  const [workspaceMenuOpen, setWorkspaceMenuOpen] = useState(false);
+  const repositoryConnection = getWorkspaceRepositoryConnection(workspace);
+  const providerLabel = REPOSITORY_PROVIDER_LABEL[repositoryConnection.provider];
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [profileOpen, setProfileOpen] = useState(false);
-  const menuRef = useRef<HTMLDivElement>(null);
   const currentMember = workspace.members.find(
     (member) => member.id === currentUserId,
   )!;
   const gitLabConnected =
     connection.state === "ready" &&
     connection.data?.status === "CONNECTED";
-  const gitLabStatusLabel =
+  const repositoryAccessRevoked = [
+    "GITLAB_PROJECT_ACCESS_DENIED",
+    "GITLAB_PROJECT_NOT_FOUND",
+    "REPOSITORY_ACCESS_REVOKED",
+  ].includes(connection.errorCode ?? "");
+  const repositoryStatusLabel =
     connection.state === "loading"
-      ? "GitLab 확인 중"
-      : connection.state === "error"
-        ? "GitLab 연결 실패"
+      ? `${providerLabel} 확인 중`
+      : repositoryAccessRevoked
+        ? `${providerLabel} 접근 권한 필요`
+        : connection.state === "error"
+          ? `${providerLabel} 연결 확인 필요`
         : gitLabConnected
-          ? "GitLab 연결됨"
-          : "GitLab 설정 필요";
-  const gitLabStatusDetail = gitLabConnected
-    ? connection.data?.project?.pathWithNamespace
-    : connection.error ?? connection.data?.message ?? "백엔드 응답 대기 중";
-
-  useEffect(() => {
-    function onPointerDown(event: PointerEvent) {
-      if (
-        workspaceMenuOpen &&
-        menuRef.current &&
-        !menuRef.current.contains(event.target as Node)
-      ) {
-        setWorkspaceMenuOpen(false);
-      }
-    }
-    document.addEventListener("pointerdown", onPointerDown);
-    return () => document.removeEventListener("pointerdown", onPointerDown);
-  }, [workspaceMenuOpen]);
+          ? `${providerLabel} 연결됨`
+          : `${providerLabel} 설정 필요`;
+  const repositoryStatusDetail = repositoryAccessRevoked
+    ? "현재 Workspace의 GitLab 프로젝트 접근 권한을 확인해주세요."
+    : gitLabConnected
+    ? repositoryConnection.repositoryPath ?? connection.data?.project?.pathWithNamespace
+    : connection.state === "loading"
+      ? "연결 상태를 확인하고 있습니다."
+      : "GitLab 연결 상태를 다시 확인해주세요.";
 
   return (
     <div className="app-frame" data-theme={themeMode.toLowerCase()} data-accent={accentColor.toLowerCase()}>
       <aside className="sidebar" aria-label="주요 메뉴">
-        <Link className="brand-block" href="/" aria-label="STUDY 랜딩 페이지로 이동">
-          <Image
-            className="brand-image"
-            src="/ssafy_icon.png"
-            alt="SSAFY"
-            width={684}
-            height={354}
-            unoptimized
-          />
+        <Link className="brand-block" href="/" aria-label="Study-ing 랜딩 페이지로 이동">
+          <Image className="app-brand-icon" src="/study-ing-icon.png" alt="" width={898} height={898} unoptimized priority />
           <div>
-            <strong>STUDY</strong>
-            <span>GitLab learning hub</span>
+            <strong>Study-ing</strong>
+            <span>학습 Workspace</span>
           </div>
         </Link>
 
-        <div className="workspace-picker" ref={menuRef}>
-          <button
-            type="button"
-            className="workspace-picker__button"
-            aria-expanded={workspaceMenuOpen}
-            aria-haspopup="menu"
-            onClick={() => setWorkspaceMenuOpen((open) => !open)}
-          >
-            <span className="repo-badge">
-              <FolderGit2 size={17} />
-            </span>
-            <span>
-              <strong>{workspace.name}</strong>
-              <small>{workspace.gitlabProjectPath}</small>
-            </span>
-            <ChevronDown size={17} />
-          </button>
-          {workspaceMenuOpen ? (
-            <div className="workspace-menu" role="menu">
-              <p>내 Workspace</p>
-              {workspaces.map((candidate) => (
-                <button
-                  key={candidate.id}
-                  type="button"
-                  role="menuitemradio"
-                  aria-checked={candidate.id === workspace.id}
-                  onClick={() => {
-                    switchWorkspace(candidate.id);
-                    setWorkspaceMenuOpen(false);
-                  }}
-                >
-                  <span>
-                    <strong>{candidate.name}</strong>
-                    <small>{candidate.gitlabProjectPath}</small>
-                  </span>
-                  {candidate.id === workspace.id ? <Check size={17} /> : null}
-                </button>
-              ))}
-              <Link
-                className="workspace-menu__create"
-                role="menuitem"
-                href="/workspaces/new"
-                onClick={() => setWorkspaceMenuOpen(false)}
-              ><Plus size={16} /><span><strong>새 Workspace 연결</strong><small>다른 GitLab 프로젝트 선택</small></span></Link>
-            </div>
-          ) : null}
-        </div>
+        <WorkspaceSwitcher
+          workspaces={workspaces}
+          workspace={workspace}
+          onSwitch={switchWorkspace}
+        />
 
         <nav className="primary-nav">
           {navigation.map((item) => {
@@ -176,7 +128,7 @@ function ThemedAppShell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="sidebar-foot">
-          <div className="sync-card">
+          <div className={`sync-card ${gitLabConnected ? "sync-card--healthy" : "sync-card--attention"}`}>
             <div>
               <span
                 className={`status-dot ${
@@ -187,22 +139,26 @@ function ThemedAppShell({ children }: { children: ReactNode }) {
                       : "status-dot--warning"
                 }`}
               />
-              {gitLabStatusLabel}
+              {repositoryStatusLabel}
             </div>
-            <small title={gitLabStatusDetail}>{gitLabStatusDetail}</small>
-            <button
-              type="button"
-              onClick={connection.reload}
-              disabled={connection.state === "loading"}
-            >
-              <RefreshCw
-                className={connection.state === "loading" ? "spin" : undefined}
-                size={16}
-              />
-              {connection.state === "loading" ? "확인 중" : "연결 다시 확인"}
-            </button>
+            {!gitLabConnected ? (
+              <>
+                <small title={repositoryStatusDetail}>{repositoryStatusDetail}</small>
+                <button
+                  type="button"
+                  onClick={connection.reload}
+                  disabled={connection.state === "loading"}
+                >
+                  <RefreshCw
+                    className={connection.state === "loading" ? "spin" : undefined}
+                    size={16}
+                  />
+                  {connection.state === "loading" ? "확인 중" : "다시 확인"}
+                </button>
+              </>
+            ) : null}
           </div>
-          <AccountMenu member={currentMember} onOpenProfile={() => setProfileOpen(true)} />
+          <AccountMenu member={currentMember} />
         </div>
       </aside>
 
@@ -215,17 +171,13 @@ function ThemedAppShell({ children }: { children: ReactNode }) {
         >
           <Menu size={21} />
         </button>
-        <Image
-          className="brand-image brand-image--small"
-          src="/ssafy_icon.png"
-          alt="SSAFY"
-          width={684}
-          height={354}
-          unoptimized
-        />
+        <Link className="mobile-brand" href="/" aria-label="Study-ing 랜딩 페이지로 이동">
+          <Image src="/study-ing-icon.png" alt="" width={898} height={898} unoptimized priority />
+          <strong>Study-ing</strong>
+        </Link>
         <span className="mobile-workspace">
           <strong>{workspace.name}</strong>
-          <small>{workspace.defaultBranch}</small>
+          <small>학습 Workspace</small>
         </span>
         <ActivityInbox variant="mobile" />
         <button className="mobile-profile-button" type="button" aria-label="프로필 메뉴 열기" onClick={() => setDrawerOpen(true)}>
@@ -234,63 +186,29 @@ function ThemedAppShell({ children }: { children: ReactNode }) {
       </header>
 
       {drawerOpen ? (
-        <div className="mobile-drawer-layer">
-          <button
-            type="button"
-            className="mobile-drawer-scrim"
-            aria-label="메뉴 닫기"
-            onClick={() => setDrawerOpen(false)}
-          />
-          <nav className="mobile-drawer" aria-label="모바일 주요 메뉴">
-            <div className="mobile-drawer__head">
-              <Image
-                className="brand-image"
-                src="/ssafy_icon.png"
-                alt="SSAFY"
-                width={684}
-                height={354}
-                unoptimized
-              />
-              <span>
-                <strong>STUDY</strong>
-                <small>{workspace.name}</small>
-              </span>
-              <button
-                type="button"
-                className="icon-button"
-                aria-label="메뉴 닫기"
-                onClick={() => setDrawerOpen(false)}
-              >
-                <X size={19} />
-              </button>
-            </div>
-            {navigation.map((item) => {
-              const Icon = item.icon;
-              const active = isActive(pathname, item.href);
-              return (
-                <Link
-                  key={item.href}
-                  className={active ? "active" : undefined}
-                  href={item.href}
-                  aria-current={active ? "page" : undefined}
-                  onClick={() => setDrawerOpen(false)}
-                >
-                  <Icon size={19} />
-                  {item.label}
-                </Link>
-              );
-            })}
-            <div className="mobile-drawer__account">
-              <AccountMenu member={currentMember} onOpenProfile={() => {
-                setDrawerOpen(false);
-                setProfileOpen(true);
-              }} />
-            </div>
-          </nav>
-        </div>
+        <MobileNavigationDrawer
+          workspaceName={workspace.name}
+          pathname={pathname}
+          member={currentMember}
+          onClose={() => setDrawerOpen(false)}
+        />
       ) : null}
 
-      <main className="app-main">{children}</main>
+      <main className={`app-main${scheduleEditorRoute ? " app-main--schedule-editor" : ""}`}>
+        <PageTransition transitionKey={`${workspace.id}:${pathname}`}>
+          {repositoryAccessRevoked && !pathname.startsWith("/workspaces") && pathname !== "/settings/accounts" ? (
+            <div className="page-stack library-route-state" role="alert">
+              <AlertTriangle size={24} aria-hidden="true" />
+              <strong>GitLab 프로젝트 접근 권한을 확인해주세요.</strong>
+              <p>현재 Workspace의 저장소에 접근할 수 없어 학습 내용을 표시하지 않습니다.</p>
+              <div className="inline-actions">
+                <button type="button" className="button button--secondary" onClick={connection.reload}>다시 확인</button>
+                <Link className="button button--ghost" href={APP_ROUTES.workspaces}>다른 Workspace 선택</Link>
+              </div>
+            </div>
+          ) : children}
+        </PageTransition>
+      </main>
       {toast ? (
         <Toast
           key={toast.id}
@@ -299,7 +217,87 @@ function ThemedAppShell({ children }: { children: ReactNode }) {
           onClose={dismissToast}
         />
       ) : null}
-      {profileOpen ? <ProfileSettingsDialog onClose={() => setProfileOpen(false)} /> : null}
+    </div>
+  );
+}
+
+function MobileNavigationDrawer({
+  workspaceName,
+  pathname,
+  member,
+  onClose,
+}: {
+  workspaceName: string;
+  pathname: string;
+  member: StudyMember;
+  onClose: () => void;
+}) {
+  const panelRef = useRef<HTMLElement>(null);
+  const restoreFocusRef = useRef(true);
+  const { motionState, requestClose } = useExitTransition(onClose, 200);
+  const navigateAndClose = () => {
+    restoreFocusRef.current = false;
+    requestClose();
+  };
+
+  useEffect(() => {
+    const previous = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    const panel = panelRef.current;
+    panel?.focus();
+    document.body.style.overflow = "hidden";
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        requestClose();
+        return;
+      }
+      if (event.key !== "Tab" || !panel) return;
+      const focusable = Array.from(
+        panel.querySelectorAll<HTMLElement>('button:not([disabled]), a[href]'),
+      );
+      if (!focusable.length) return;
+      const first = focusable[0];
+      const last = focusable.at(-1)!;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    }
+
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      if (restoreFocusRef.current) previous?.focus();
+    };
+  }, [requestClose]);
+
+  return (
+    <div className="mobile-drawer-layer" data-motion-state={motionState}>
+      <button type="button" className="mobile-drawer-scrim" aria-label="메뉴 닫기" onClick={requestClose} />
+      <nav ref={panelRef} className="mobile-drawer" aria-label="모바일 주요 메뉴" tabIndex={-1}>
+        <div className="mobile-drawer__head">
+          <Image className="app-brand-icon" src="/study-ing-icon.png" alt="" width={898} height={898} unoptimized priority />
+          <span><strong>Study-ing</strong><small>{workspaceName}</small></span>
+          <button type="button" className="icon-button" aria-label="메뉴 닫기" onClick={requestClose}><X size={19} /></button>
+        </div>
+        <Link href={APP_ROUTES.workspaces} onClick={navigateAndClose}><FolderGit2 size={19} />모든 Workspace</Link>
+        {navigation.map((item) => {
+          const Icon = item.icon;
+          const active = isActive(pathname, item.href);
+          return (
+            <Link key={item.href} className={active ? "active" : undefined} href={item.href} aria-current={active ? "page" : undefined} onClick={navigateAndClose}>
+              <Icon size={19} />{item.label}
+            </Link>
+          );
+        })}
+        <div className="mobile-drawer__account"><AccountMenu member={member} /></div>
+      </nav>
     </div>
   );
 }

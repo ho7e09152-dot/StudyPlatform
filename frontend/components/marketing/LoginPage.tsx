@@ -1,19 +1,15 @@
 "use client";
 
+import { useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import {
-  ArrowLeft,
-  ArrowRight,
-  Check,
-  FolderGit2,
-  GitBranch,
-  Gitlab,
-  LockKeyhole,
-  ShieldCheck,
-  Sparkles,
-} from "lucide-react";
+import { ArrowLeft, BookOpenCheck, FolderGit2, Gitlab, MessageSquareText, ShieldCheck } from "lucide-react";
+import { AuthNotice } from "@/components/auth/AuthNotice";
+import { AuthProviderButton } from "@/components/auth/AuthProviderButton";
+import { getAuthSession } from "@/lib/api/services/authApi";
+import { getLoginNoticeState } from "@/lib/auth/loginState";
+import { safeAppReturnUrl } from "@/lib/auth/redirects";
 
 const apiBaseUrl = (
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
@@ -24,136 +20,106 @@ const demoMode = process.env.NEXT_PUBLIC_APP_MODE === "demo";
 export function LoginPage() {
   const searchParams = useSearchParams();
   const oauthError = searchParams.get("oauthError");
-  const requestedReturnUrl = searchParams.get("returnUrl");
-  const returnUrl =
-    requestedReturnUrl?.startsWith("/") &&
-    !requestedReturnUrl.startsWith("//") &&
-    !requestedReturnUrl.includes("\\")
-      ? requestedReturnUrl
-      : "/today";
+  const returnUrl = safeAppReturnUrl(searchParams.get("returnUrl"));
   const gitLabLoginUrl = `${apiBaseUrl}/api/v1/auth/gitlab/login?returnUrl=${encodeURIComponent(returnUrl)}`;
+  const notice = getLoginNoticeState(oauthError);
+  const currentLoginPath = `/login${searchParams.size ? `?${searchParams.toString()}` : ""}`;
+  const policyReturnQuery = encodeURIComponent(currentLoginPath);
+
+  useEffect(() => {
+    if (demoMode) return;
+    const controller = new AbortController();
+    void getAuthSession(controller.signal)
+      .then((session) => {
+        if (!session.authenticated || !session.user) return;
+        if (!session.user.profileCompleted) {
+          window.location.replace(`/onboarding/profile?returnTo=${encodeURIComponent(returnUrl)}`);
+          return;
+        }
+        window.location.replace(returnUrl);
+      })
+      .catch(() => {
+        // The login entry remains usable when no authenticated session exists.
+      });
+    return () => controller.abort();
+  }, [returnUrl]);
 
   return (
-    <main className="login-page">
-      <div className="login-background" aria-hidden="true">
-        <span className="login-background__orb login-background__orb--one" />
-        <span className="login-background__orb login-background__orb--two" />
-        <span className="login-background__grid" />
-      </div>
+    <main className="auth-entry-page">
+      <nav className="auth-entry-topbar" aria-label="로그인 보조 탐색">
+        <Link href="/">
+          <ArrowLeft size={16} aria-hidden="true" /> 홈
+        </Link>
+      </nav>
 
-      <Link className="login-back" href="/">
-        <ArrowLeft size={16} /> 홈으로
-      </Link>
-
-      <div className="login-layout">
-        <section className="login-story">
-          <Link className="marketing-brand marketing-brand--login" href="/">
+      <div className="auth-entry-layout">
+        <section className="auth-entry-context" aria-labelledby="auth-entry-context-title">
+          <Link className="auth-entry-brand" href="/" aria-label="Study-ing 홈">
             <Image
-              src="/ssafy_icon.png"
-              alt="SSAFY"
-              width={684}
-              height={354}
+              src="/study-ing-icon.png"
+              alt=""
+              width={898}
+              height={898}
               unoptimized
             />
-            <span>
-              <strong>STUDY</strong>
-              <small>GitLab learning hub</small>
-            </span>
+            <strong>Study-ing</strong>
           </Link>
 
-          <div className="login-story__copy">
-            <div className="landing-pill landing-pill--dark">
-              <Sparkles size={13} />
-              기록은 GitLab에, 흐름은 Workspace에
-            </div>
-            <h1>
-              다시 만나서 반가워요.
-              <br />
-              <span>오늘의 학습을 이어가세요.</span>
-            </h1>
-            <p>
-              GitLab 계정 하나로 팀 Workspace와 저장소 권한을 안전하게
-              연결합니다.
-            </p>
+          <div className="auth-entry-context__copy">
+            <h1 id="auth-entry-context-title">함께 공부하고,<br />기록은 그대로 남기세요.</h1>
+            <p>오늘의 학습부터 팀 제출과 리뷰까지, 한 흐름으로 이어갑니다.</p>
           </div>
 
-          <div className="login-flow-card">
-            <div className="login-flow-card__head">
-              <span><GitBranch size={16} /></span>
-              <div>
-                <small>CONNECTED WORKFLOW</small>
-                <strong>로그인하면 이어지는 것들</strong>
-              </div>
-            </div>
-            <ol>
-              <li><span><Check size={12} /></span><div><b>내 Workspace 확인</b><small>접근 가능한 스터디 프로젝트를 불러옵니다.</small></div></li>
-              <li><span><Check size={12} /></span><div><b>오늘 일정과 제출 복원</b><small>GitLab 원본을 기준으로 현재 상태를 보여줍니다.</small></div></li>
-              <li><span><Check size={12} /></span><div><b>내 계정으로 commit</b><small>웹에서 작성해도 투명한 기록이 남습니다.</small></div></li>
-            </ol>
-          </div>
+          <ul className="auth-entry-values" aria-label="Study-ing에서 할 수 있는 일">
+            <li><BookOpenCheck size={18} aria-hidden="true" /><span>오늘 할 학습을 한눈에 확인</span></li>
+            <li><MessageSquareText size={18} aria-hidden="true" /><span>제출과 팀 리뷰를 한곳에서 진행</span></li>
+            <li><FolderGit2 size={18} aria-hidden="true" /><span>학습 기록은 GitLab에 안전하게 보관</span></li>
+          </ul>
         </section>
 
-        <section className="login-panel" aria-labelledby="login-title">
-          <div className="login-panel__badge"><LockKeyhole size={15} /> OAuth 보안 로그인</div>
-          <header>
-            <span className="login-panel__icon"><Gitlab size={28} /></span>
+        <section className="auth-entry-panel" aria-labelledby="login-title">
+          <header className="auth-entry-panel__header">
+            <span className="auth-entry-provider-mark" aria-hidden="true"><Gitlab size={22} /></span>
             <div>
-              <h2 id="login-title">GitLab 계정으로 시작</h2>
-              <p>별도의 비밀번호를 만들 필요가 없습니다.</p>
+              <h2 id="login-title">Study-ing 시작하기</h2>
+              <p>GitLab 계정으로 안전하게 로그인합니다.</p>
             </div>
           </header>
 
-          {oauthError ? (
-            <div className="login-oauth-error" role="alert">
-              {oauthError === "session_expired"
-                ? "로그인 세션이 만료되었습니다. GitLab로 다시 로그인해 주세요."
-                : oauthError === "reconnect_required"
-                  ? "GitLab 연결이 만료되거나 철회되었습니다. 권한을 다시 승인해 주세요."
-                : "GitLab 로그인이 취소되었거나 승인되지 않았습니다. 다시 시도해 주세요."}
-            </div>
-          ) : null}
+          {notice ? <AuthNotice notice={notice} /> : null}
 
-          <a
-            className="gitlab-login-button"
+          <AuthProviderButton
+            provider="GITLAB"
             href={gitLabLoginUrl}
           >
-            <Gitlab size={20} />
-            GitLab로 계속하기
-            <ArrowRight size={17} />
-          </a>
+            {notice?.actionLabel ?? "GitLab로 계속하기"}
+          </AuthProviderButton>
 
           {demoMode ? (
             <>
-              <div className="login-divider"><span>또는</span></div>
-              <Link className="demo-login-button" href="/today">
-                <span><FolderGit2 size={18} /></span>
-                <div>
-                  <strong>데모 Workspace 둘러보기</strong>
-                  <small>로그인 없이 준비된 데이터로 기능 확인</small>
-                </div>
-                <ArrowRight size={17} />
+              <div className="auth-entry-divider"><span>또는</span></div>
+              <Link className="auth-entry-demo" href="/today">
+                <FolderGit2 size={18} aria-hidden="true" />
+                <span>데모 Workspace 둘러보기</span>
               </Link>
             </>
           ) : null}
 
-          <div className="login-security-note">
-            <ShieldCheck size={19} />
+          <div className="auth-entry-security-note">
+            <ShieldCheck size={18} aria-hidden="true" />
             <div>
-              <strong>토큰은 브라우저에 저장되지 않아요</strong>
-              <p>인증 정보는 Spring 백엔드가 관리하고 브라우저에는 HttpOnly 세션 쿠키만 전달합니다.</p>
+              <strong>안전한 OAuth 로그인</strong>
+              <p>OAuth 토큰은 서버에서 암호화해 관리하고, 브라우저에는 HttpOnly 세션 쿠키만 사용합니다.</p>
             </div>
           </div>
 
-          <footer>
-            계속하면 <Link href="/terms">이용약관</Link>과 <Link href="/privacy">개인정보 처리 안내</Link>에 동의하고,
-            GitLab 계정의 기본 프로필과 접근 가능한 프로젝트를 읽도록 승인하게 됩니다.
+          <footer className="auth-entry-footer">
+            <Link href={`/terms?returnTo=${policyReturnQuery}`}>이용약관</Link>
+            <span aria-hidden="true">·</span>
+            <Link href={`/privacy?returnTo=${policyReturnQuery}`}>개인정보 처리 안내</Link>
+            <p>개인 액세스 토큰을 직접 입력할 필요가 없습니다.</p>
           </footer>
         </section>
-      </div>
-
-      <div className="login-corner-note">
-        <ShieldCheck size={14} />
-        <span>Workspace에 연결된 프로젝트만 접근합니다.</span>
       </div>
     </main>
   );

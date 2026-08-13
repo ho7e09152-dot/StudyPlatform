@@ -1,5 +1,7 @@
 package com.studyworkspace.workspace.controller;
 
+import static com.studyworkspace.policy.DataRetentionPolicy.WORKSPACE_SOFT_DELETE;
+
 import static com.studyworkspace.workspace.domain.WorkspaceModels.*;
 
 import java.nio.charset.StandardCharsets;
@@ -17,6 +19,7 @@ import com.studyworkspace.gitlab.service.GitLabOAuthProjectService;
 import com.studyworkspace.auth.dto.GitLabOAuthSession;
 import com.studyworkspace.auth.service.GitLabOAuthTokenProvider;
 import com.studyworkspace.auth.service.OAuthAccountService;
+import com.studyworkspace.auth.security.StudyIngPrincipal;
 import com.studyworkspace.workspace.domain.WorkspaceException;
 import com.studyworkspace.workspace.service.GitLabSessionFileService;
 import com.studyworkspace.workspace.service.GitLabSessionSyncService;
@@ -25,7 +28,11 @@ import com.studyworkspace.workspace.service.WorkspaceService;
 import com.studyworkspace.workspace.service.SessionYamlSerializer;
 import com.studyworkspace.workspace.service.SubmissionMarkdownCodec;
 import com.studyworkspace.workspace.service.GitLabWorkspaceMemberService;
+import com.studyworkspace.workspace.service.WorkspaceDiscoveryService;
+import com.studyworkspace.workspace.dto.DiscoverableWorkspace;
+import com.studyworkspace.workspace.dto.WorkspaceJoinResponse;
 import com.studyworkspace.workspace.security.WorkspaceAccessService;
+import com.studyworkspace.workspace.security.WorkspaceRepositoryAccessVerifier;
 import com.studyworkspace.workspace.service.SyncJobService;
 import com.studyworkspace.workspace.service.AuditEventService;
 import com.studyworkspace.workspace.service.InAppNotificationService;
@@ -71,7 +78,9 @@ public class WorkspaceController {
 	private final SessionYamlSerializer sessionYamlSerializer;
 	private final SubmissionMarkdownCodec submissionMarkdownCodec;
 	private final GitLabWorkspaceMemberService memberService;
+	private final WorkspaceDiscoveryService discoveryService;
 	private final WorkspaceAccessService accessService;
+	private final WorkspaceRepositoryAccessVerifier repositoryAccessVerifier;
 	private final SyncJobService syncJobService;
 	private final AuditEventService auditEventService;
 	private final InAppNotificationService notificationService;
@@ -91,7 +100,9 @@ public class WorkspaceController {
 		SessionYamlSerializer sessionYamlSerializer,
 		SubmissionMarkdownCodec submissionMarkdownCodec,
 		GitLabWorkspaceMemberService memberService,
+		WorkspaceDiscoveryService discoveryService,
 		WorkspaceAccessService accessService,
+		WorkspaceRepositoryAccessVerifier repositoryAccessVerifier,
 		SyncJobService syncJobService,
 		AuditEventService auditEventService,
 		InAppNotificationService notificationService,
@@ -110,7 +121,9 @@ public class WorkspaceController {
 		this.sessionYamlSerializer = sessionYamlSerializer;
 		this.submissionMarkdownCodec = submissionMarkdownCodec;
 		this.memberService = memberService;
+		this.discoveryService = discoveryService;
 		this.accessService = accessService;
+		this.repositoryAccessVerifier = repositoryAccessVerifier;
 		this.syncJobService = syncJobService;
 		this.auditEventService = auditEventService;
 		this.notificationService = notificationService;
@@ -122,8 +135,38 @@ public class WorkspaceController {
 	}
 
 	@GetMapping
-	public List<WorkspaceState> listWorkspaces(@AuthenticationPrincipal GitLabUser user) {
-		return service.list(user.id());
+	public List<WorkspaceState> listWorkspaces(
+		@AuthenticationPrincipal GitLabUser user,
+		HttpServletRequest servletRequest
+	) {
+		String studyIngUserId = user instanceof StudyIngPrincipal principal ? principal.userId() : null;
+		List<WorkspaceState> joined = service.list(studyIngUserId, user.id());
+		if (joined.isEmpty()) return joined;
+		return repositoryAccessVerifier.verifyAtLogin(
+			joined,
+			tokenProvider.requireValidSession(servletRequest)
+		);
+	}
+
+	@GetMapping("/discoverable")
+	public List<DiscoverableWorkspace> listDiscoverableWorkspaces(HttpServletRequest servletRequest) {
+		return discoveryService.discover(tokenProvider.requireValidSession(servletRequest));
+	}
+
+	@PostMapping("/{workspaceId}/join")
+	public WorkspaceJoinResponse joinWorkspace(
+		@PathVariable String workspaceId,
+		@AuthenticationPrincipal StudyIngPrincipal user,
+		HttpServletRequest servletRequest
+	) {
+		WorkspaceJoinResponse result = discoveryService.join(
+			workspaceId,
+			tokenProvider.requireValidSession(servletRequest)
+		);
+		if (result.joined()) {
+			auditEventService.record(workspaceId, user, "WORKSPACE_MEMBER_JOINED", "MEMBER", Long.toString(user.id()), Map.of("role", "MEMBER"));
+		}
+		return result;
 	}
 
 	@GetMapping("/deleted")
@@ -135,7 +178,7 @@ public class WorkspaceController {
 	@ResponseStatus(HttpStatus.CREATED)
 	public WorkspaceState createWorkspace(
 		@RequestBody CreateWorkspaceRequest request,
-		@AuthenticationPrincipal GitLabUser user,
+		@AuthenticationPrincipal StudyIngPrincipal user,
 		HttpServletRequest servletRequest
 	) {
 		if (request == null || request.gitlabProjectId() <= 0 || !StringUtils.hasText(request.name())) {
@@ -143,6 +186,9 @@ public class WorkspaceController {
 		}
 		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
 		GitLabProject project = projectService.getProject(oauth.accessToken(), request.gitlabProjectId());
+		if (project.accessLevel() == null || project.accessLevel() < WorkspaceDiscoveryService.JOIN_MINIMUM_ACCESS_LEVEL) {
+			throw new WorkspaceException("REPOSITORY_WRITE_PERMISSION_REQUIRED", "Workspace 연결과 학습 제출을 위해 GitLab 프로젝트 쓰기 권한이 필요합니다.", 403);
+		}
 		OAuthAccountService.AccountProfile profile = accountService.requireProfile(oauth.user().id());
 		if (!profile.profileCompleted()) {
 			throw new WorkspaceException("PROFILE_REQUIRED", "Workspace를 만들기 전에 프로필을 설정해 주세요.", 409);
@@ -165,11 +211,12 @@ public class WorkspaceController {
 			analysis.repositorySchemaVersion(),
 			analysis.classification(),
 			analysis.treeFingerprint(),
-			profile.repositoryFileName()
+			profile.repositoryFileName(),
+			project.webUrl(),
+			project.visibility()
 		);
-		WorkspaceState created = service.create(verified, oauth.user());
+		WorkspaceState created = service.create(verified, user, project.accessLevel());
 		try {
-			created = memberService.addAllVerified(oauth.accessToken(), created.id());
 			repositoryInitializationService.initialize(oauth.accessToken(), created, profile.name());
 		} catch (RuntimeException exception) {
 			service.rollbackCreate(created.id());
@@ -200,7 +247,7 @@ public class WorkspaceController {
 	public WorkspaceState softDeleteWorkspace(@PathVariable String workspaceId, @AuthenticationPrincipal GitLabUser user) {
 		accessService.requireOwner(workspaceId, user.id(), false);
 		WorkspaceState deleted = service.setStatus(workspaceId, "SOFT_DELETED");
-		auditEventService.record(workspaceId, user, "WORKSPACE_SOFT_DELETED", "WORKSPACE", workspaceId, Map.of("retentionDays", 7));
+		auditEventService.record(workspaceId, user, "WORKSPACE_SOFT_DELETED", "WORKSPACE", workspaceId, Map.of("retentionDays", WORKSPACE_SOFT_DELETE.toDays()));
 		return deleted;
 	}
 
@@ -282,6 +329,7 @@ public class WorkspaceController {
 		@AuthenticationPrincipal GitLabUser user,
 		HttpServletRequest servletRequest
 	) {
+		accessService.requireManager(workspaceId, user.id(), false);
 		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
 		String jobId = syncJobService.start(workspaceId, "REPOSITORY_SYNC");
 		try {
@@ -289,7 +337,7 @@ public class WorkspaceController {
 			syncJobService.complete(jobId, !result.failures().isEmpty());
 			auditEventService.record(workspaceId, user, result.failures().isEmpty() ? "REPOSITORY_SYNCED" : "REPOSITORY_SYNC_PARTIAL", "SYNC_JOB", jobId, Map.of("failures", result.failures().size()));
 			if (!result.failures().isEmpty()) {
-				notificationService.create(user.id(), workspaceId, "SYNC_PARTIAL", "일부 GitLab 파일을 동기화하지 못했습니다.", result.failures().size() + "개 파일을 확인해 주세요.", "/settings");
+				notificationService.create(user.id(), workspaceId, "SYNC_PARTIAL", "일부 GitLab 파일을 동기화하지 못했습니다.", result.failures().size() + "개 파일을 확인해 주세요.", "/settings/data");
 			}
 			return result;
 		} catch (WorkspaceException exception) {
@@ -355,7 +403,8 @@ public class WorkspaceController {
 	}
 
 	@GetMapping("/{workspaceId}/sync-jobs")
-	public List<SyncJobService.SyncJobView> listSyncJobs(@PathVariable String workspaceId) {
+	public List<SyncJobService.SyncJobView> listSyncJobs(@PathVariable String workspaceId, @AuthenticationPrincipal GitLabUser user) {
+		accessService.requireManager(workspaceId, user.id(), false);
 		return syncJobService.list(workspaceId);
 	}
 
@@ -374,6 +423,7 @@ public class WorkspaceController {
 		@RequestBody Notifications notifications,
 		@AuthenticationPrincipal GitLabUser user
 	) {
+		accessService.requireManager(workspaceId, user.id(), false);
 		WorkspaceState updated = service.updateNotifications(workspaceId, notifications);
 		auditEventService.record(workspaceId, user, "NOTIFICATION_SETTINGS_UPDATED", "WORKSPACE", workspaceId, Map.of());
 		return updated;
@@ -404,6 +454,7 @@ public class WorkspaceController {
 		@AuthenticationPrincipal GitLabUser user,
 		HttpServletRequest servletRequest
 	) {
+		accessService.requireManager(workspaceId, user.id(), false);
 		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
 		WorkspaceState updated = service.saveSession(
 			workspaceId,
@@ -431,6 +482,7 @@ public class WorkspaceController {
 		@AuthenticationPrincipal GitLabUser user,
 		HttpServletRequest servletRequest
 	) {
+		accessService.requireManager(workspaceId, user.id(), false);
 		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
 		WorkspaceState updated = service.saveSession(
 			workspaceId,
@@ -451,6 +503,7 @@ public class WorkspaceController {
 		@AuthenticationPrincipal GitLabUser user,
 		HttpServletRequest servletRequest
 	) {
+		accessService.requireManager(workspaceId, user.id(), false);
 		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
 		WorkspaceState updated = service.cancelSession(
 			workspaceId,
@@ -538,7 +591,7 @@ public class WorkspaceController {
 			notificationService.create(
 				target.gitlabUserId(), workspaceId, "SUBMISSION_REVIEW",
 				"새 제출 리뷰가 등록되었습니다.", user.name() + "님이 " + date + " 제출에 댓글을 남겼습니다.",
-				"/today"
+				"/library/sessions/" + date
 			);
 		}
 		return thread;
@@ -689,7 +742,7 @@ public class WorkspaceController {
 	private void recordSyncFailure(String workspaceId, GitLabUser user, String jobId, String code, String message) {
 		String safeMessage = message == null || message.isBlank() ? "GitLab 동기화 중 알 수 없는 오류가 발생했습니다." : message;
 		auditEventService.record(workspaceId, user, "REPOSITORY_SYNC_FAILED", "SYNC_JOB", jobId, Map.of("code", code, "message", safeMessage));
-		notificationService.create(user.id(), workspaceId, "SYNC_FAILED", "GitLab 동기화에 실패했습니다.", safeMessage, "/settings");
+		notificationService.create(user.id(), workspaceId, "SYNC_FAILED", "GitLab 동기화에 실패했습니다.", safeMessage, "/settings/data");
 	}
 
 }

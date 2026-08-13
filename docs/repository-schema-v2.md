@@ -1,6 +1,6 @@
 # GitLab 저장 구조 V2
 
-Study Workspace가 새로 만드는 Workspace는 학습 데이터를 저장소 루트에 흩어 놓지 않고 서비스 전용 경로에 모읍니다.
+Study-ing이 새로 만드는 Workspace는 학습 데이터를 저장소 루트에 흩어 놓지 않고 서비스 전용 경로에 모읍니다.
 
 ```text
 .study-workspace/

@@ -6,7 +6,7 @@ plugins {
 
 group = 'com.studyworkspace'
 version = '0.1.0-SNAPSHOT'
-description = 'GitLab integration spike for Study Workspace'
+description = 'GitLab integration spike for Study-ing'
 
 java {
 	sourceCompatibility = '21'

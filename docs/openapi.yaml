@@ -1,9 +1,9 @@
 openapi: 3.1.0
 info:
-  title: Study Workspace API
+  title: Study-ing API
   version: 0.2.0
   description: |
-    Study Workspace 프론트엔드와 Spring Boot 백엔드가 공유하는 API 계약입니다.
+    Study-ing 프론트엔드와 Spring Boot 백엔드가 공유하는 API 계약입니다.
 
     구현 원칙:
     - GitLab access token은 브라우저에 반환하지 않습니다.
@@ -12,7 +12,7 @@ info:
     - 날짜는 `YYYY-MM-DD`, 시각은 timezone을 포함한 ISO 8601 문자열입니다.
     - 수정 요청은 `expectedRevision` 또는 `lastCommitId`로 낙관적 잠금을 적용합니다.
   contact:
-    name: Study Workspace Team
+    name: Study-ing Team
 servers:
   - url: http://localhost:8080/api/v1
     description: 로컬 개발 서버
@@ -452,6 +452,59 @@ paths:
                     deletionExpiresAt:
                       type: string
                       format: date-time
+
+  /workspaces/discoverable:
+    get:
+      tags: [Workspaces]
+      summary: Repository 멤버십으로 참여 가능한 Workspace 목록
+      operationId: listDiscoverableWorkspaces
+      x-implementation-status: implemented
+      responses:
+        "200":
+          description: 현재 Provider 계정으로 접근 및 쓰기가 가능한 활성 Workspace만 반환
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  required: [workspaceId, workspaceName, provider, repositoryId, repositoryPath, eligibility]
+                  properties:
+                    workspaceId: { type: string }
+                    workspaceName: { type: string }
+                    provider: { type: string, enum: [GITLAB] }
+                    repositoryId: { type: string }
+                    repositoryPath: { type: string }
+                    defaultBranch: { type: string, nullable: true }
+                    eligibility: { type: string, enum: [REPOSITORY_WRITE_CONFIRMED] }
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+
+  /workspaces/{workspaceId}/join:
+    post:
+      tags: [Workspaces]
+      summary: Repository 멤버십 재검증 후 Workspace 참여
+      operationId: joinWorkspace
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      responses:
+        "200":
+          description: MEMBER 역할로 참여했거나 이미 참여 중인 Workspace
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [workspace, joined]
+                properties:
+                  workspace:
+                    $ref: "#/components/schemas/Workspace"
+                  joined:
+                    type: boolean
+        "403":
+          description: Repository 쓰기 권한 부족
+        "404":
+          description: 존재하지 않거나 현재 계정에서 발견할 수 없는 Workspace
 
   /workspaces/{workspaceId}:
     parameters:
@@ -1808,9 +1861,19 @@ components:
           type: string
         termsVersion:
           type: [string, "null"]
-        termsAcceptedAt:
+        termsAgreedAt:
           type: [string, "null"]
           format: date-time
+        privacyVersion:
+          type: [string, "null"]
+        privacyAgreedAt:
+          type: [string, "null"]
+          format: date-time
+        minimumAgeConfirmedAt:
+          type: [string, "null"]
+          format: date-time
+        requiresReconsent:
+          type: boolean
         themeMode:
           type: string
           enum: [LIGHT, DARK]
@@ -1819,7 +1882,7 @@ components:
           enum: [PURPLE, BLUE, TEAL, ORANGE, ROSE]
     UpdateAccountProfileRequest:
       type: object
-      required: [displayName, repositoryFileName, timezone, acceptTerms]
+      required: [displayName, repositoryFileName, timezone, acceptTerms, acceptPrivacy, confirmMinimumAge]
       properties:
         displayName:
           type: string
@@ -1831,7 +1894,14 @@ components:
         timezone:
           type: string
         acceptTerms:
-          const: true
+          type: boolean
+          description: 최초 onboarding 또는 재동의 시 이용약관 동의
+        acceptPrivacy:
+          type: boolean
+          description: 최초 onboarding 또는 재동의 시 개인정보 처리 안내 동의
+        confirmMinimumAge:
+          type: boolean
+          description: 만 14세 이상 확인
     UpdateAccountPreferencesRequest:
       type: object
       required: [themeMode, accentColor]

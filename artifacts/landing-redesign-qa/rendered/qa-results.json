@@ -1,0 +1,138 @@
+{
+  "baseURL": "https://sandbox.withroro.com",
+  "generatedAt": "2026-08-12T15:59:59.769Z",
+  "captures": [
+    {
+      "folder": "desktop",
+      "route": "/",
+      "file": "/home/roro/study_platform/artifacts/landing-redesign-qa/rendered/desktop/02-full-landing.png",
+      "dimensions": {
+        "viewportWidth": 1440,
+        "viewportHeight": 1050,
+        "scrollWidth": 1440,
+        "scrollHeight": 3872
+      }
+    },
+    {
+      "folder": "desktop",
+      "selector": ".public-hero",
+      "file": "/home/roro/study_platform/artifacts/landing-redesign-qa/rendered/desktop/01-landing-hero.png"
+    },
+    {
+      "folder": "desktop",
+      "selector": "#product-showcase",
+      "file": "/home/roro/study_platform/artifacts/landing-redesign-qa/rendered/desktop/03-product-showcase.png"
+    },
+    {
+      "folder": "desktop",
+      "selector": ".public-final-cta",
+      "file": "/home/roro/study_platform/artifacts/landing-redesign-qa/rendered/desktop/04-final-cta.png"
+    },
+    {
+      "folder": "desktop",
+      "route": "/terms",
+      "file": "/home/roro/study_platform/artifacts/landing-redesign-qa/rendered/desktop/05-terms.png",
+      "dimensions": {
+        "viewportWidth": 1440,
+        "viewportHeight": 1050,
+        "scrollWidth": 1440,
+        "scrollHeight": 1050
+      }
+    },
+    {
+      "folder": "desktop",
+      "route": "/privacy",
+      "file": "/home/roro/study_platform/artifacts/landing-redesign-qa/rendered/desktop/06-privacy.png",
+      "dimensions": {
+        "viewportWidth": 1440,
+        "viewportHeight": 1050,
+        "scrollWidth": 1440,
+        "scrollHeight": 1278
+      }
+    },
+    {
+      "folder": "mobile",
+      "route": "/",
+      "file": "/home/roro/study_platform/artifacts/landing-redesign-qa/rendered/mobile/02-full-landing.png",
+      "dimensions": {
+        "viewportWidth": 390,
+        "viewportHeight": 844,
+        "scrollWidth": 390,
+        "scrollHeight": 4700
+      }
+    },
+    {
+      "folder": "mobile",
+      "selector": ".public-hero",
+      "file": "/home/roro/study_platform/artifacts/landing-redesign-qa/rendered/mobile/01-landing-hero.png"
+    },
+    {
+      "folder": "mobile",
+      "selector": "#product-showcase",
+      "file": "/home/roro/study_platform/artifacts/landing-redesign-qa/rendered/mobile/03-product-showcase.png"
+    },
+    {
+      "folder": "mobile",
+      "selector": ".public-final-cta",
+      "file": "/home/roro/study_platform/artifacts/landing-redesign-qa/rendered/mobile/04-final-cta.png"
+    },
+    {
+      "folder": "mobile",
+      "route": "/terms",
+      "file": "/home/roro/study_platform/artifacts/landing-redesign-qa/rendered/mobile/05-terms.png",
+      "dimensions": {
+        "viewportWidth": 390,
+        "viewportHeight": 844,
+        "scrollWidth": 390,
+        "scrollHeight": 1077
+      }
+    },
+    {
+      "folder": "mobile",
+      "route": "/privacy",
+      "file": "/home/roro/study_platform/artifacts/landing-redesign-qa/rendered/mobile/06-privacy.png",
+      "dimensions": {
+        "viewportWidth": 390,
+        "viewportHeight": 844,
+        "scrollWidth": 390,
+        "scrollHeight": 1396
+      }
+    }
+  ],
+  "checks": [
+    {
+      "folder": "desktop",
+      "route": "/",
+      "horizontalOverflow": false,
+      "heroCtaInFirstViewport": true
+    },
+    {
+      "folder": "desktop",
+      "route": "/terms",
+      "horizontalOverflow": false
+    },
+    {
+      "folder": "desktop",
+      "route": "/privacy",
+      "horizontalOverflow": false
+    },
+    {
+      "folder": "mobile",
+      "route": "/",
+      "horizontalOverflow": false,
+      "heroCtaInFirstViewport": true
+    },
+    {
+      "folder": "mobile",
+      "route": "/terms",
+      "horizontalOverflow": false
+    },
+    {
+      "folder": "mobile",
+      "route": "/privacy",
+      "horizontalOverflow": false
+    }
+  ],
+  "consoleErrors": [],
+  "pageErrors": []
+}

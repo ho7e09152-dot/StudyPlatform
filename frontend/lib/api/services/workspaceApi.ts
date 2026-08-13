@@ -6,6 +6,7 @@ import type {
   WorkspaceSettings,
   StudyMember,
 } from "@/lib/domain/types";
+import type { ProviderId } from "@/lib/providers/provider-descriptors";
 
 function workspacePath(workspaceId: string) {
   return `/api/v1/workspaces/${encodeURIComponent(workspaceId)}`;
@@ -13,6 +14,41 @@ function workspacePath(workspaceId: string) {
 
 export function listWorkspaces(signal?: AbortSignal) {
   return apiGet<Workspace[]>("/api/v1/workspaces", signal);
+}
+
+export interface DiscoverableWorkspace {
+  workspaceId: string;
+  workspaceName: string;
+  provider: ProviderId;
+  externalRepositoryId: string;
+  repositoryFullName: string;
+  repositoryId: string;
+  repositoryPath: string;
+  defaultBranch?: string | null;
+  eligibility: "REPOSITORY_WRITE_CONFIRMED";
+}
+
+export interface WorkspaceJoinResponse {
+  workspace: Workspace;
+  joined: boolean;
+}
+
+export function listDiscoverableWorkspaces(signal?: AbortSignal) {
+  return apiGet<DiscoverableWorkspace[]>("/api/v1/workspaces/discoverable", signal);
+}
+
+export function joinWorkspace(workspaceId: string) {
+  return apiRequest<WorkspaceJoinResponse>(`${workspacePath(workspaceId)}/join`, { method: "POST" });
+}
+
+export function updateWorkspaceSettings(
+  workspaceId: string,
+  input: { name: string; settings: WorkspaceSettings },
+) {
+  return apiRequest<Workspace>(workspacePath(workspaceId), {
+    method: "PATCH",
+    body: input,
+  });
 }
 
 export interface DeletedWorkspace {
@@ -89,8 +125,8 @@ export function listAuditEvents(workspaceId: string) {
   return apiGet<AuditEvent[]>(`${workspacePath(workspaceId)}/audit-events`);
 }
 
-export function listNotifications() {
-  return apiGet<InAppNotification[]>("/api/v1/notifications");
+export function listNotifications(signal?: AbortSignal) {
+  return apiGet<InAppNotification[]>("/api/v1/notifications", signal);
 }
 
 export function markNotificationRead(notificationId: string) {

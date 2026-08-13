@@ -1,4 +1,4 @@
-# Study Workspace 백엔드·API·GitLab 연동 설계서
+# Study-ing 백엔드·API·GitLab 연동 설계서
 
 > 작성 기준: 2026-07-23  
 > 구현 기준: Spring Boot + PostgreSQL + GitLab Self-Managed OAuth
@@ -8,7 +8,7 @@
 
 ## 1. 서비스 개요와 개발 배경
 
-Study Workspace는 팀별 GitLab 저장소를 연결해 날짜별 학습 일정, 학습 항목, 멤버별 제출 파일과 진행률을 관리하는 웹서비스다.
+Study-ing은 팀별 GitLab 저장소를 연결해 날짜별 학습 일정, 학습 항목, 멤버별 제출 파일과 진행률을 관리하는 웹서비스다.
 
 기존 방식은 날짜 폴더를 만들고 각 멤버가 자신의 Markdown 또는 코드 파일을 직접 커밋하는 구조다. 이 방식은 단순하지만 다음 불편이 있다.
 
@@ -145,7 +145,7 @@ flowchart LR
 사내 GitLab에서 웹서비스용 OAuth Application 하나를 등록한다.
 
 ```text
-Name: Study Workspace
+Name: Study-ing
 Redirect URI: https://api.example.com/api/v1/auth/gitlab/callback
 Confidential: 활성화
 ```

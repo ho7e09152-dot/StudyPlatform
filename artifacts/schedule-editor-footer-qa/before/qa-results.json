@@ -1,0 +1,27 @@
+{
+  "baseURL": "https://sandbox.withroro.com",
+  "captures": [
+    {
+      "viewport": "desktop",
+      "file": "/work/artifacts/schedule-editor-footer-qa/before/desktop-bottom.png",
+      "viewportHeight": 900,
+      "footerTop": 757.984375,
+      "footerBottom": 827.984375,
+      "bottomGap": 72,
+      "mainPaddingBottom": "72px",
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "mobile",
+      "file": "/work/artifacts/schedule-editor-footer-qa/before/mobile-bottom.png",
+      "viewportHeight": 844,
+      "footerTop": 674.640625,
+      "footerBottom": 795.640625,
+      "bottomGap": 48,
+      "mainPaddingBottom": "48px",
+      "horizontalOverflow": false
+    }
+  ],
+  "consoleErrors": [],
+  "pageErrors": []
+}

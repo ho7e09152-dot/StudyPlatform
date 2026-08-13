@@ -1,0 +1,58 @@
+{
+  "today-desktop": {
+    "source": "artifacts/brand-refresh/desktop/today.png",
+    "target": "frontend/public/product-previews/today-desktop.webp",
+    "width": 1200,
+    "height": 917,
+    "bytes": 53004
+  },
+  "schedule-desktop": {
+    "source": "artifacts/brand-refresh/desktop/schedule.png",
+    "target": "frontend/public/product-previews/schedule-desktop.webp",
+    "width": 1200,
+    "height": 917,
+    "bytes": 28126
+  },
+  "library-desktop": {
+    "source": "artifacts/brand-refresh/desktop/library.png",
+    "target": "frontend/public/product-previews/library-desktop.webp",
+    "width": 1200,
+    "height": 917,
+    "bytes": 45622
+  },
+  "records-desktop": {
+    "source": "artifacts/brand-refresh/desktop/records.png",
+    "target": "frontend/public/product-previews/records-desktop.webp",
+    "width": 1200,
+    "height": 917,
+    "bytes": 41066
+  },
+  "today-mobile": {
+    "source": "artifacts/brand-refresh/mobile/today.png",
+    "target": "frontend/public/product-previews/today-mobile.webp",
+    "width": 390,
+    "height": 1676,
+    "bytes": 47004
+  },
+  "schedule-mobile": {
+    "source": "artifacts/brand-refresh/mobile/schedule.png",
+    "target": "frontend/public/product-previews/schedule-mobile.webp",
+    "width": 390,
+    "height": 1088,
+    "bytes": 24832
+  },
+  "library-mobile": {
+    "source": "artifacts/brand-refresh/mobile/library.png",
+    "target": "frontend/public/product-previews/library-mobile.webp",
+    "width": 390,
+    "height": 1218,
+    "bytes": 37892
+  },
+  "records-mobile": {
+    "source": "artifacts/brand-refresh/mobile/records.png",
+    "target": "frontend/public/product-previews/records-mobile.webp",
+    "width": 390,
+    "height": 1421,
+    "bytes": 31644
+  }
+}

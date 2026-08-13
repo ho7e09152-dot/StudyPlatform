@@ -64,7 +64,7 @@ class OAuthAccountPersistenceTests {
 		);
 		accountService.upsert(first);
 		var profile = accountService.updateProfile(123456789L, new OAuthAccountService.UpdateProfileRequest(
-			"김서연", "서연-학습", "Asia/Seoul", true
+			"김서연", "서연-학습", "Asia/Seoul", true, true, true
 		));
 		assertThat(profile.profileCompleted()).isTrue();
 		assertThat(profile.repositoryFileName()).isEqualTo("서연-학습.md");
@@ -76,6 +76,69 @@ class OAuthAccountPersistenceTests {
 
 		assertThat(accountService.requireProfile(123456789L).name()).isEqualTo("김서연");
 		assertThat(accountService.findOAuthSession(123456789L).orElseThrow().user().name()).isEqualTo("김서연");
+	}
+
+	@Test
+	void storesIndependentConsentOnceAndProfileEditsDoNotOverwriteAgreementTime() {
+		long gitLabUserId = 314159265L;
+		accountService.upsert(new GitLabOAuthSession(
+			new GitLabUser(gitLabUserId, "consent-user", "Consent User", null, null),
+			"access", "refresh", Instant.now().plusSeconds(3600), "api"
+		));
+
+		var first = accountService.updateProfile(gitLabUserId, new OAuthAccountService.UpdateProfileRequest(
+			"동의 사용자", "consent-user", "Asia/Seoul", true, true, true
+		));
+		assertThat(first.termsVersion()).isEqualTo("2026-08-13");
+		assertThat(first.privacyVersion()).isEqualTo("2026-08-13");
+		assertThat(first.termsAgreedAt()).isNotNull();
+		assertThat(first.privacyAgreedAt()).isNotNull();
+		assertThat(first.minimumAgeConfirmedAt()).isNotNull();
+		assertThat(first.requiresReconsent()).isFalse();
+
+		var edited = accountService.updateProfile(gitLabUserId, new OAuthAccountService.UpdateProfileRequest(
+			"수정된 이름", "consent-user", "Asia/Seoul", false, false, false
+		));
+		assertThat(edited.termsAgreedAt()).isEqualTo(first.termsAgreedAt());
+		assertThat(edited.privacyAgreedAt()).isEqualTo(first.privacyAgreedAt());
+		assertThat(edited.minimumAgeConfirmedAt()).isEqualTo(first.minimumAgeConfirmedAt());
+	}
+
+	@Test
+	void initialProfileRequiresAgeTermsAndPrivacySeparately() {
+		long gitLabUserId = 271828182L;
+		accountService.upsert(new GitLabOAuthSession(
+			new GitLabUser(gitLabUserId, "policy-user", "Policy User", null, null),
+			"access", "refresh", Instant.now().plusSeconds(3600), "api"
+		));
+
+		assertThatThrownBy(() -> accountService.updateProfile(gitLabUserId,
+			new OAuthAccountService.UpdateProfileRequest("정책 사용자", "policy-user", "Asia/Seoul", true, true, false)))
+			.hasMessageContaining("만 14세 이상");
+		assertThatThrownBy(() -> accountService.updateProfile(gitLabUserId,
+			new OAuthAccountService.UpdateProfileRequest("정책 사용자", "policy-user", "Asia/Seoul", false, true, true)))
+			.hasMessageContaining("이용약관");
+		assertThatThrownBy(() -> accountService.updateProfile(gitLabUserId,
+			new OAuthAccountService.UpdateProfileRequest("정책 사용자", "policy-user", "Asia/Seoul", true, false, true)))
+			.hasMessageContaining("개인정보");
+	}
+
+	@Test
+	void reportsReconsentWhenAnAcceptedDocumentVersionIsOutdated() {
+		long gitLabUserId = 161803398L;
+		accountService.upsert(new GitLabOAuthSession(
+			new GitLabUser(gitLabUserId, "reconsent-user", "Reconsent User", null, null),
+			"access", "refresh", Instant.now().plusSeconds(3600), "api"
+		));
+		accountService.updateProfile(gitLabUserId, new OAuthAccountService.UpdateProfileRequest(
+			"재동의 사용자", "reconsent-user", "Asia/Seoul", true, true, true
+		));
+		entityManager.flush();
+		jdbcClient.sql("UPDATE user_accounts SET privacy_version = 'old-version' WHERE gitlab_user_id = :id")
+			.param("id", gitLabUserId).update();
+		entityManager.clear();
+
+		assertThat(accountService.requireProfile(gitLabUserId).requiresReconsent()).isTrue();
 	}
 
 	@Test

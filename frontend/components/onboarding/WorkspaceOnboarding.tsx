@@ -1,114 +1,195 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { AlertTriangle, CheckCircle2, Database, FileCheck2, Gitlab, LoaderCircle, RotateCcw, Search } from "lucide-react";
-import { createWorkspace, listDeletedWorkspaces, restoreWorkspace, syncWorkspace, type DeletedWorkspace } from "@/lib/api/services/workspaceApi";
 import {
-  getGitLabConnection,
+  AlertTriangle,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  Database,
+  ExternalLink,
+  FileCheck2,
+  Gitlab,
+  LoaderCircle,
+  RotateCcw,
+  Search,
+} from "lucide-react";
+import { ApiError } from "@/lib/api/client/http";
+import { getGitLabReconnectUrl } from "@/lib/api/services/authApi";
+import {
+  createWorkspace,
+  joinWorkspace,
+  listDiscoverableWorkspaces,
+  syncWorkspace,
+  type DiscoverableWorkspace,
+} from "@/lib/api/services/workspaceApi";
+import {
   analyzeGitLabRepository,
-  listGitLabProjects,
+  getGitLabConnection,
 } from "@/lib/api/services/gitlabApi";
-import type { GitLabProject, RepositoryImportAnalysis } from "@/lib/api/types/gitlab";
+import { listRepositories } from "@/lib/api/services/repositoryApi";
+import type { RepositoryImportAnalysis } from "@/lib/api/types/gitlab";
+import {
+  getGitLabAccessLabel,
+  getRepositoryVisibilityLabel,
+  toRepository,
+  type Repository,
+} from "@/lib/domain/repository";
 import type { Workspace } from "@/lib/domain/types";
+import { APP_ROUTES } from "@/lib/routes";
+import { getUserFacingError } from "@/lib/api/errors";
 
-export function WorkspaceOnboarding({
+type FlowState = "loading" | "ready" | "checking" | "saving";
+type PermissionState = "idle" | "checking" | "ready" | "denied";
+
+export function WorkspaceConnectionFlow({
   onCreated,
   embedded = false,
+  existingWorkspaces = [],
+  onOpenWorkspace,
 }: {
   onCreated: (workspace: Workspace) => void;
   embedded?: boolean;
+  existingWorkspaces?: Workspace[];
+  onOpenWorkspace?: (workspace: Workspace) => void;
 }) {
-  const [projects, setProjects] = useState<GitLabProject[]>([]);
+  const [repositories, setRepositories] = useState<Repository[]>([]);
+  const [discoverable, setDiscoverable] = useState<DiscoverableWorkspace[]>([]);
   const [search, setSearch] = useState("");
+  const [searched, setSearched] = useState(false);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [workspaceName, setWorkspaceName] = useState("");
-  const [state, setState] = useState<"loading" | "ready" | "checking" | "saving">("loading");
-  const [connectionReady, setConnectionReady] = useState(false);
+  const [state, setState] = useState<FlowState>("loading");
+  const [permission, setPermission] = useState<PermissionState>("idle");
+  const [verifiedAccessLevel, setVerifiedAccessLevel] = useState<number | null>(null);
   const [analysis, setAnalysis] = useState<RepositoryImportAnalysis | null>(null);
   const [error, setError] = useState("");
-  const [deleted, setDeleted] = useState<DeletedWorkspace[]>([]);
+  const [reconnectRequired, setReconnectRequired] = useState(false);
+	const [joining, setJoining] = useState(false);
 
   const selected = useMemo(
-    () => projects.find((project) => project.id === selectedId) ?? null,
-    [projects, selectedId],
+    () => repositories.find((repository) => repository.id === selectedId) ?? null,
+    [repositories, selectedId],
   );
+  const connectedWorkspace = selected
+    ? existingWorkspaces.find((workspace) => workspace.gitlabProjectId === selected.id)
+    : undefined;
+  const joinableWorkspace = selected
+    ? discoverable.find((candidate) => Number(candidate.repositoryId) === selected.id)
+    : undefined;
 
-  async function loadProjects(query = "", signal?: AbortSignal) {
-    await Promise.resolve();
-    if (signal?.aborted) return;
+  async function loadRepositories(query = "") {
     setState("loading");
     setError("");
+    setReconnectRequired(false);
     try {
-      const loaded = await listGitLabProjects(query, signal);
-      setProjects(loaded);
+		const projects = await listRepositories(query);
+		setRepositories(projects);
       setSelectedId(null);
-      setConnectionReady(false);
+      setPermission("idle");
       setAnalysis(null);
-      setState("ready");
+      setSearched(Boolean(query.trim()));
     } catch (requestError) {
-      if (signal?.aborted) return;
-      setError(requestError instanceof Error ? requestError.message : "프로젝트를 불러오지 못했습니다.");
-      setState("ready");
-    }
-  }
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void listGitLabProjects("", controller.signal)
-      .then((loaded) => {
-        setProjects(loaded);
-        setState("ready");
-      })
-      .catch((requestError) => {
-        if (controller.signal.aborted) return;
-        setError(requestError instanceof Error ? requestError.message : "프로젝트를 불러오지 못했습니다.");
-        setState("ready");
-      });
-    return () => controller.abort();
-  }, []);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    void listDeletedWorkspaces(controller.signal).then(setDeleted).catch(() => undefined);
-    return () => controller.abort();
-  }, []);
-
-  async function handleSearch(event: FormEvent) {
-    event.preventDefault();
-    await loadProjects(search);
-  }
-
-  async function selectProject(project: GitLabProject) {
-    setSelectedId(project.id);
-    setWorkspaceName(project.name);
-    setConnectionReady(false);
-    setAnalysis(null);
-    setError("");
-    setState("checking");
-    try {
-      const [, repositoryAnalysis] = await Promise.all([
-        getGitLabConnection(project.id),
-        analyzeGitLabRepository(project.id),
-      ]);
-      setAnalysis(repositoryAnalysis);
-      setConnectionReady(true);
-    } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "프로젝트 연결을 확인하지 못했습니다.");
+      setReconnectRequired(requestError instanceof ApiError && requestError.code === "GITLAB_RECONNECT_REQUIRED");
+      setError(getUserFacingError(requestError, "프로젝트를 불러오지 못했습니다."));
     } finally {
       setState("ready");
     }
   }
 
+  useEffect(() => {
+    void listRepositories("")
+		.then((projects) => setRepositories(projects))
+      .catch((requestError) => {
+        setReconnectRequired(requestError instanceof ApiError && requestError.code === "GITLAB_RECONNECT_REQUIRED");
+        setError(getUserFacingError(requestError, "프로젝트를 불러오지 못했습니다."));
+      })
+      .finally(() => setState("ready"));
+  }, []);
+
+	useEffect(() => {
+		const controller = new AbortController();
+		void listDiscoverableWorkspaces(controller.signal)
+			.then(setDiscoverable)
+			.catch(() => undefined);
+		return () => controller.abort();
+	}, []);
+
+  async function handleSearch(event: FormEvent) {
+    event.preventDefault();
+    await loadRepositories(search);
+  }
+
+  async function selectRepository(repository: Repository) {
+    setSelectedId(repository.id);
+    setWorkspaceName(repository.name);
+    setPermission("checking");
+    setVerifiedAccessLevel(repository.accessLevel ?? null);
+    setAnalysis(null);
+    setError("");
+    setReconnectRequired(false);
+
+    const alreadyConnected = existingWorkspaces.some(
+      (workspace) => workspace.gitlabProjectId === repository.id,
+    ) || discoverable.some((workspace) => Number(workspace.repositoryId) === repository.id);
+    if (alreadyConnected) {
+      setPermission("idle");
+      return;
+    }
+    if (!repository.capabilities.canWrite) {
+      setPermission("denied");
+      return;
+    }
+
+    setState("checking");
+    try {
+      const [connection, repositoryAnalysis] = await Promise.all([
+        getGitLabConnection(repository.id),
+        analyzeGitLabRepository(repository.id),
+      ]);
+      const accessLevel = connection.project?.accessLevel ?? repository.accessLevel ?? null;
+      setVerifiedAccessLevel(accessLevel);
+      const verifiedCanWrite = connection.project ? toRepository(connection.project).capabilities.canWrite : repository.capabilities.canWrite;
+      if (!verifiedCanWrite) {
+        setPermission("denied");
+        return;
+      }
+      setAnalysis(repositoryAnalysis);
+      setPermission("ready");
+    } catch (requestError) {
+      setReconnectRequired(requestError instanceof ApiError && requestError.code === "GITLAB_RECONNECT_REQUIRED");
+      setError(getUserFacingError(requestError, "프로젝트를 확인하지 못했어요."));
+      setPermission(requestError instanceof ApiError && requestError.status === 403 ? "denied" : "idle");
+    } finally {
+      setState("ready");
+    }
+  }
+
+	async function handleJoin(workspaceId: string) {
+		if (joining) return;
+		setJoining(true);
+		setError("");
+		try {
+			const result = await joinWorkspace(workspaceId);
+			onCreated(result.workspace);
+		} catch (requestError) {
+			setReconnectRequired(requestError instanceof ApiError && ["GITLAB_RECONNECT_REQUIRED", "GITLAB_AUTHENTICATION_FAILED"].includes(requestError.code));
+			setError(getUserFacingError(requestError, "Workspace에 참여하지 못했습니다."));
+			setJoining(false);
+		}
+	}
+
   async function handleCreate(event: FormEvent) {
     event.preventDefault();
-    if (!selected || !connectionReady || !analysis || analysis.classification === "CONFLICTED" || !workspaceName.trim()) return;
+    if (!selected || permission !== "ready" || !analysis || analysis.classification === "CONFLICTED" || !workspaceName.trim()) return;
     setState("saving");
     setError("");
     try {
       const workspace = await createWorkspace({
         name: workspaceName.trim(),
         gitlabProjectId: selected.id,
-        gitlabProjectPath: selected.pathWithNamespace,
+        gitlabProjectPath: selected.path,
         defaultBranch: selected.defaultBranch ?? "main",
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Seoul",
         repositoryBasePath: analysis.repositoryBasePath,
@@ -117,129 +198,229 @@ export function WorkspaceOnboarding({
         expectedTreeFingerprint: analysis.treeFingerprint,
       });
       try {
-        const initialSync = await syncWorkspace(workspace.id);
-        onCreated(initialSync.workspace);
+        onCreated((await syncWorkspace(workspace.id)).workspace);
       } catch {
-        // Workspace creation is already committed. Enter the app and expose the
-        // failed sync job in Settings so the user can safely retry it.
         onCreated(workspace);
       }
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : "Workspace를 만들지 못했습니다.");
+      if (requestError instanceof ApiError && requestError.code === "WORKSPACE_PROJECT_ALREADY_CONNECTED") {
+		try {
+			const available = await listDiscoverableWorkspaces();
+			setDiscoverable(available);
+			const match = available.find((candidate) => Number(candidate.repositoryId) === selected.id);
+			setError(match ? "" : "이미 Study-ing Workspace와 연결된 프로젝트입니다. 현재 계정의 참여 권한을 확인해 주세요.");
+		} catch {
+			setError("이미 Study-ing Workspace와 연결된 프로젝트입니다. Workspace 목록에서 참여 상태를 확인해 주세요.");
+		}
+      } else {
+        setError(getUserFacingError(requestError, "Workspace를 연결하지 못했습니다."));
+      }
       setState("ready");
     }
   }
 
   return (
-    <main className={embedded ? "onboarding-page onboarding-page--embedded" : "onboarding-page"}>
-      <section className="onboarding-card" aria-labelledby="onboarding-title">
-        <div className="onboarding-eyebrow"><Gitlab size={17} /> GitLab 프로젝트 연결</div>
-        <h1 id="onboarding-title">{embedded ? "새 Workspace 연결" : "첫 Workspace를 만들어볼까요?"}</h1>
-        <p>OAuth로 승인한 계정에서 접근 가능한 프로젝트만 표시합니다. PAT는 필요하지 않습니다.</p>
+    <main className={embedded ? "workspace-connect workspace-connect--embedded" : "workspace-connect workspace-connect--first"}>
+      <div className="workspace-connect__inner">
+        {embedded ? (
+          <Link className="back-link" href={APP_ROUTES.workspaces}>← Workspace</Link>
+        ) : <div className="workspace-connect__brand">Study-ing</div>}
 
-        <form className="onboarding-search" onSubmit={handleSearch}>
-          <Search size={18} aria-hidden="true" />
-          <input
-            aria-label="GitLab 프로젝트 검색"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="프로젝트 이름으로 검색"
-          />
-          <button type="submit" disabled={state === "loading"}>검색</button>
-        </form>
+        <header className="workspace-connect__header">
+          <div className="workspace-connect__provider"><Gitlab size={17} /> GitLab 프로젝트 연결</div>
+          <h1>{embedded ? "새 Workspace 연결" : "첫 Workspace를 연결해볼까요?"}</h1>
+          <p>GitLab에서 접근 가능한 프로젝트를 선택해 학습 공간으로 연결하세요.</p>
+          <small>GitLab OAuth로 접근 가능한 프로젝트만 표시합니다.</small>
+        </header>
 
-        {state === "loading" ? (
-          <div className="onboarding-status" role="status"><LoaderCircle className="spin" /> 프로젝트를 불러오고 있습니다.</div>
-        ) : projects.length ? (
-          <div className="onboarding-projects" role="list">
-            {projects.map((project) => (
-              <button
-                type="button"
-                role="listitem"
-                className={project.id === selectedId ? "is-selected" : ""}
-                key={project.id}
-                onClick={() => void selectProject(project)}
-              >
-                <span><strong>{project.name}</strong><small>{project.pathWithNamespace}</small></span>
-                <em>{project.visibility}</em>
-              </button>
-            ))}
+        <section className="workspace-connect__section" aria-labelledby="repository-select-title">
+          <div className="workspace-connect__section-heading">
+            <span>1</span>
+            <div><h2 id="repository-select-title">GitLab 프로젝트 선택</h2><p>연결할 프로젝트를 찾아 선택하세요.</p></div>
           </div>
-        ) : (
-          <div className="onboarding-status">검색 조건에 맞는 접근 가능 프로젝트가 없습니다.</div>
-        )}
+          <form className="repository-search" onSubmit={handleSearch} role="search">
+            <Search size={18} aria-hidden="true" />
+            <input aria-label="GitLab 프로젝트 검색" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="프로젝트 이름으로 검색" />
+            <button className="button button--secondary" type="submit" disabled={state === "loading"}>검색</button>
+          </form>
+
+          {state === "loading" ? (
+            <div className="workspace-connect__status" role="status" aria-live="polite"><LoaderCircle className="spin" /> 접근 가능한 프로젝트를 불러오고 있어요.</div>
+          ) : repositories.length ? (
+            <div className="repository-list" role="listbox" aria-label="접근 가능한 GitLab 프로젝트">
+              {repositories.map((repository) => {
+                const isSelected = repository.id === selectedId;
+                const linked = existingWorkspaces.some((workspace) => workspace.gitlabProjectId === repository.id);
+                const joinable = discoverable.some((workspace) => Number(workspace.repositoryId) === repository.id);
+                const denied = !repository.capabilities.canWrite;
+                return (
+                  <button
+                    type="button"
+                    role="option"
+                    aria-selected={isSelected}
+                    className={isSelected ? "is-selected" : undefined}
+                    key={repository.id}
+                    onClick={() => void selectRepository(repository)}
+                  >
+                    <span className="repository-list__copy"><strong>{repository.name}</strong><small>{repository.path}</small></span>
+                    <span className="repository-list__meta">
+                      {linked ? <em className="status-badge success">참여 중</em> : joinable ? <em className="status-badge neutral">Workspace 존재</em> : denied ? <em className="status-badge warning">쓰기 권한 필요</em> : null}
+                      <em>{getRepositoryVisibilityLabel(repository.visibility)}</em>
+                      {isSelected ? <Check size={18} aria-label="선택됨" /> : null}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="workspace-connect__status">{searched ? "조건에 맞는 GitLab 프로젝트가 없어요." : "현재 계정으로 접근 가능한 프로젝트가 없어요."}</div>
+          )}
+        </section>
 
         {selected ? (
-          <form className="onboarding-create" onSubmit={handleCreate}>
-            <label>
-              Workspace 이름
-              <input value={workspaceName} onChange={(event) => setWorkspaceName(event.target.value)} maxLength={80} />
-            </label>
-            <div className={connectionReady ? "onboarding-check is-ready" : "onboarding-check"}>
-              {state === "checking" ? <LoaderCircle className="spin" /> : <CheckCircle2 />}
-              <span>
-                <strong>{connectionReady ? "연결할 수 있습니다" : "프로젝트 권한 확인"}</strong>
-                <small>{selected.defaultBranch ? `기본 브랜치: ${selected.defaultBranch}` : "빈 저장소 · 첫 기본 브랜치는 main으로 설정됩니다."}</small>
-              </span>
+          <section className="workspace-connect__section" aria-labelledby="connection-check-title">
+            <div className="workspace-connect__section-heading">
+              <span>2</span>
+              <div><h2 id="connection-check-title">연결 확인</h2><p>Workspace 이름과 저장소 상태를 확인하세요.</p></div>
             </div>
 
-            {analysis ? <RepositoryAnalysisCard analysis={analysis} /> : null}
-
-            <button className="button" type="submit" disabled={!connectionReady || !analysis || analysis.classification === "CONFLICTED" || !workspaceName.trim() || state === "saving"}>
-              {state === "saving"
-                ? "Workspace 생성·초기 동기화 중…"
-                : analysis?.classification === "COMPATIBLE" || analysis?.classification === "PARTIALLY_COMPATIBLE"
-                  ? "기존 데이터 가져와서 시작하기"
-                  : "기존 파일 유지하고 시작하기"}
-            </button>
-          </form>
-        ) : null}
-
-        {error ? <div className="onboarding-error" role="alert">{error}</div> : null}
-
-        {deleted.length ? (
-          <section className="onboarding-restore" aria-labelledby="restore-title">
-            <h2 id="restore-title">복원 가능한 Workspace</h2>
-            {deleted.map((item) => (
-              <div key={item.workspace.id}>
-                <span><strong>{item.workspace.name}</strong><small>{item.workspace.gitlabProjectPath} · {new Date(item.deletionExpiresAt).toLocaleString("ko-KR")}까지</small></span>
-                <button type="button" onClick={() => void restoreWorkspace(item.workspace.id).then(onCreated)}>
-                  <RotateCcw size={15} /> 복원
-                </button>
+            {connectedWorkspace ? (
+              <div className="connection-existing" role="status">
+                <CheckCircle2 size={20} />
+                <div><strong>이미 Workspace와 연결된 프로젝트입니다.</strong><small>{connectedWorkspace.name}에서 이 저장소를 사용하고 있어요.</small></div>
+                <button className="button button--primary" type="button" onClick={() => onOpenWorkspace?.(connectedWorkspace)}>Workspace로 이동</button>
               </div>
-            ))}
+            ) : joinableWorkspace ? (
+				<div className="connection-existing connection-existing--join" role="status">
+					<CheckCircle2 size={20} />
+					<div><strong>이미 Study-ing Workspace가 있는 프로젝트입니다.</strong><small>{joinableWorkspace.workspaceName}에 멤버로 참여할 수 있어요.</small></div>
+					<button className="button button--primary" type="button" disabled={joining} onClick={() => void handleJoin(joinableWorkspace.workspaceId)}>
+						{joining ? <><LoaderCircle className="spin" size={16} /> 참여 중…</> : "Workspace 참여하기"}
+					</button>
+				</div>
+            ) : (
+              <form className="workspace-connect__create" onSubmit={handleCreate}>
+                <label className="field">
+                  <span>Workspace 이름</span>
+                  <input value={workspaceName} onChange={(event) => setWorkspaceName(event.target.value)} maxLength={80} required />
+                  <small>GitLab 프로젝트 이름과 다르게 정할 수 있습니다.</small>
+                </label>
+
+                <PermissionCheck
+                  state={permission}
+                  accessLevel={verifiedAccessLevel}
+                  defaultBranch={selected.defaultBranch}
+                  webUrl={selected.webUrl}
+                />
+
+                {state === "checking" ? (
+                  <div className="repository-analysis-loading" role="status" aria-live="polite">
+                    <LoaderCircle className="spin" />
+                    <span><strong>기존 학습 기록을 확인하고 있어요</strong><small>일정과 제출 기록의 호환성을 안전하게 분석합니다.</small></span>
+                  </div>
+                ) : null}
+                {analysis ? <RepositoryAnalysisCard analysis={analysis} /> : null}
+
+                {error ? (
+                  <div className="workspace-connect__error" role="alert">
+                    <AlertTriangle size={18} /><span><strong>프로젝트를 확인하지 못했어요.</strong><small>{error}</small></span>
+                    {reconnectRequired ? <a className="button button--secondary button--small" href={getGitLabReconnectUrl(APP_ROUTES.workspaceNew)}>다시 연결</a> : <button className="button button--secondary button--small" type="button" onClick={() => void selectRepository(selected)}><RotateCcw size={15} /> 다시 시도</button>}
+                  </div>
+                ) : null}
+
+                {analysis && permission === "ready" ? (
+                  <div className="workspace-connect__actions">
+                    <span>{analysis.classification === "CONFLICTED" ? "문제를 해결한 뒤 다시 분석해 주세요." : "연결하면 기존 저장소 파일은 그대로 유지됩니다."}</span>
+                    <button className="button button--primary" type="submit" disabled={analysis.classification === "CONFLICTED" || !workspaceName.trim() || state === "saving"}>
+                      {state === "saving" ? <><LoaderCircle className="spin" size={17} /> 연결 중…</> : analysis.classification === "COMPATIBLE" || analysis.classification === "PARTIALLY_COMPATIBLE" ? "기존 학습 기록과 연결하기" : "Workspace 연결하기"}
+                    </button>
+                  </div>
+                ) : null}
+              </form>
+            )}
           </section>
         ) : null}
-      </section>
+      </div>
     </main>
+  );
+}
+
+export function WorkspaceOnboarding(props: Parameters<typeof WorkspaceConnectionFlow>[0]) {
+  return <WorkspaceConnectionFlow {...props} />;
+}
+
+function PermissionCheck({ state, accessLevel, defaultBranch, webUrl }: { state: PermissionState; accessLevel: number | null; defaultBranch: string | null; webUrl: string | null }) {
+  if (state === "idle") return null;
+  if (state === "checking") {
+    return <div className="permission-check" role="status"><LoaderCircle className="spin" /><span><strong>프로젝트 권한을 확인하고 있어요</strong><small>Repository 접근과 쓰기 가능 여부를 확인합니다.</small></span></div>;
+  }
+  if (state === "denied") {
+    return (
+      <div className="permission-check permission-check--denied" role="alert">
+        <AlertTriangle size={20} />
+        <span>
+          <strong>이 프로젝트를 연결할 권한이 없습니다.</strong>
+          <small>현재 권한으로는 저장소에 변경사항을 쓸 수 없습니다.</small>
+          <details className="permission-check__details"><summary>권한 세부 정보</summary><p>현재 GitLab 권한 · {getGitLabAccessLabel(accessLevel) ?? "확인 불가"}<br />필요 GitLab 권한 · Developer 이상</p></details>
+        </span>
+        {webUrl ? <a href={webUrl} target="_blank" rel="noreferrer">GitLab에서 권한 확인 <ExternalLink size={14} /></a> : null}
+      </div>
+    );
+  }
+  return (
+    <div className="permission-check permission-check--ready" role="status">
+      <CheckCircle2 size={20} />
+      <span>
+        <strong>프로젝트 권한을 확인했어요</strong>
+        <small>기본 브랜치 · {defaultBranch ?? "main"} · 쓰기 권한 확인됨</small>
+        {accessLevel == null ? null : <details className="permission-check__details"><summary>권한 세부 정보</summary><p>현재 GitLab 권한 · {getGitLabAccessLabel(accessLevel)}</p></details>}
+      </span>
+    </div>
   );
 }
 
 function RepositoryAnalysisCard({ analysis }: { analysis: RepositoryImportAnalysis }) {
   const compatible = analysis.classification === "COMPATIBLE" || analysis.classification === "PARTIALLY_COMPATIBLE";
   const conflicted = analysis.classification === "CONFLICTED";
+  const empty = analysis.classification === "EMPTY";
   return (
     <section className={`repository-analysis ${conflicted ? "is-conflicted" : ""}`} aria-label="저장소 분석 결과">
       <header>
         <span>{conflicted ? <AlertTriangle size={18} /> : compatible ? <FileCheck2 size={18} /> : <Database size={18} />}</span>
         <div>
-          <strong>{conflicted ? "전용 경로 충돌을 해결해야 합니다" : compatible ? "기존 학습 데이터를 찾았습니다" : analysis.classification === "EMPTY" ? "빈 저장소에서 새로 시작합니다" : "기존 파일을 그대로 유지합니다"}</strong>
-          <small>{analysis.repositorySchemaVersion >= 2
-            ? "학습 데이터는 .study-workspace/sessions 아래에 날짜별로 정리됩니다."
-            : "기존 루트 형식을 그대로 가져오며 설정에서 안전하게 정리할 수 있습니다."}</small>
+          <strong>{conflicted ? "연결하기 전에 확인이 필요해요." : compatible ? "기존 학습 기록을 찾았어요." : empty ? "연결할 준비가 되었어요." : "연결할 준비가 되었어요."}</strong>
+          <small>{conflicted ? `${analysis.issues.length}개의 학습 데이터 문제가 발견되었습니다.` : empty ? "기존 저장소 파일은 그대로 유지됩니다." : "인식한 학습 기록만 연결하고 다른 파일은 그대로 유지합니다."}</small>
         </div>
       </header>
-      <dl>
-        <div><dt>전체 파일</dt><dd>{analysis.totalFiles}</dd></div>
-        <div><dt>일정</dt><dd>{analysis.compatibleSessions}</dd></div>
-        <div><dt>제출</dt><dd>{analysis.compatibleSubmissions}</dd></div>
-        <div><dt>유지되는 기타 파일</dt><dd>{analysis.ignoredFiles}</dd></div>
-      </dl>
-      {analysis.issues.length ? (
-        <div className="repository-analysis__issues">
-          {analysis.issues.slice(0, 4).map((issue) => <span key={`${issue.path}-${issue.code}`}><code>{issue.path}</code>{issue.message}</span>)}
+      {compatible ? (
+        <dl>
+          <div><dt>학습 일정</dt><dd>{analysis.compatibleSessions}개</dd></div>
+          <div><dt>제출 기록</dt><dd>{analysis.compatibleSubmissions}건</dd></div>
+          <div><dt>기타 파일</dt><dd>그대로 유지</dd></div>
+        </dl>
+      ) : null}
+      {conflicted ? (
+        <div className="repository-analysis__problems">
+          {analysis.issues.slice(0, 4).map((issue) => (
+            <div key={`${issue.path}-${issue.code}`}><AlertTriangle size={15} /><span>{getIssueSummary(issue.code, issue.message)}</span></div>
+          ))}
+          <details>
+            <summary><ChevronDown size={15} /> 문제 상세 보기</summary>
+            <div className="repository-analysis__issues">
+              {analysis.issues.map((issue) => <span key={`${issue.path}-${issue.code}`}><code>{issue.path}</code>{issue.message}</span>)}
+            </div>
+          </details>
         </div>
+      ) : analysis.totalFiles > 0 ? (
+        <details className="repository-analysis__details"><summary>저장소 세부 정보</summary><p>전체 파일 {analysis.totalFiles}개 · 유지되는 기타 파일 {analysis.ignoredFiles}개</p></details>
       ) : null}
     </section>
   );
+}
+
+function getIssueSummary(code: string, fallback: string) {
+  if (code.includes("MARKER") || code.includes("CONFIG")) return "Workspace 설정 파일 확인 필요";
+  if (code.includes("SESSION")) return "학습 일정 파일 형식 확인 필요";
+  if (code.includes("RESERVED") || code.includes("PATH")) return "학습 데이터 저장 위치 확인 필요";
+  return fallback;
 }

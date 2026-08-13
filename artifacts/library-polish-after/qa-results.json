@@ -1,0 +1,17 @@
+{
+  "generatedAt": "2026-08-12T03:20:14.643Z",
+  "baseURL": "https://sandbox.withroro.com",
+  "screenshots": 20,
+  "checks": [
+    "desktop: session title/item/submission payload search",
+    "desktop: document title/body/author search",
+    "desktop: non-author actions hidden",
+    "desktop: completed schedule opens the Library session route",
+    "mobile: session title/item/submission payload search",
+    "mobile: document title/body/author search",
+    "mobile: non-author actions hidden",
+    "mobile: completed schedule opens the Library session route"
+  ],
+  "failures": [],
+  "consoleErrors": []
+}

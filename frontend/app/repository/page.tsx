@@ -1,8 +1,7 @@
-import type { Metadata } from "next";
-import { RepositoryWorkspace } from "@/components/repository/RepositoryWorkspace";
+import { LegacyLibraryRedirect } from "@/components/library/LegacyLibraryRedirect";
+import { APP_ROUTES } from "@/lib/routes";
 
-export const metadata: Metadata = { title: "학습 라이브러리" };
-
-export default function RepositoryPage() {
-  return <RepositoryWorkspace />;
+export default async function RepositoryPage({ searchParams }: { searchParams: Promise<{ document?: string }> }) {
+  const { document } = await searchParams;
+  return <LegacyLibraryRedirect destination={document ? APP_ROUTES.libraryDocument(document) : APP_ROUTES.learningLibrary} />;
 }

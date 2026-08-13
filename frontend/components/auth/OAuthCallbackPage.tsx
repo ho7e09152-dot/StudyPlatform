@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { AppLoadingScreen } from "@/components/ui/AppLoadingScreen";
 import { completeGitLabLogin } from "@/lib/api/services/authApi";
+import { safeAppReturnUrl } from "@/lib/auth/redirects";
 
 export function OAuthCallbackPage() {
   const started = useRef(false);
@@ -12,10 +13,7 @@ export function OAuthCallbackPage() {
     started.current = true;
     void completeGitLabLogin()
       .then(({ returnUrl }) => {
-        const destination = returnUrl.startsWith("/") && !returnUrl.startsWith("//")
-          ? returnUrl
-          : "/today";
-        window.location.replace(destination);
+        window.location.replace(safeAppReturnUrl(returnUrl));
       })
       .catch(() => {
         window.location.replace("/login?oauthError=oauth_failed");

@@ -3,7 +3,7 @@ package com.studyworkspace.workspace.controller;
 import java.util.List;
 import java.util.Map;
 
-import com.studyworkspace.gitlab.dto.GitLabUser;
+import com.studyworkspace.auth.security.StudyIngPrincipal;
 import com.studyworkspace.workspace.domain.WorkspaceModels.WorkspaceState;
 import com.studyworkspace.workspace.service.AuditEventService;
 import com.studyworkspace.workspace.service.InAppNotificationService;
@@ -38,13 +38,13 @@ public class WorkspaceFeedController {
 	}
 
 	@GetMapping("/announcements")
-	public List<WorkspaceFeedService.AnnouncementView> listAnnouncements(@PathVariable String workspaceId, @AuthenticationPrincipal GitLabUser user) {
+	public List<WorkspaceFeedService.AnnouncementView> listAnnouncements(@PathVariable String workspaceId, @AuthenticationPrincipal StudyIngPrincipal user) {
 		return feedService.listAnnouncements(workspaceId, user.id());
 	}
 
 	@PostMapping("/announcements")
 	@ResponseStatus(HttpStatus.CREATED)
-	public WorkspaceFeedService.AnnouncementView createAnnouncement(@PathVariable String workspaceId, @RequestBody WorkspaceFeedService.AnnouncementRequest request, @AuthenticationPrincipal GitLabUser user) {
+	public WorkspaceFeedService.AnnouncementView createAnnouncement(@PathVariable String workspaceId, @RequestBody WorkspaceFeedService.AnnouncementRequest request, @AuthenticationPrincipal StudyIngPrincipal user) {
 		WorkspaceFeedService.AnnouncementView created = feedService.createAnnouncement(workspaceId, user.id(), request);
 		auditEventService.record(workspaceId, user, "ANNOUNCEMENT_CREATED", "ANNOUNCEMENT", created.id(), Map.of("pinned", created.pinned()));
 		notifyAnnouncement(workspaceId, user, created);
@@ -52,7 +52,7 @@ public class WorkspaceFeedController {
 	}
 
 	@PatchMapping("/announcements/{announcementId}")
-	public WorkspaceFeedService.AnnouncementView updateAnnouncement(@PathVariable String workspaceId, @PathVariable String announcementId, @RequestBody WorkspaceFeedService.AnnouncementRequest request, @AuthenticationPrincipal GitLabUser user) {
+	public WorkspaceFeedService.AnnouncementView updateAnnouncement(@PathVariable String workspaceId, @PathVariable String announcementId, @RequestBody WorkspaceFeedService.AnnouncementRequest request, @AuthenticationPrincipal StudyIngPrincipal user) {
 		WorkspaceFeedService.AnnouncementView updated = feedService.updateAnnouncement(workspaceId, announcementId, user.id(), request);
 		auditEventService.record(workspaceId, user, "ANNOUNCEMENT_UPDATED", "ANNOUNCEMENT", announcementId, Map.of("pinned", updated.pinned()));
 		return updated;
@@ -60,31 +60,31 @@ public class WorkspaceFeedController {
 
 	@DeleteMapping("/announcements/{announcementId}")
 	@ResponseStatus(HttpStatus.NO_CONTENT)
-	public void deleteAnnouncement(@PathVariable String workspaceId, @PathVariable String announcementId, @AuthenticationPrincipal GitLabUser user) {
+	public void deleteAnnouncement(@PathVariable String workspaceId, @PathVariable String announcementId, @AuthenticationPrincipal StudyIngPrincipal user) {
 		feedService.deleteAnnouncement(workspaceId, announcementId, user.id());
 		auditEventService.record(workspaceId, user, "ANNOUNCEMENT_ARCHIVED", "ANNOUNCEMENT", announcementId, Map.of());
 	}
 
 	@PatchMapping("/announcements/{announcementId}/read")
-	public Map<String, Object> markAnnouncementRead(@PathVariable String workspaceId, @PathVariable String announcementId, @AuthenticationPrincipal GitLabUser user) {
+	public Map<String, Object> markAnnouncementRead(@PathVariable String workspaceId, @PathVariable String announcementId, @AuthenticationPrincipal StudyIngPrincipal user) {
 		return Map.of("announcementId", announcementId, "readAt", feedService.markAnnouncementRead(workspaceId, announcementId, user.id()));
 	}
 
 	@GetMapping("/messages")
-	public WorkspaceFeedService.MessagePage listMessages(@PathVariable String workspaceId, @RequestParam(required = false) String date, @RequestParam(required = false) String cursor, @AuthenticationPrincipal GitLabUser user) {
+	public WorkspaceFeedService.MessagePage listMessages(@PathVariable String workspaceId, @RequestParam(required = false) String date, @RequestParam(required = false) String cursor, @AuthenticationPrincipal StudyIngPrincipal user) {
 		return feedService.listMessages(workspaceId, user.id(), date, cursor);
 	}
 
 	@PostMapping("/messages")
 	@ResponseStatus(HttpStatus.CREATED)
-	public WorkspaceFeedService.MessageView createMessage(@PathVariable String workspaceId, @RequestBody WorkspaceFeedService.MessageRequest request, @AuthenticationPrincipal GitLabUser user) {
+	public WorkspaceFeedService.MessageView createMessage(@PathVariable String workspaceId, @RequestBody WorkspaceFeedService.MessageRequest request, @AuthenticationPrincipal StudyIngPrincipal user) {
 		WorkspaceFeedService.MessageView created = feedService.createMessage(workspaceId, user.id(), request);
 		auditEventService.record(workspaceId, user, "WORKSPACE_MESSAGE_CREATED", "MESSAGE", created.id(), Map.of("contextDate", created.contextDate().toString()));
 		return created;
 	}
 
 	@PatchMapping("/messages/{messageId}")
-	public WorkspaceFeedService.MessageView updateMessage(@PathVariable String workspaceId, @PathVariable String messageId, @RequestBody WorkspaceFeedService.MessageRequest request, @AuthenticationPrincipal GitLabUser user) {
+	public WorkspaceFeedService.MessageView updateMessage(@PathVariable String workspaceId, @PathVariable String messageId, @RequestBody WorkspaceFeedService.MessageRequest request, @AuthenticationPrincipal StudyIngPrincipal user) {
 		WorkspaceFeedService.MessageView updated = feedService.updateMessage(workspaceId, messageId, user.id(), request);
 		auditEventService.record(workspaceId, user, "WORKSPACE_MESSAGE_UPDATED", "MESSAGE", messageId, Map.of());
 		return updated;
@@ -92,12 +92,12 @@ public class WorkspaceFeedController {
 
 	@DeleteMapping("/messages/{messageId}")
 	@ResponseStatus(HttpStatus.NO_CONTENT)
-	public void deleteMessage(@PathVariable String workspaceId, @PathVariable String messageId, @AuthenticationPrincipal GitLabUser user) {
+	public void deleteMessage(@PathVariable String workspaceId, @PathVariable String messageId, @AuthenticationPrincipal StudyIngPrincipal user) {
 		feedService.deleteMessage(workspaceId, messageId, user.id());
 		auditEventService.record(workspaceId, user, "WORKSPACE_MESSAGE_DELETED", "MESSAGE", messageId, Map.of());
 	}
 
-	private void notifyAnnouncement(String workspaceId, GitLabUser actor, WorkspaceFeedService.AnnouncementView announcement) {
+	private void notifyAnnouncement(String workspaceId, StudyIngPrincipal actor, WorkspaceFeedService.AnnouncementView announcement) {
 		WorkspaceState workspace = workspaceService.get(workspaceId);
 		workspace.members().stream()
 			.filter(member -> "ACTIVE".equals(member.status()))

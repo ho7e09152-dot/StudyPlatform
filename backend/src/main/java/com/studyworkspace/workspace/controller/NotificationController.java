@@ -2,7 +2,7 @@ package com.studyworkspace.workspace.controller;
 
 import java.util.List;
 
-import com.studyworkspace.gitlab.dto.GitLabUser;
+import com.studyworkspace.auth.security.StudyIngPrincipal;
 import com.studyworkspace.workspace.service.InAppNotificationService;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -21,12 +21,12 @@ public class NotificationController {
 	}
 
 	@GetMapping
-	public List<InAppNotificationService.NotificationView> list(@AuthenticationPrincipal GitLabUser user) {
+	public List<InAppNotificationService.NotificationView> list(@AuthenticationPrincipal StudyIngPrincipal user) {
 		return service.list(user.id());
 	}
 
 	@PatchMapping("/{notificationId}/read")
-	public InAppNotificationService.NotificationView markRead(@PathVariable String notificationId, @AuthenticationPrincipal GitLabUser user) {
+	public InAppNotificationService.NotificationView markRead(@PathVariable String notificationId, @AuthenticationPrincipal StudyIngPrincipal user) {
 		return service.markRead(notificationId, user.id());
 	}
 }

@@ -18,8 +18,13 @@ public final class WorkspaceModels {
 		String fileName,
 		String role,
 		String status,
-		int accessLevel
+		int accessLevel,
+		String userId
 	) {
+		public StudyMember(String id, long gitlabUserId, String username, String displayName, String avatar,
+			String color, String fileName, String role, String status, int accessLevel) {
+			this(id, gitlabUserId, username, displayName, avatar, color, fileName, role, status, accessLevel, null);
+		}
 	}
 
 	public record SessionItem(
@@ -107,6 +112,19 @@ public final class WorkspaceModels {
 	) {
 	}
 
+	public record RepositoryIdentity(
+		String provider,
+		String externalRepositoryId,
+		String fullName,
+		String webUrl,
+		String visibility,
+		String defaultBranch,
+		boolean canRead,
+		boolean canWrite,
+		boolean canManage,
+		String providerPermission
+	) { }
+
 	public record WorkspaceState(
 		String id,
 		String name,
@@ -121,8 +139,21 @@ public final class WorkspaceModels {
 		List<StudyMember> members,
 		Map<String, StudySession> sessions,
 		Map<String, MemberSubmissionFile> submissions,
-		WorkspaceSettings settings
+		WorkspaceSettings settings,
+		RepositoryIdentity repository
 	) {
+		public WorkspaceState(
+			String id, String name, long gitlabProjectId, String gitlabProjectPath, String defaultBranch,
+			String repositoryBasePath, Integer repositorySchemaVersion, String importMode,
+			String status, String lastSyncedAt, List<StudyMember> members, Map<String, StudySession> sessions,
+			Map<String, MemberSubmissionFile> submissions, WorkspaceSettings settings
+		) {
+			this(id, name, gitlabProjectId, gitlabProjectPath, defaultBranch, repositoryBasePath,
+				repositorySchemaVersion, importMode, status, lastSyncedAt, members, sessions, submissions, settings,
+				gitlabProjectId > 0 ? new RepositoryIdentity("GITLAB", Long.toString(gitlabProjectId), gitlabProjectPath,
+					null, null, defaultBranch, true, true, false, null) : null);
+		}
+
 		public WorkspaceState(
 			String id, String name, long gitlabProjectId, String gitlabProjectPath, String defaultBranch,
 			String status, String lastSyncedAt, List<StudyMember> members, Map<String, StudySession> sessions,
@@ -165,12 +196,23 @@ public final class WorkspaceModels {
 		Integer repositorySchemaVersion,
 		String importMode,
 		String expectedTreeFingerprint,
-		String ownerRepositoryFileName
+		String ownerRepositoryFileName,
+		String repositoryWebUrl,
+		String repositoryVisibility
 	) {
+		public CreateWorkspaceRequest(
+			String name, long gitlabProjectId, String gitlabProjectPath, String defaultBranch, String timezone,
+			String repositoryBasePath, Integer repositorySchemaVersion, String importMode,
+			String expectedTreeFingerprint, String ownerRepositoryFileName
+		) {
+			this(name, gitlabProjectId, gitlabProjectPath, defaultBranch, timezone, repositoryBasePath,
+				repositorySchemaVersion, importMode, expectedTreeFingerprint, ownerRepositoryFileName, null, null);
+		}
+
 		public CreateWorkspaceRequest(
 			String name, long gitlabProjectId, String gitlabProjectPath, String defaultBranch, String timezone
 		) {
-			this(name, gitlabProjectId, gitlabProjectPath, defaultBranch, timezone, "", 1, "COMPATIBLE", null, null);
+			this(name, gitlabProjectId, gitlabProjectPath, defaultBranch, timezone, "", 1, "COMPATIBLE", null, null, null, null);
 		}
 	}
 

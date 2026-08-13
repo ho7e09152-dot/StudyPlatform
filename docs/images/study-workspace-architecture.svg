@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title description">
-  <title id="title">Study Workspace 예정 아키텍처</title>
+  <title id="title">Study-ing 예정 아키텍처</title>
   <desc id="description">React 프론트엔드가 Spring Boot API를 호출하고, Spring Boot가 PostgreSQL, Redis, GitLab OAuth와 REST API를 연결하는 구조</desc>
 
   <defs>
@@ -85,7 +85,7 @@
   <circle cx="1475" cy="70" r="170" fill="#efe9fb" opacity="0.65"/>
   <circle cx="80" cy="820" r="190" fill="#f2edf8" opacity="0.75"/>
 
-  <text x="78" y="64" class="eyebrow">STUDY WORKSPACE</text>
+  <text x="78" y="64" class="eyebrow">STUDY-ING WORKSPACE</text>
   <text x="78" y="112" class="title">예정 서비스 아키텍처</text>
   <text x="78" y="145" class="subtitle">GitLab을 학습 기록의 원본으로 유지하고, Spring Boot가 안전한 연결 계층을 담당합니다.</text>
 
@@ -221,5 +221,5 @@
   <path d="M838 671 V730" fill="none" stroke="#7865a8" stroke-width="3" marker-end="url(#arrow)"/>
   <path d="M1068 671 V730" fill="none" stroke="#7865a8" stroke-width="3" marker-end="url(#arrow)"/>
 
-  <text x="1520" y="870" text-anchor="end" fill="#9a92a4" font-size="12">Study Workspace · Architecture v1</text>
+  <text x="1520" y="870" text-anchor="end" fill="#9a92a4" font-size="12">Study-ing · Architecture v1</text>
 </svg>

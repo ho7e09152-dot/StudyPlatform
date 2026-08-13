@@ -11,10 +11,15 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.Base64;
 
+import com.studyworkspace.auth.dto.GitLabOAuthSession;
+import com.studyworkspace.auth.service.GitLabOAuthTokenProvider;
 import com.studyworkspace.gitlab.dto.GitLabUser;
+import com.studyworkspace.workspace.security.WorkspaceRepositoryAccessVerifier;
 import jakarta.servlet.http.Cookie;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -23,6 +28,11 @@ import org.springframework.session.Session;
 import org.springframework.session.SessionRepository;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.when;
 
 @SpringBootTest(properties = "app.demo.persistence-path=build/test-data/security-boundary-workspaces.json")
 @AutoConfigureMockMvc
@@ -34,6 +44,21 @@ class SecurityBoundaryTests {
 	@Autowired
 	private SessionRepository<?> sessionRepository;
 
+	@MockitoBean
+	private GitLabOAuthTokenProvider tokenProvider;
+
+	@MockitoBean
+	private WorkspaceRepositoryAccessVerifier repositoryAccessVerifier;
+
+	@BeforeEach
+	void providerAccess() {
+		GitLabUser user = new GitLabUser(101, "gitlab-user-a", "GitLab User A", null, "https://gitlab.example/gitlab-user-a");
+		when(tokenProvider.requireValidSession(any())).thenReturn(new GitLabOAuthSession(
+			user, "access-token", "refresh-token", Instant.now().plusSeconds(3600), "api"
+		));
+		when(repositoryAccessVerifier.verifyAtLogin(anyList(), any())).thenAnswer(invocation -> invocation.getArgument(0));
+	}
+
 	@Test
 	void unauthenticatedWorkspaceRequestReturnsJson401() throws Exception {
 		mockMvc.perform(get("/api/v1/workspaces"))
@@ -41,6 +66,13 @@ class SecurityBoundaryTests {
 			.andExpect(header().exists("X-Request-ID"))
 			.andExpect(header().string("X-Content-Type-Options", "nosniff"))
 			.andExpect(header().string("X-Frame-Options", "DENY"))
+			.andExpect(jsonPath("$.code").value("AUTH_REQUIRED"));
+	}
+
+	@Test
+	void unauthenticatedProviderLinkStartIsRejected() throws Exception {
+		mockMvc.perform(get("/api/v1/provider-accounts/github/link"))
+			.andExpect(status().isUnauthorized())
 			.andExpect(jsonPath("$.code").value("AUTH_REQUIRED"));
 	}
 

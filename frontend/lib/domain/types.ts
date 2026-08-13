@@ -17,6 +17,7 @@ export interface StudyMember {
   role: "OWNER" | "MANAGER" | "MEMBER";
   status: "ACTIVE" | "PROJECT_ACCESS_LOST";
   accessLevel: number;
+  userId?: string | null;
 }
 
 export interface SessionItem {
@@ -106,6 +107,18 @@ export interface Workspace {
   sessions: Record<string, StudySession>;
   submissions: Record<string, MemberSubmissionFile>;
   settings: WorkspaceSettings;
+  repository?: {
+    provider: "GITLAB" | "GITHUB";
+    externalRepositoryId: string;
+    fullName: string;
+    webUrl?: string | null;
+    visibility?: string | null;
+    defaultBranch?: string | null;
+    canRead: boolean;
+    canWrite: boolean;
+    canManage: boolean;
+    providerPermission?: string | null;
+  } | null;
 }
 
 export interface DashboardMetrics {

@@ -75,7 +75,7 @@ public class WorkspaceDocumentController {
 			.filter(member -> "ACTIVE".equals(member.status()) && member.gitlabUserId() != actor.id())
 			.forEach(member -> notificationService.create(
 				member.gitlabUserId(), workspaceId, "WORKSPACE_DOCUMENT_CREATED", "새 팀 문서가 등록되었습니다.",
-				document.title() + " · " + document.authorName(), "/repository?document=" + document.id()
+				document.title() + " · " + document.authorName(), "/library/docs/" + document.id()
 			));
 	}
 }

@@ -51,7 +51,7 @@ class GitLabWriteSpikeTests {
 			assertThat(branch.defaultBranch()).isFalse();
 			assertThat(branch.canPush()).isTrue();
 
-			String firstContent = "# Study Workspace write spike\n\nphase: created\n";
+			String firstContent = "# Study-ing write spike\n\nphase: created\n";
 			client.createRepositoryFile(
 				SPIKE_FILE_PATH,
 				branchName,
@@ -62,7 +62,7 @@ class GitLabWriteSpikeTests {
 			GitLabFileResponse created = client.getRepositoryFile(SPIKE_FILE_PATH, branchName);
 			assertThat(decode(created)).isEqualTo(firstContent);
 
-			String secondContent = "# Study Workspace write spike\n\nphase: updated\n";
+			String secondContent = "# Study-ing write spike\n\nphase: updated\n";
 			client.updateRepositoryFile(
 				SPIKE_FILE_PATH,
 				branchName,

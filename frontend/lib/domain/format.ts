@@ -29,9 +29,9 @@ export function formatDate(date: string, includeYear = false) {
   }).format(new Date(`${date}T12:00:00+09:00`));
 }
 
-export function formatDateTime(value: string) {
+export function formatDateTime(value: string, timeZone = "Asia/Seoul") {
   return new Intl.DateTimeFormat("ko-KR", {
-    timeZone: "Asia/Seoul",
+    timeZone,
     month: "numeric",
     day: "numeric",
     hour: "2-digit",

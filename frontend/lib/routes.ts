@@ -1,0 +1,18 @@
+export const APP_ROUTES = {
+  workspaces: "/workspaces",
+  workspaceNew: "/workspaces/new",
+  schedule: "/schedule",
+  scheduleNew: "/schedule/new",
+  scheduleDetail: (date: string) => `/schedule/${encodeURIComponent(date)}`,
+  scheduleEdit: (date: string) => `/schedule/${encodeURIComponent(date)}/edit`,
+  learningLibrary: "/library",
+  librarySessions: "/library",
+  libraryDocuments: "/library?tab=documents",
+  librarySession: (date: string) => `/library/sessions/${encodeURIComponent(date)}`,
+  libraryDocument: (documentId: string) => `/library/docs/${encodeURIComponent(documentId)}`,
+  libraryDocumentNew: "/library/docs/new",
+  libraryDocumentEdit: (documentId: string) => `/library/docs/${encodeURIComponent(documentId)}/edit`,
+  settings: "/settings",
+  settingsSection: (section: string) => `/settings/${encodeURIComponent(section)}`,
+  settingsMigration: "/settings/data/migrate",
+} as const;

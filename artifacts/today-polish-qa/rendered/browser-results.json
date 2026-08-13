@@ -1,0 +1,27 @@
+{
+  "baseURL": "https://sandbox.withroro.com",
+  "capturedAt": "2026-08-11T13:28:41.970Z",
+  "desktopMetrics": {
+    "scrollWidth": 1440,
+    "clientWidth": 1440,
+    "primaryButtons": [
+      "계속 학습하기"
+    ]
+  },
+  "mobileMetrics": {
+    "scrollWidth": 390,
+    "clientWidth": 390,
+    "primaryButtons": [
+      "계속 학습하기"
+    ]
+  },
+  "mobileDialogMetrics": {
+    "width": 390,
+    "height": 844,
+    "viewportWidth": 390,
+    "viewportHeight": 844,
+    "selectorVisible": true
+  },
+  "consoleErrors": [],
+  "pageErrors": []
+}

@@ -1,0 +1,434 @@
+{
+  "phase": "before",
+  "baseURL": "http://localhost:3210",
+  "generatedAt": "2026-08-13T07:36:19.906Z",
+  "captures": [
+    {
+      "viewport": "desktop",
+      "route": "/today",
+      "state": "page",
+      "file": "/workspace/artifacts/information-density-audit/before/desktop/01-today.png",
+      "viewportWidth": 1440,
+      "viewportHeight": 900,
+      "scrollWidth": 1440,
+      "scrollHeight": 1013,
+      "bodyTextLength": 662,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/schedule",
+      "state": "page",
+      "file": "/workspace/artifacts/information-density-audit/before/desktop/02-schedule.png",
+      "viewportWidth": 1440,
+      "viewportHeight": 900,
+      "scrollWidth": 1440,
+      "scrollHeight": 1013,
+      "bodyTextLength": 359,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/schedule/2026-07-23",
+      "state": "page",
+      "file": "/workspace/artifacts/information-density-audit/before/desktop/03-schedule-detail.png",
+      "viewportWidth": 1440,
+      "viewportHeight": 900,
+      "scrollWidth": 1440,
+      "scrollHeight": 998,
+      "bodyTextLength": 554,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/library",
+      "state": "page",
+      "file": "/workspace/artifacts/information-density-audit/before/desktop/04-library.png",
+      "viewportWidth": 1440,
+      "viewportHeight": 900,
+      "scrollWidth": 1440,
+      "scrollHeight": 972,
+      "bodyTextLength": 644,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/library?tab=documents",
+      "state": "page",
+      "file": "/workspace/artifacts/information-density-audit/before/desktop/05-library-documents.png",
+      "viewportWidth": 1440,
+      "viewportHeight": 900,
+      "scrollWidth": 1440,
+      "scrollHeight": 900,
+      "bodyTextLength": 541,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/library/sessions/2026-07-23",
+      "state": "page",
+      "file": "/workspace/artifacts/information-density-audit/before/desktop/06-library-session.png",
+      "viewportWidth": 1440,
+      "viewportHeight": 900,
+      "scrollWidth": 1440,
+      "scrollHeight": 1162,
+      "bodyTextLength": 496,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/library/docs/demo-doc-os",
+      "state": "page",
+      "file": "/workspace/artifacts/information-density-audit/before/desktop/07-document-detail.png",
+      "viewportWidth": 1440,
+      "viewportHeight": 900,
+      "scrollWidth": 1440,
+      "scrollHeight": 900,
+      "bodyTextLength": 274,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/records",
+      "state": "page",
+      "file": "/workspace/artifacts/information-density-audit/before/desktop/08-records.png",
+      "viewportWidth": 1440,
+      "viewportHeight": 900,
+      "scrollWidth": 1440,
+      "scrollHeight": 900,
+      "bodyTextLength": 473,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/workspaces",
+      "state": "page",
+      "file": "/workspace/artifacts/information-density-audit/before/desktop/09-workspaces.png",
+      "viewportWidth": 1440,
+      "viewportHeight": 900,
+      "scrollWidth": 1440,
+      "scrollHeight": 900,
+      "bodyTextLength": 405,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/workspaces/new",
+      "state": "page",
+      "file": "/workspace/artifacts/information-density-audit/before/desktop/10-workspace-connect.png",
+      "viewportWidth": 1440,
+      "viewportHeight": 900,
+      "scrollWidth": 1440,
+      "scrollHeight": 900,
+      "bodyTextLength": 303,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/settings/general",
+      "state": "page",
+      "file": "/workspace/artifacts/information-density-audit/before/desktop/11-settings-general.png",
+      "viewportWidth": 1440,
+      "viewportHeight": 900,
+      "scrollWidth": 1440,
+      "scrollHeight": 946,
+      "bodyTextLength": 7347,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/settings/repository",
+      "state": "page",
+      "file": "/workspace/artifacts/information-density-audit/before/desktop/12-settings-repository.png",
+      "viewportWidth": 1440,
+      "viewportHeight": 900,
+      "scrollWidth": 1440,
+      "scrollHeight": 900,
+      "bodyTextLength": 431,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/settings/accounts",
+      "state": "page",
+      "file": "/workspace/artifacts/information-density-audit/before/desktop/13-settings-accounts.png",
+      "viewportWidth": 1440,
+      "viewportHeight": 900,
+      "scrollWidth": 1440,
+      "scrollHeight": 900,
+      "bodyTextLength": 389,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/today",
+      "state": "activity",
+      "file": "/workspace/artifacts/information-density-audit/before/desktop/14-activity.png",
+      "viewportWidth": 1440,
+      "viewportHeight": 900,
+      "scrollWidth": 1440,
+      "scrollHeight": 1013,
+      "bodyTextLength": 721,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "desktop",
+      "route": "/today",
+      "state": "submission",
+      "file": "/workspace/artifacts/information-density-audit/before/desktop/15-submission.png",
+      "viewportWidth": 1440,
+      "viewportHeight": 900,
+      "scrollWidth": 1440,
+      "scrollHeight": 1013,
+      "bodyTextLength": 798,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/today",
+      "state": "page",
+      "file": "/workspace/artifacts/information-density-audit/before/mobile/01-today.png",
+      "viewportWidth": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 390,
+      "scrollHeight": 1676,
+      "bodyTextLength": 607,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/schedule",
+      "state": "page",
+      "file": "/workspace/artifacts/information-density-audit/before/mobile/02-schedule.png",
+      "viewportWidth": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 390,
+      "scrollHeight": 1088,
+      "bodyTextLength": 356,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/schedule/2026-07-23",
+      "state": "page",
+      "file": "/workspace/artifacts/information-density-audit/before/mobile/03-schedule-detail.png",
+      "viewportWidth": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 390,
+      "scrollHeight": 1491,
+      "bodyTextLength": 499,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/library",
+      "state": "page",
+      "file": "/workspace/artifacts/information-density-audit/before/mobile/04-library.png",
+      "viewportWidth": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 390,
+      "scrollHeight": 1258,
+      "bodyTextLength": 589,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/library?tab=documents",
+      "state": "page",
+      "file": "/workspace/artifacts/information-density-audit/before/mobile/05-library-documents.png",
+      "viewportWidth": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 390,
+      "scrollHeight": 908,
+      "bodyTextLength": 486,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/library/sessions/2026-07-23",
+      "state": "page",
+      "file": "/workspace/artifacts/information-density-audit/before/mobile/06-library-session.png",
+      "viewportWidth": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 390,
+      "scrollHeight": 1313,
+      "bodyTextLength": 441,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/library/docs/demo-doc-os",
+      "state": "page",
+      "file": "/workspace/artifacts/information-density-audit/before/mobile/07-document-detail.png",
+      "viewportWidth": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 390,
+      "scrollHeight": 908,
+      "bodyTextLength": 219,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/records",
+      "state": "page",
+      "file": "/workspace/artifacts/information-density-audit/before/mobile/08-records.png",
+      "viewportWidth": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 390,
+      "scrollHeight": 1421,
+      "bodyTextLength": 406,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/workspaces",
+      "state": "page",
+      "file": "/workspace/artifacts/information-density-audit/before/mobile/09-workspaces.png",
+      "viewportWidth": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 390,
+      "scrollHeight": 908,
+      "bodyTextLength": 350,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/workspaces/new",
+      "state": "page",
+      "file": "/workspace/artifacts/information-density-audit/before/mobile/10-workspace-connect.png",
+      "viewportWidth": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 390,
+      "scrollHeight": 908,
+      "bodyTextLength": 248,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/settings/general",
+      "state": "page",
+      "file": "/workspace/artifacts/information-density-audit/before/mobile/11-settings-general.png",
+      "viewportWidth": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 390,
+      "scrollHeight": 1120,
+      "bodyTextLength": 7280,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/settings/repository",
+      "state": "page",
+      "file": "/workspace/artifacts/information-density-audit/before/mobile/12-settings-repository.png",
+      "viewportWidth": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 390,
+      "scrollHeight": 975,
+      "bodyTextLength": 364,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/settings/accounts",
+      "state": "page",
+      "file": "/workspace/artifacts/information-density-audit/before/mobile/13-settings-accounts.png",
+      "viewportWidth": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 390,
+      "scrollHeight": 908,
+      "bodyTextLength": 322,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/today",
+      "state": "activity",
+      "file": "/workspace/artifacts/information-density-audit/before/mobile/14-activity.png",
+      "viewportWidth": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 390,
+      "scrollHeight": 1676,
+      "bodyTextLength": 666,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "mobile",
+      "route": "/today",
+      "state": "submission",
+      "file": "/workspace/artifacts/information-density-audit/before/mobile/15-submission.png",
+      "viewportWidth": 390,
+      "viewportHeight": 844,
+      "scrollWidth": 390,
+      "scrollHeight": 1676,
+      "bodyTextLength": 761,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "desktop-dark",
+      "route": "/today",
+      "state": "page",
+      "file": "/workspace/artifacts/information-density-audit/before/desktop-dark/16-today-dark.png",
+      "viewportWidth": 1440,
+      "viewportHeight": 900,
+      "scrollWidth": 1440,
+      "scrollHeight": 1013,
+      "bodyTextLength": 662,
+      "horizontalOverflow": false
+    },
+    {
+      "viewport": "desktop-dark",
+      "route": "/settings/general",
+      "state": "page",
+      "file": "/workspace/artifacts/information-density-audit/before/desktop-dark/17-settings-dark.png",
+      "viewportWidth": 1440,
+      "viewportHeight": 900,
+      "scrollWidth": 1440,
+      "scrollHeight": 946,
+      "bodyTextLength": 7347,
+      "horizontalOverflow": false
+    }
+  ],
+  "consoleErrors": [
+    {
+      "viewport": "desktop",
+      "route": "/workspaces",
+      "text": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "viewport": "desktop",
+      "route": "/workspaces",
+      "text": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "viewport": "desktop",
+      "route": "/workspaces/new",
+      "text": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "viewport": "desktop",
+      "route": "/workspaces/new",
+      "text": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "viewport": "mobile",
+      "route": "/workspaces",
+      "text": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "viewport": "mobile",
+      "route": "/workspaces",
+      "text": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "viewport": "mobile",
+      "route": "/workspaces/new",
+      "text": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    },
+    {
+      "viewport": "mobile",
+      "route": "/workspaces/new",
+      "text": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+    }
+  ],
+  "pageErrors": []
+}

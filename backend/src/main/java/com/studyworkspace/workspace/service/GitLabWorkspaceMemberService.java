@@ -46,7 +46,7 @@ public class GitLabWorkspaceMemberService {
 			candidate = new StudyMember(
 				candidate.id(), candidate.gitlabUserId(), candidate.username(), candidate.displayName(), candidate.avatar(), candidate.color(),
 				uniqueFileName(workspace, candidate.fileName()),
-				candidate.role(), candidate.status(), candidate.accessLevel()
+				candidate.role(), candidate.status(), candidate.accessLevel(), candidate.userId()
 			);
 		}
 		return workspaces.addMember(workspaceId, candidate);
@@ -62,36 +62,16 @@ public class GitLabWorkspaceMemberService {
 			if (match == null || !"active".equalsIgnoreCase(match.state())) {
 				members.add(new StudyMember(
 					current.id(), current.gitlabUserId(), current.username(), current.displayName(), current.avatar(), current.color(),
-					current.fileName(), current.role(), "PROJECT_ACCESS_LOST", current.accessLevel()
+					current.fileName(), current.role(), "PROJECT_ACCESS_LOST", current.accessLevel(), current.userId()
 				));
 			} else {
 				members.add(new StudyMember(
 					current.id(), match.id(), match.username(), current.displayName(), current.avatar(), current.color(), current.fileName(),
-					current.role(), "ACTIVE", match.accessLevel()
+					current.role(), "ACTIVE", match.accessLevel(), current.userId()
 				));
 			}
 		}
 		return workspaces.replaceMembers(workspaceId, members);
-	}
-
-	public WorkspaceState addAllVerified(String accessToken, String workspaceId) {
-		WorkspaceState workspace = workspaces.get(workspaceId);
-		for (GitLabProjectMember remote : gitLab.getAllProjectMembers(accessToken, workspace.gitlabProjectId())) {
-			if (!"active".equalsIgnoreCase(remote.state()) || remote.id() <= 0) continue;
-			WorkspaceState current = workspaces.get(workspaceId);
-			if (current.members().stream().anyMatch(member -> member.gitlabUserId() == remote.id())) continue;
-			StudyMember candidate = mapped(remote, "MEMBER", "ACTIVE");
-			String candidateFileName = candidate.fileName();
-			if (current.members().stream().anyMatch(member -> member.fileName().equalsIgnoreCase(candidateFileName))) {
-				candidate = new StudyMember(
-					candidate.id(), candidate.gitlabUserId(), candidate.username(), candidate.displayName(), candidate.avatar(), candidate.color(),
-					uniqueFileName(current, candidate.fileName()),
-					candidate.role(), candidate.status(), candidate.accessLevel()
-				);
-			}
-			workspaces.addMember(workspaceId, candidate);
-		}
-		return workspaces.get(workspaceId);
 	}
 
 	private static StudyMember mapped(GitLabProjectMember member, String role, String status) {

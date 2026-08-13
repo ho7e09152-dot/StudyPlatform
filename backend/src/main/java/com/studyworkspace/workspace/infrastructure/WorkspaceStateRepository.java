@@ -6,6 +6,7 @@ import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface WorkspaceStateRepository extends JpaRepository<WorkspaceStateEntity, String> {
+	boolean existsByGitLabProjectId(long gitLabProjectId);
 	List<WorkspaceStateEntity> findByStatusAndDeletionExpiresAtBefore(String status, Instant cutoff);
 	List<WorkspaceStateEntity> findByStatus(String status);
 }

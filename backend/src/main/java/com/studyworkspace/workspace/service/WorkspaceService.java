@@ -9,6 +9,7 @@ import java.nio.file.StandardCopyOption;
 import java.time.OffsetDateTime;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -23,8 +24,11 @@ import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 import com.studyworkspace.workspace.domain.WorkspaceException;
 import com.studyworkspace.gitlab.dto.GitLabUser;
+import com.studyworkspace.auth.security.StudyIngPrincipal;
 import com.studyworkspace.workspace.infrastructure.WorkspaceStateEntity;
 import com.studyworkspace.workspace.infrastructure.WorkspaceStateRepository;
+import com.studyworkspace.workspace.infrastructure.RepositoryConnectionEntity;
+import com.studyworkspace.workspace.infrastructure.RepositoryConnectionRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +37,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.util.StringUtils;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
+import org.springframework.dao.DataIntegrityViolationException;
 
 @Service
 public class WorkspaceService {
@@ -46,6 +51,7 @@ public class WorkspaceService {
 	private final Path persistencePath;
 	private final boolean seedEnabled;
 	private final WorkspaceStateRepository stateRepository;
+	private final RepositoryConnectionRepository repositoryConnectionRepository;
 
 	@FunctionalInterface
 	public interface SessionWriter {
@@ -68,6 +74,7 @@ public class WorkspaceService {
 	public WorkspaceService(
 		ObjectMapper objectMapper,
 		WorkspaceStateRepository stateRepository,
+		RepositoryConnectionRepository repositoryConnectionRepository,
 		@Value("${app.demo.persistence-path:.data/workspaces-production.json}") String legacyPersistencePath,
 		@Value("${app.demo.seed-enabled:false}") boolean seedEnabled
 	) {
@@ -75,6 +82,7 @@ public class WorkspaceService {
 		this.persistencePath = Path.of(legacyPersistencePath).toAbsolutePath().normalize();
 		this.seedEnabled = seedEnabled;
 		this.stateRepository = stateRepository;
+		this.repositoryConnectionRepository = repositoryConnectionRepository;
 		loadState().forEach(workspace -> workspaces.put(workspace.id(), workspace));
 	}
 
@@ -87,17 +95,31 @@ public class WorkspaceService {
 		this.persistencePath = Path.of(persistencePath).toAbsolutePath().normalize();
 		this.seedEnabled = seedEnabled;
 		this.stateRepository = null;
+		this.repositoryConnectionRepository = null;
 		loadState().forEach(workspace -> workspaces.put(workspace.id(), workspace));
 	}
 
 	public List<WorkspaceState> list(long gitLabUserId) {
+		return list(null, gitLabUserId);
+	}
+
+	public List<WorkspaceState> list(String userId, long gitLabUserId) {
 		refreshAllFromDatabase();
 		return workspaces.values().stream()
 			.filter(workspace -> "ACTIVE".equals(workspace.status()))
 			.filter(workspace -> workspace.members().stream().anyMatch(member ->
-				member.gitlabUserId() == gitLabUserId && "ACTIVE".equals(member.status())
+				(userId != null && userId.equals(member.userId()) || member.gitlabUserId() == gitLabUserId)
+					&& "ACTIVE".equals(member.status())
 			))
 			.sorted(Comparator.comparing(WorkspaceState::name))
+			.toList();
+	}
+
+	public List<WorkspaceState> listActiveRepositoryWorkspaces() {
+		refreshAllFromDatabase();
+		return workspaces.values().stream()
+			.filter(workspace -> "ACTIVE".equals(workspace.status()))
+			.filter(workspace -> workspace.repository() != null)
 			.toList();
 	}
 
@@ -105,7 +127,7 @@ public class WorkspaceService {
 		WorkspaceState workspace = stateRepository == null
 			? workspaces.get(workspaceId)
 			: stateRepository.findById(workspaceId)
-				.map(entity -> entity.toState(objectMapper))
+				.map(entity -> withRepositoryConnection(entity.toState(objectMapper)))
 				.map(WorkspaceService::normalizeMemberRoles)
 				.orElse(null);
 		if (workspace != null && stateRepository != null) workspaces.put(workspaceId, workspace);
@@ -116,6 +138,18 @@ public class WorkspaceService {
 	}
 
 	public synchronized WorkspaceState create(CreateWorkspaceRequest request, GitLabUser user) {
+		return create(request, user, 40);
+	}
+
+	public synchronized WorkspaceState create(CreateWorkspaceRequest request, GitLabUser user, int repositoryAccessLevel) {
+		return create(request, user, null, repositoryAccessLevel);
+	}
+
+	public synchronized WorkspaceState create(CreateWorkspaceRequest request, StudyIngPrincipal user, int repositoryAccessLevel) {
+		return create(request, user, user.userId(), repositoryAccessLevel);
+	}
+
+	private WorkspaceState create(CreateWorkspaceRequest request, GitLabUser user, String studyIngUserId, int repositoryAccessLevel) {
 		refreshAllFromDatabase();
 		if (request == null || !StringUtils.hasText(request.name()) || request.gitlabProjectId() <= 0 || !StringUtils.hasText(request.gitlabProjectPath())) {
 			throw error("INVALID_REQUEST", "Workspace 이름과 GitLab 프로젝트 정보가 필요합니다.", 400);
@@ -123,7 +157,12 @@ public class WorkspaceService {
 		if (user == null || user.id() <= 0 || !StringUtils.hasText(user.username())) {
 			throw error("AUTH_REQUIRED", "GitLab 로그인이 필요합니다.", 401);
 		}
-		if (workspaces.values().stream().anyMatch(workspace -> workspace.gitlabProjectId() == request.gitlabProjectId())) {
+		if (workspaces.values().stream().anyMatch(workspace -> workspace.repository() != null
+				&& "GITLAB".equals(workspace.repository().provider())
+				&& Long.toString(request.gitlabProjectId()).equals(workspace.repository().externalRepositoryId()))
+			|| repositoryConnectionRepository != null && repositoryConnectionRepository
+				.existsByProviderAndExternalRepositoryId("GITLAB", Long.toString(request.gitlabProjectId()))
+			|| stateRepository != null && stateRepository.existsByGitLabProjectId(request.gitlabProjectId())) {
 			throw error("WORKSPACE_PROJECT_ALREADY_CONNECTED", "이미 연결되었거나 복원 가능한 GitLab 프로젝트입니다. 삭제 목록을 확인해 주세요.", 409);
 		}
 		String id = "workspace-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
@@ -131,7 +170,8 @@ public class WorkspaceService {
 		String avatar = displayName.substring(0, 1).toUpperCase();
 		StudyMember owner = new StudyMember(
 			"member-" + user.id(), user.id(), user.username(), displayName, avatar,
-			"#6d52b5", safeMemberFileName(request.ownerRepositoryFileName(), user.username()), "OWNER", "ACTIVE", 40
+			"#6d52b5", safeMemberFileName(request.ownerRepositoryFileName(), user.username()), "OWNER", "ACTIVE", repositoryAccessLevel,
+			studyIngUserId
 		);
 		WorkspaceState workspace = new WorkspaceState(
 			id, request.name().trim(), request.gitlabProjectId(), request.gitlabProjectPath().trim(),
@@ -144,11 +184,76 @@ public class WorkspaceService {
 				StringUtils.hasText(request.timezone()) ? request.timezone().trim() : "Asia/Seoul",
 				true,
 				new Notifications(true, true, true)
-			)
+			),
+			new RepositoryIdentity("GITLAB", Long.toString(request.gitlabProjectId()), request.gitlabProjectPath().trim(),
+				request.repositoryWebUrl(), request.repositoryVisibility(),
+				StringUtils.hasText(request.defaultBranch()) ? request.defaultBranch().trim() : "main",
+				true, repositoryAccessLevel >= 30, repositoryAccessLevel >= 40, Integer.toString(repositoryAccessLevel))
 		);
 		store(workspace);
 		persist();
 		return workspace;
+	}
+
+	public synchronized WorkspaceState joinMember(String workspaceId, StudyMember candidate) {
+		if (candidate == null || candidate.gitlabUserId() <= 0) {
+			throw error("INVALID_REQUEST", "참여할 사용자 정보가 필요합니다.", 400);
+		}
+		for (int attempt = 0; attempt < 2; attempt++) {
+			WorkspaceState current = stateRepository == null
+				? get(workspaceId)
+				: stateRepository.findById(workspaceId)
+					.map(entity -> normalizeMemberRoles(entity.toState(objectMapper)))
+					.orElseThrow(() -> error("WORKSPACE_NOT_DISCOVERABLE", "참여 가능한 Workspace를 찾을 수 없습니다.", 404));
+			if (!"ACTIVE".equals(current.status())) {
+				throw error("WORKSPACE_NOT_DISCOVERABLE", "참여 가능한 Workspace를 찾을 수 없습니다.", 404);
+			}
+			StudyMember existing = current.members().stream()
+				.filter(member -> candidate.userId() != null && candidate.userId().equals(member.userId())
+					|| member.gitlabUserId() == candidate.gitlabUserId())
+				.findFirst().orElse(null);
+			if (existing != null && "ACTIVE".equals(existing.status())) {
+				workspaces.put(current.id(), current);
+				return current;
+			}
+
+			List<StudyMember> members = new ArrayList<>(current.members());
+			if (existing == null) {
+				String fileName = uniqueMemberFileName(
+					members, candidate.id(), safeMemberFileName(candidate.fileName(), candidate.username())
+				);
+				members.add(new StudyMember(
+					candidate.id(), candidate.gitlabUserId(), candidate.username(), candidate.displayName(), candidate.avatar(),
+					candidate.color(), fileName, "MEMBER", "ACTIVE", candidate.accessLevel(), candidate.userId()
+				));
+			} else {
+				members = members.stream().map(member -> member.gitlabUserId() == candidate.gitlabUserId()
+					? new StudyMember(
+						member.id(), member.gitlabUserId(), candidate.username(), candidate.displayName(), candidate.avatar(),
+						member.color(), member.fileName(), "MEMBER", "ACTIVE", candidate.accessLevel(),
+						candidate.userId() == null ? member.userId() : candidate.userId()
+					)
+					: member).collect(Collectors.toCollection(ArrayList::new));
+			}
+			WorkspaceState updated = copyMembers(current, List.copyOf(members));
+			if (stateRepository == null) {
+				store(updated);
+				persist();
+				return updated;
+			}
+			WorkspaceStateEntity previous = stateRepository.findById(workspaceId)
+				.orElseThrow(() -> error("WORKSPACE_NOT_DISCOVERABLE", "참여 가능한 Workspace를 찾을 수 없습니다.", 404));
+			try {
+				stateRepository.saveAndFlush(WorkspaceStateEntity.create(updated, objectMapper, previous));
+				workspaces.put(updated.id(), updated);
+				dirtyWorkspaceIds.remove(updated.id());
+				return updated;
+			} catch (ObjectOptimisticLockingFailureException exception) {
+				dirtyWorkspaceIds.remove(workspaceId);
+				if (attempt == 1) throw error("WORKSPACE_CONFLICT", "다른 요청에서 Workspace 참여가 처리되었습니다. 다시 확인해 주세요.", 409);
+			}
+		}
+		throw error("WORKSPACE_CONFLICT", "Workspace 참여 상태를 확인하지 못했습니다.", 409);
 	}
 
 	public synchronized void rollbackCreate(String workspaceId) {
@@ -165,6 +270,11 @@ public class WorkspaceService {
 		if (request == null) throw error("INVALID_REQUEST", "수정할 값이 필요합니다.", 400);
 		String name = StringUtils.hasText(request.name()) ? request.name().trim() : current.name();
 		WorkspaceSettings settings = request.settings() == null ? current.settings() : request.settings();
+		try {
+			ZoneId.of(settings.timezone());
+		} catch (RuntimeException exception) {
+			throw error("INVALID_TIMEZONE", "올바른 시간대를 선택해 주세요.", 400);
+		}
 		WorkspaceState updated = new WorkspaceState(
 			current.id(), name, current.gitlabProjectId(), current.gitlabProjectPath(), current.defaultBranch(),
 			current.repositoryBasePath(), current.repositorySchemaVersion(), current.importMode(), current.status(),
@@ -211,7 +321,7 @@ public class WorkspaceService {
 				members.add(new StudyMember(
 					member.id(), member.gitlabUserId(), member.username(), displayName,
 					displayName.substring(0, 1).toUpperCase(), member.color(), nextFileName,
-					member.role(), member.status(), member.accessLevel()
+					member.role(), member.status(), member.accessLevel(), member.userId()
 				));
 				changed = true;
 			}
@@ -300,10 +410,10 @@ public class WorkspaceService {
 				.filter(member -> !member.id().equals(memberId))
 				.filter(member -> "OWNER".equals(member.role()) && "ACTIVE".equals(member.status()))
 				.count();
-			if (remainingOwners == 0) throw error("LAST_OWNER_REQUIRED", "활성 Owner는 최소 한 명이어야 합니다.", 409);
+			if (remainingOwners == 0) throw error("LAST_OWNER_REQUIRED", "활성 소유자는 최소 한 명이어야 합니다.", 409);
 		}
 		List<StudyMember> members = current.members().stream().map(member -> member.id().equals(memberId)
-			? new StudyMember(member.id(), member.gitlabUserId(), member.username(), member.displayName(), member.avatar(), member.color(), member.fileName(), role, member.status(), member.accessLevel())
+			? new StudyMember(member.id(), member.gitlabUserId(), member.username(), member.displayName(), member.avatar(), member.color(), member.fileName(), role, member.status(), member.accessLevel(), member.userId())
 			: member).toList();
 		WorkspaceState updated = copyMembers(current, members);
 		store(updated);
@@ -318,21 +428,66 @@ public class WorkspaceService {
 			.flatMap(workspace -> workspace.members().stream())
 			.anyMatch(member -> member.gitlabUserId() == gitLabUserId && "OWNER".equals(member.role()) && "ACTIVE".equals(member.status()));
 		if (ownsActiveWorkspace) {
-			throw error("ACCOUNT_OWNS_WORKSPACES", "Owner인 활성 Workspace를 모두 삭제한 뒤 탈퇴해 주세요.", 409);
+			throw error("ACCOUNT_OWNS_WORKSPACES", "소유자인 활성 Workspace를 모두 삭제한 뒤 탈퇴해 주세요.", 409);
 		}
 
 		boolean changed = false;
 		for (WorkspaceState workspace : List.copyOf(workspaces.values())) {
-			if (workspace.members().stream().noneMatch(member -> member.gitlabUserId() == gitLabUserId)) continue;
+			StudyMember deletedMember = workspace.members().stream()
+				.filter(member -> member.gitlabUserId() == gitLabUserId)
+				.findFirst().orElse(null);
+			if (deletedMember == null) continue;
 			List<StudyMember> anonymized = workspace.members().stream().map(member ->
 				member.gitlabUserId() == gitLabUserId
-					? new StudyMember(member.id(), -Math.abs(gitLabUserId), "deleted-user", "탈퇴한 사용자", "?", "#8b8493", member.fileName(), member.role(), "PROJECT_ACCESS_LOST", 0)
+					? new StudyMember(member.id(), -Math.abs(gitLabUserId), "deleted-user", "탈퇴한 사용자", "?", "#8b8493", member.fileName(), member.role(), "PROJECT_ACCESS_LOST", 0, null)
 					: member
 			).toList();
-			store(copyMembers(workspace, anonymized));
+			Map<String, MemberSubmissionFile> submissions = workspace.submissions().entrySet().stream()
+				.collect(Collectors.toMap(
+					Map.Entry::getKey,
+					entry -> anonymizeSubmission(entry.getValue(), gitLabUserId),
+					(left, right) -> left,
+					LinkedHashMap::new
+				));
+			Map<String, StudySession> sessions = workspace.sessions().entrySet().stream()
+				.collect(Collectors.toMap(
+					Map.Entry::getKey,
+					entry -> anonymizeSession(entry.getValue(), deletedMember),
+					(left, right) -> left,
+					LinkedHashMap::new
+				));
+			WorkspaceState anonymizedWorkspace = new WorkspaceState(
+				workspace.id(), workspace.name(), workspace.gitlabProjectId(), workspace.gitlabProjectPath(), workspace.defaultBranch(),
+				workspace.repositoryBasePath(), workspace.repositorySchemaVersion(), workspace.importMode(), workspace.status(),
+				workspace.lastSyncedAt(), anonymized, Map.copyOf(sessions), Map.copyOf(submissions), workspace.settings()
+			);
+			store(anonymizedWorkspace);
 			changed = true;
 		}
 		if (changed) persist();
+	}
+
+	private static MemberSubmissionFile anonymizeSubmission(MemberSubmissionFile file, long gitLabUserId) {
+		if (file.gitlabUserId() != gitLabUserId) return file;
+		return new MemberSubmissionFile(
+			file.version(), file.memberId(), -Math.abs(gitLabUserId), "deleted-user", file.date(), file.sessionRevision(),
+			file.sessionType(), file.updatedAt(), file.submissions(), file.reflection(), file.lastCommitId(), file.lastCommitMessage()
+		);
+	}
+
+	private static StudySession anonymizeSession(StudySession session, StudyMember deletedMember) {
+		String createdBy = isDeletedAttribution(session.createdBy(), deletedMember) ? "탈퇴한 사용자" : session.createdBy();
+		String updatedBy = isDeletedAttribution(session.updatedBy(), deletedMember) ? "탈퇴한 사용자" : session.updatedBy();
+		if (java.util.Objects.equals(createdBy, session.createdBy()) && java.util.Objects.equals(updatedBy, session.updatedBy())) return session;
+		return new StudySession(
+			session.date(), session.folder(), session.revision(), session.type(), session.title(), session.description(), session.status(),
+			session.deadline(), session.secondaryDeadline(), session.createdAt(), createdBy, session.updatedAt(), updatedBy,
+			session.change(), session.items(), session.archivedItems(), session.lastCommitId()
+		);
+	}
+
+	private static boolean isDeletedAttribution(String value, StudyMember member) {
+		return value != null && (value.equals(member.displayName()) || value.equals(member.username()));
 	}
 
 	public synchronized WorkspaceState deactivateMember(String workspaceId, String memberId, long currentGitLabUserId) {
@@ -343,7 +498,7 @@ public class WorkspaceService {
 		boolean found = current.members().stream().anyMatch(member -> member.id().equals(memberId));
 		if (!found) throw error("WORKSPACE_MEMBER_NOT_FOUND", "Workspace 멤버를 찾을 수 없습니다.", 404);
 		List<StudyMember> members = current.members().stream().map(member -> member.id().equals(memberId)
-			? new StudyMember(member.id(), member.gitlabUserId(), member.username(), member.displayName(), member.avatar(), member.color(), member.fileName(), member.role(), "PROJECT_ACCESS_LOST", member.accessLevel())
+			? new StudyMember(member.id(), member.gitlabUserId(), member.username(), member.displayName(), member.avatar(), member.color(), member.fileName(), member.role(), "PROJECT_ACCESS_LOST", member.accessLevel(), member.userId())
 			: member).toList();
 		WorkspaceState updated = copyMembers(current, members);
 		store(updated);
@@ -838,7 +993,7 @@ public class WorkspaceService {
 	private List<WorkspaceState> loadState() {
 		if (stateRepository != null) {
 			List<WorkspaceState> loaded = stateRepository.findAll().stream()
-				.map(entity -> entity.toState(objectMapper))
+				.map(entity -> withRepositoryConnection(entity.toState(objectMapper)))
 				.map(WorkspaceService::normalizeMemberRoles)
 				.toList();
 			if (!loaded.isEmpty()) return loaded;
@@ -848,6 +1003,7 @@ public class WorkspaceService {
 				stateRepository.saveAll(legacy.stream()
 					.map(state -> WorkspaceStateEntity.create(state, objectMapper, null))
 					.toList());
+				saveRepositoryConnections(legacy);
 				log.info("기존 Workspace JSON {}개를 DB로 마이그레이션했습니다.", legacy.size());
 				return legacy;
 			}
@@ -856,6 +1012,7 @@ public class WorkspaceService {
 				stateRepository.saveAllAndFlush(initial.stream()
 					.map(state -> WorkspaceStateEntity.create(state, objectMapper, null))
 					.toList());
+				saveRepositoryConnections(initial);
 			}
 			return initial;
 		}
@@ -883,7 +1040,7 @@ public class WorkspaceService {
 				: index == 0 ? "OWNER" : member.accessLevel() >= 40 ? "MANAGER" : "MEMBER";
 			members.add(new StudyMember(
 				member.id(), member.gitlabUserId(), member.username(), member.displayName(), member.avatar(), member.color(),
-				member.fileName(), role, member.status(), member.accessLevel()
+				member.fileName(), role, member.status(), member.accessLevel(), member.userId()
 			));
 		}
 		return new WorkspaceState(
@@ -891,7 +1048,8 @@ public class WorkspaceService {
 			workspace.repositoryBasePath() == null ? "" : workspace.repositoryBasePath(),
 			workspace.repositorySchemaVersion() == null || workspace.repositorySchemaVersion() < 1 ? 1 : workspace.repositorySchemaVersion(),
 			workspace.importMode() == null ? "COMPATIBLE" : workspace.importMode(),
-			workspace.status(), workspace.lastSyncedAt(), List.copyOf(members), workspace.sessions(), workspace.submissions(), workspace.settings()
+			workspace.status(), workspace.lastSyncedAt(), List.copyOf(members), workspace.sessions(), workspace.submissions(), workspace.settings(),
+			workspace.repository()
 		);
 	}
 
@@ -911,10 +1069,13 @@ public class WorkspaceService {
 					))
 					.toList();
 				stateRepository.saveAllAndFlush(entities);
+				saveRepositoryConnections(entities.stream().map(entity -> entity.toState(objectMapper)).toList());
 				dirtyWorkspaceIds.removeAll(dirtyIds);
 				return;
 			} catch (ObjectOptimisticLockingFailureException exception) {
 				throw error("WORKSPACE_CONFLICT", "다른 서버에서 Workspace가 변경되었습니다. 최신 내용을 다시 불러와 주세요.", 409);
+			} catch (DataIntegrityViolationException exception) {
+				throw error("WORKSPACE_PROJECT_ALREADY_CONNECTED", "이미 연결되었거나 복원 가능한 GitLab 프로젝트입니다.", 409);
 			} catch (RuntimeException exception) {
 				throw error("WORKSPACE_PERSISTENCE_FAILED", "Workspace 상태를 DB에 안전하게 저장하지 못했습니다.", 500);
 			}
@@ -943,7 +1104,7 @@ public class WorkspaceService {
 	private void refreshAllFromDatabase() {
 		if (stateRepository == null) return;
 		List<WorkspaceState> loaded = stateRepository.findAll().stream()
-			.map(entity -> entity.toState(objectMapper))
+			.map(entity -> withRepositoryConnection(entity.toState(objectMapper)))
 			.map(WorkspaceService::normalizeMemberRoles)
 			.toList();
 		Set<String> loadedIds = loaded.stream().map(WorkspaceState::id).collect(Collectors.toSet());
@@ -967,5 +1128,27 @@ public class WorkspaceService {
 
 	private static WorkspaceException error(String code, String message, int status) {
 		return new WorkspaceException(code, message, status);
+	}
+
+	private WorkspaceState withRepositoryConnection(WorkspaceState state) {
+		if (repositoryConnectionRepository == null) return state;
+		return repositoryConnectionRepository.findById(state.id())
+			.map(connection -> new WorkspaceState(
+				state.id(), state.name(), state.gitlabProjectId(), state.gitlabProjectPath(), state.defaultBranch(),
+				state.repositoryBasePath(), state.repositorySchemaVersion(), state.importMode(), state.status(), state.lastSyncedAt(),
+				state.members(), state.sessions(), state.submissions(), state.settings(), connection.toIdentity()
+			))
+			.orElse(state);
+	}
+
+	private void saveRepositoryConnections(List<WorkspaceState> states) {
+		if (repositoryConnectionRepository == null) return;
+		List<RepositoryConnectionEntity> connections = states.stream()
+			.filter(state -> state.repository() != null)
+			.map(state -> RepositoryConnectionEntity.from(state.id(), state.repository(),
+				repositoryConnectionRepository.findById(state.id()).orElse(null)))
+			.toList();
+		repositoryConnectionRepository.saveAll(connections);
+		repositoryConnectionRepository.flush();
 	}
 }

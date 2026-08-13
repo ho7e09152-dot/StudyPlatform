@@ -1,4 +1,4 @@
-# Study Workspace 문서 안내
+# Study-ing 문서 안내
 
 이 디렉터리는 현재 실행 계약, 개발 방법, 저장 구조, 운영 절차와 과거 설계 자료를 함께 보관한다. 처음 보는 사람은 아래 순서로 읽는다.
 
@@ -25,6 +25,16 @@
 | [GitLab CI 가이드](ci-guide.md) | Merge Request와 로컬 전체 검사 |
 | [스테이징 OAuth E2E](staging-e2e-checklist.md) | 실제 GitLab 두 계정 출시 승인 |
 | [Production runbook](production-runbook.md) | HTTPS, PostgreSQL, Secret, 백업과 장애 대응 |
+| [보안사고 최소 대응 절차](security/incident-response.md) | credential 차단, 영향 확인, 안내 판단과 재발 방지 |
+
+## Legal / policy audit
+
+| 문서 | 성격 |
+|---|---|
+| [구현 사실](legal/implementation-facts.md) | 코드·DB·배포 설정에서 확인한 데이터 처리와 삭제 사실 |
+| [운영 정책과 남은 결정](legal/policy-decisions-required.md) | 확정된 기본정책, 공개 전 입력값과 법률 검토 |
+| [개인정보 처리방침 초안](legal/privacy-policy-draft.md) | 운영자 승인·법률 검토 전 비공개 draft |
+| [이용약관 초안](legal/terms-of-service-draft.md) | 운영자 승인·법률 검토 전 비공개 draft |
 
 ## 팀원별 백엔드 학습 자료
 

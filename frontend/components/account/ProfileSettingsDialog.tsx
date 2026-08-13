@@ -45,7 +45,9 @@ export function ProfileSettingsDialog({ onClose }: { onClose: () => void }) {
         displayName,
         repositoryFileName,
         timezone,
-        acceptTerms: true,
+        acceptTerms: false,
+        acceptPrivacy: false,
+        confirmMinimumAge: false,
       });
       setUser(updated);
       await syncMembers();
