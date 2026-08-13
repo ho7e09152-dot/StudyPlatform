@@ -1,10 +1,15 @@
 package com.studyworkspace.auth.security;
 
+import java.io.Serial;
+
 import com.studyworkspace.gitlab.dto.GitLabUser;
 import com.studyworkspace.workspace.domain.RepositoryProvider;
 
 /** Stable Study-ing session identity plus the provider proof used to establish it. */
 public final class StudyIngPrincipal extends GitLabUser {
+	@Serial
+	private static final long serialVersionUID = 1L;
+
 	private final String userId;
 	private final String providerAccountId;
 	private final RepositoryProvider provider;

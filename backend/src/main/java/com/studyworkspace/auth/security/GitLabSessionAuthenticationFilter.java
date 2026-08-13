@@ -10,6 +10,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import jakarta.servlet.http.HttpSession;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.core.convert.ConversionException;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 import com.studyworkspace.workspace.domain.WorkspaceException;
@@ -30,7 +31,14 @@ public class GitLabSessionAuthenticationFilter extends OncePerRequestFilter {
 	) throws ServletException, IOException {
 		if (SecurityContextHolder.getContext().getAuthentication() == null) {
 			HttpSession session = request.getSession(false);
-			Object stored = session == null ? null : session.getAttribute(AuthSessionAttributes.STUDY_ING_USER);
+			Object stored = null;
+			try {
+				stored = session == null ? null : session.getAttribute(AuthSessionAttributes.STUDY_ING_USER);
+			} catch (ConversionException exception) {
+				// Discard an unreadable deploy-era session so OAuth can create a fresh one.
+				if (session != null) session.invalidate();
+				session = null;
+			}
 			if (stored == null && session != null) {
 				Object legacy = session.getAttribute(AuthSessionAttributes.GITLAB_USER);
 				if (legacy == null) legacy = session.getAttribute(AuthSessionAttributes.LEGACY_GITLAB_OAUTH);

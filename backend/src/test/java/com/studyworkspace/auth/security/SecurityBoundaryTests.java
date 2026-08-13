@@ -9,8 +9,10 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 
 import java.nio.charset.StandardCharsets;
+import java.io.ObjectStreamClass;
 import java.time.Instant;
 import java.util.Base64;
 
@@ -63,10 +65,18 @@ class SecurityBoundaryTests {
 	void unauthenticatedWorkspaceRequestReturnsJson401() throws Exception {
 		mockMvc.perform(get("/api/v1/workspaces"))
 			.andExpect(status().isUnauthorized())
+			.andExpect(content().contentType("application/json;charset=UTF-8"))
+			.andExpect(content().string(org.hamcrest.Matchers.containsString("GitLab 로그인이 필요합니다.")))
 			.andExpect(header().exists("X-Request-ID"))
 			.andExpect(header().string("X-Content-Type-Options", "nosniff"))
 			.andExpect(header().string("X-Frame-Options", "DENY"))
 			.andExpect(jsonPath("$.code").value("AUTH_REQUIRED"));
+	}
+
+	@Test
+	void sessionIdentityUsesStableSerializationVersions() {
+		assertThat(ObjectStreamClass.lookup(GitLabUser.class).getSerialVersionUID()).isZero();
+		assertThat(ObjectStreamClass.lookup(StudyIngPrincipal.class).getSerialVersionUID()).isEqualTo(1L);
 	}
 
 	@Test

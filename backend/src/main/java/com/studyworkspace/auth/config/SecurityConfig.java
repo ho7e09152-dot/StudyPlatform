@@ -4,6 +4,7 @@ import com.studyworkspace.auth.security.GitLabSessionAuthenticationFilter;
 import com.studyworkspace.common.api.ApiErrorResponse;
 import com.studyworkspace.common.security.ApiRateLimitFilter;
 import jakarta.servlet.http.HttpServletResponse;
+import java.nio.charset.StandardCharsets;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.MediaType;
@@ -51,6 +52,7 @@ public class SecurityConfig {
 			.exceptionHandling(exceptions -> exceptions
 				.authenticationEntryPoint((request, response, exception) -> {
 					response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);
+					response.setCharacterEncoding(StandardCharsets.UTF_8.name());
 					response.setContentType(MediaType.APPLICATION_JSON_VALUE);
 					objectMapper.writeValue(response.getOutputStream(), ApiErrorResponse.of(
 						"AUTH_REQUIRED", "GitLab 로그인이 필요합니다."
@@ -58,6 +60,7 @@ public class SecurityConfig {
 				})
 				.accessDeniedHandler((request, response, exception) -> {
 					response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+					response.setCharacterEncoding(StandardCharsets.UTF_8.name());
 					response.setContentType(MediaType.APPLICATION_JSON_VALUE);
 					objectMapper.writeValue(response.getOutputStream(), ApiErrorResponse.of(
 						"ACCESS_DENIED", "요청을 수행할 권한이 없습니다."

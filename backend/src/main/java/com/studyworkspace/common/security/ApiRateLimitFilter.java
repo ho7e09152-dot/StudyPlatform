@@ -1,6 +1,7 @@
 package com.studyworkspace.common.security;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -57,6 +58,7 @@ public class ApiRateLimitFilter extends OncePerRequestFilter {
 		Window window = windows.computeIfAbsent(key, ignored -> new Window(now));
 		if (!window.tryAcquire(now, limit)) {
 			response.setStatus(429);
+			response.setCharacterEncoding(StandardCharsets.UTF_8.name());
 			response.setContentType(MediaType.APPLICATION_JSON_VALUE);
 			response.setHeader("Retry-After", "60");
 			objectMapper.writeValue(response.getOutputStream(), ApiErrorResponse.of("RATE_LIMITED", "요청이 너무 많습니다. 잠시 후 다시 시도해 주세요."));

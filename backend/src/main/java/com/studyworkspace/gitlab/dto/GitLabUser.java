@@ -1,5 +1,6 @@
 package com.studyworkspace.gitlab.dto;
 
+import java.io.Serial;
 import java.io.Serializable;
 import java.util.Objects;
 
@@ -8,6 +9,9 @@ import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 public class GitLabUser implements Serializable {
+	@Serial
+	private static final long serialVersionUID = 0L;
+
 	private final long id;
 	private final String username;
 	private final String name;
