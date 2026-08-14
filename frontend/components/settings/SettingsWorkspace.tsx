@@ -262,6 +262,77 @@ function auditLabel(type: string) {
   return labels[type] ?? "Workspace 변경";
 }
 
+function ConnectedAccountsSettings({
+	linkResult,
+	mode,
+	demoUsername,
+	demoDisplayName,
+}: {
+	linkResult: ProviderLinkResult;
+	mode: "oauth" | "demo";
+	demoUsername: string;
+	demoDisplayName: string | null;
+}) {
+	const [accounts, setAccounts] = useState<ProviderAccount[]>([]);
+	const [accountLinkProviders, setAccountLinkProviders] = useState<Array<ProviderAccount["provider"]>>([]);
+	const [resolved, setResolved] = useState(mode === "demo");
+	const [failed, setFailed] = useState(false);
+
+	useEffect(() => {
+		if (mode === "demo") return;
+		const controller = new AbortController();
+		void Promise.allSettled([
+			listProviderAccounts(controller.signal),
+			getProviderCapabilities(controller.signal),
+		]).then(([accountResult, capabilityResult]) => {
+			if (controller.signal.aborted) return;
+			if (accountResult.status === "fulfilled") {
+				setAccounts(accountResult.value);
+				setAccountLinkProviders(capabilityResult.status === "fulfilled"
+					? capabilityResult.value.accountLinkProviders ?? []
+					: accountResult.value.map((account) => account.provider));
+			} else {
+				setAccounts([]);
+				setAccountLinkProviders([]);
+			}
+			setFailed(accountResult.status === "rejected" || capabilityResult.status === "rejected");
+			setResolved(true);
+		});
+		return () => controller.abort();
+	}, [mode]);
+
+	const demoAccount = {
+		id: "demo",
+		provider: "GITLAB",
+		externalUserId: "demo",
+		username: demoUsername,
+		displayName: demoDisplayName,
+		avatarUrl: null,
+		webUrl: null,
+		status: "CONNECTED",
+	} satisfies ProviderAccount;
+	const visibleAccounts = mode === "demo" ? [demoAccount] : buildProviderAccountRows(accounts, accountLinkProviders);
+	const linkNotice = getProviderLinkNotice(linkResult);
+
+	return <section className="settings-section-block" aria-busy={!resolved}>
+		{!resolved ? <p className="settings-scope-note" role="status">연결된 계정을 확인하고 있어요.</p> : null}
+		{resolved ? visibleAccounts.map((account) => {
+			const descriptor = getProviderDescriptor(account.provider);
+			const connected = account.status === "CONNECTED";
+			const connectUrl = getProviderAccountLinkUrl(account.provider, APP_ROUTES.settingsSection("accounts"));
+			return <div className="provider-account-row" key={account.provider}>
+				<span className="provider-account-icon"><ProviderIcon provider={account.provider} size={21} /></span>
+				<div><strong>{descriptor.displayName} 계정</strong><small>{account.username ? `@${account.username}` : "연결되지 않음"}</small></div>
+				<span className={`status-badge ${connected ? "success" : "neutral"}`}>{connected ? "연결됨" : "연결되지 않음"}</span>
+				<a className="button button--secondary button--small" href={connectUrl}><RefreshCcw size={14} /> {connected ? descriptor.reconnectLabel : descriptor.connectLabel}</a>
+			</div>;
+		}) : null}
+		{linkNotice ? <div className={`onboarding-error provider-link-result${linkNotice.tone === "neutral" ? " is-neutral" : ""}`} role={linkNotice.tone === "neutral" ? "status" : "alert"}><span>{linkNotice.message}</span>{linkNotice.retry ? <a className="button button--secondary button--small" href={getProviderAccountLinkUrl("GITHUB")}>다시 시도</a> : null}</div> : null}
+		{failed ? <p className="settings-scope-note" role="alert">연결된 계정을 모두 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.</p> : null}
+		<p className="settings-scope-note">재승인은 개인 Provider 권한만 갱신하며 Workspace 저장소 연결은 바뀌지 않습니다.</p>
+	</section>;
+}
+
 export function SettingsWorkspace({ section = "general" }: { section?: SettingsSection }) {
 	const searchParams = useSearchParams();
   const { mode, user, setUser } = useAuth();
@@ -359,7 +430,12 @@ export function SettingsWorkspace({ section = "general" }: { section?: SettingsS
           {section === "repository" ? <RepositorySettings /> : null}
           {section === "data" ? <DataSettings syncJobs={syncJobs} canManage={canManage} /> : null}
           {section === "profile" ? <ProfileSettings /> : null}
-          {section === "accounts" ? <ConnectedAccountsSettings linkResult={providerLinkResult} /> : null}
+          {section === "accounts" ? <ConnectedAccountsSettings
+				linkResult={providerLinkResult}
+				mode={mode}
+				demoUsername={user?.username ?? currentMember?.username ?? "demo"}
+				demoDisplayName={user?.name ?? null}
+			/> : null}
           {section === "appearance" ? <AppearanceSettings /> : null}
           {section === "account" ? <AccountSettings onDelete={() => setConfirmation("account")} /> : null}
           {section === "security" ? <SecuritySettings canManage={canManage} events={auditEvents} /> : null}
@@ -664,45 +740,6 @@ export function SettingsWorkspace({ section = "general" }: { section?: SettingsS
     useUnsavedChanges(dirty && !saving);
     async function submit(event: FormEvent) { event.preventDefault(); if (mode === "demo") { setError("데모 모드에서는 프로필을 변경할 수 없습니다."); return; } setSaving(true); setError(""); try { const updated = await updateAccountProfile({ displayName, repositoryFileName: recordName, timezone, acceptTerms: false, acceptPrivacy: false, confirmMinimumAge: false }); setUser(updated); await syncMembers(); } catch (e) { setError(getUserFacingError(e, "프로필을 저장하지 못했습니다.")); } finally { setSaving(false); } }
     return <form className="settings-form" onSubmit={submit}><section className="settings-section-block"><h3>기본 정보</h3><div className="settings-form-fields"><label className="is-primary"><span>표시 이름</span><input value={displayName} onChange={(event) => setDisplayName(event.target.value)} minLength={2} maxLength={40} required /><small>Workspace, 일정, 제출과 리뷰에서 표시됩니다.</small></label><label><span>학습 기록 이름</span><div className="settings-file-input"><FileText size={16} /><input value={recordName} onChange={(event) => setRecordName(event.target.value)} required maxLength={80} /><em>.md</em></div><small>새 학습 기록 파일 이름에 사용됩니다. 기존 제출 파일 경로는 유지됩니다.</small></label><label><span>개인 시간대</span><TimezoneSelect value={timezone} onChange={setTimezone} describedBy="profile-timezone-help" /><small id="profile-timezone-help">내 화면에서 날짜와 시간을 표시할 때 사용됩니다. Workspace 마감 기준 시간대와는 별개입니다.</small></label></div></section>{error ? <div className="onboarding-error" role="alert">{error}</div> : null}<footer className="settings-form-actions"><span className="settings-save-state" aria-live="polite">{dirty ? "저장하지 않은 변경사항이 있습니다." : "모든 변경사항이 저장되었습니다."}</span><button className="button button--primary" type="submit" disabled={!dirty || saving || displayName.trim().length < 2 || !recordName.trim() || !validTimezone}>{saving ? "저장 중…" : "프로필 저장"}</button></footer></form>;
-  }
-
-  function ConnectedAccountsSettings({ linkResult }: { linkResult: ProviderLinkResult }) {
-    const [accounts, setAccounts] = useState<ProviderAccount[]>([]);
-		const [accountLinkProviders, setAccountLinkProviders] = useState<Array<ProviderAccount["provider"]>>(["GITLAB"]);
-    const [failed, setFailed] = useState(false);
-    useEffect(() => {
-      if (mode === "demo") return;
-      const controller = new AbortController();
-			void Promise.allSettled([
-				listProviderAccounts(controller.signal),
-				getProviderCapabilities(controller.signal),
-			]).then(([accountResult, capabilityResult]) => {
-				if (controller.signal.aborted) return;
-				if (accountResult.status === "fulfilled") setAccounts(accountResult.value);
-				else setFailed(true);
-				if (capabilityResult.status === "fulfilled") setAccountLinkProviders(capabilityResult.value.accountLinkProviders ?? []);
-			});
-      return () => controller.abort();
-    }, []);
-		const demoAccount = { id: "demo", provider: "GITLAB", externalUserId: "demo", username: user?.username ?? currentMember?.username ?? "demo", displayName: user?.name ?? null, avatarUrl: null, webUrl: null, status: "CONNECTED" } satisfies ProviderAccount;
-		const visibleAccounts = mode === "demo" ? [demoAccount] : buildProviderAccountRows(accounts, accountLinkProviders);
-		const linkNotice = getProviderLinkNotice(linkResult);
-		return <section className="settings-section-block">
-			{visibleAccounts.map((account) => {
-				const descriptor = getProviderDescriptor(account.provider);
-				const connected = account.status === "CONNECTED";
-				const connectUrl = getProviderAccountLinkUrl(account.provider, APP_ROUTES.settingsSection("accounts"));
-				return <div className="provider-account-row" key={account.provider}>
-					<span className="provider-account-icon"><ProviderIcon provider={account.provider} size={21} /></span>
-					<div><strong>{descriptor.displayName} 계정</strong><small>{account.username ? `@${account.username}` : "연결되지 않음"}</small></div>
-					<span className={`status-badge ${connected ? "success" : "neutral"}`}>{connected ? "연결됨" : "연결되지 않음"}</span>
-					<a className="button button--secondary button--small" href={connectUrl}><RefreshCcw size={14} /> {connected ? descriptor.reconnectLabel : descriptor.connectLabel}</a>
-				</div>;
-			})}
-			{linkNotice ? <div className={`onboarding-error provider-link-result${linkNotice.tone === "neutral" ? " is-neutral" : ""}`} role={linkNotice.tone === "neutral" ? "status" : "alert"}><span>{linkNotice.message}</span>{linkNotice.retry ? <a className="button button--secondary button--small" href={getProviderAccountLinkUrl("GITHUB")}>다시 시도</a> : null}</div> : null}
-			{failed ? <p className="settings-scope-note" role="alert">연결된 계정을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.</p> : null}
-			<p className="settings-scope-note">재승인은 개인 Provider 권한만 갱신하며 Workspace 저장소 연결은 바뀌지 않습니다.</p>
-		</section>;
   }
 
   function AppearanceSettings() {
