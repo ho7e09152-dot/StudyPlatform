@@ -1,4 +1,4 @@
-# Study-ing implementation facts
+# Study-ing 구현 사실
 
 > 감사 기준일: 2026-08-13
 > 문서 성격: 코드와 저장소 내 운영 설정에서 확인한 구현 사실. 법률 자문이나 승인된 운영 정책이 아니다.
@@ -17,7 +17,7 @@
 | CONFIRMED | Repository-owned deployment templates | `application.yml`, `application-prod.yml`, `compose.prod.yml`, `compose.sandbox.yml`, `deploy/nginx.conf`, `docs/operations/production.md` |
 | UNKNOWN | 실제 공개 운영 환경의 서버 사업자, 물리 지역, DNS/CDN, DB host, 모니터링 사업자 | 배포된 인프라 inventory나 계약서가 저장소에 없음 |
 
-## 2. Current product and account model
+## 2. 현재 제품과 account 모델
 
 | 상태 | 사실 |
 |---|---|
@@ -28,9 +28,9 @@
 | CONFIRMED | 결제, 가격, 구독, 광고, checkout 기능 또는 관련 SDK가 코드에 없다. |
 | CONFIRMED POLICY | 현재 이호철 개인 개발자가 운영하는 무료·비상업 토이 프로젝트이며 유료 plan, 결제, 광고, marketing 활용, 개인정보 판매가 없다. 서비스 및 개인정보 문의 채널은 `ho7e09152@gmail.com`이다. |
 
-## 3. Personal-data and service-data inventory
+## 3. 개인정보와 서비스 데이터 목록
 
-### 3.1 Account and profile
+### 3.1 Account와 profile
 
 | 상태 | 저장 위치 | 필드/데이터 | 생성·갱신 | 목적 | 암호화 | 삭제/보유 |
 |---|---|---|---|---|---|---|
@@ -42,7 +42,7 @@
 | CONFIRMED | Browser localStorage `study-demo-library-documents` | demo 팀 문서 title/body/author/time | demo mode 문서 조작 | demo 기능 | 평문 | 자동 expiry 없음; 실제 OAuth Workspace 데이터와 별개 |
 | CONFIRMED | Browser sessionStorage `study-ing-demo-session` | 데모 활성 여부 | 랜딩/로그인의 명시적 데모 진입 | 현재 탭에서 실제 인증 데이터와 데모 데이터 분리 | 평문; 인증정보 아님 | 탭 종료 또는 데모 종료/로그인 진입 시 제거 |
 
-### 3.2 OAuth credentials and sessions
+### 3.2 OAuth credential과 session
 
 | 상태 | 저장 위치 | 필드/데이터 | 생성·갱신 | 목적 | 보호조치 | 삭제/보유 |
 |---|---|---|---|---|---|---|
@@ -63,7 +63,7 @@ Important OAuth details:
 - **CONFIRMED** access/refresh token DTO and session `toString()` redact token values.
 - **CONFIRMED** application log statements found in the audit do not intentionally print Authorization headers or token values.
 
-### 3.3 Workspace state, schedule, submissions, members, settings
+### 3.3 Workspace 상태, 일정, 제출, 멤버, 설정
 
 | 상태 | 저장 위치 | 필드/데이터 | 목적 | 다른 서비스 전송 | 삭제/보유 |
 |---|---|---|---|---|---|
@@ -81,7 +81,7 @@ Important OAuth details:
 - **CONFIRMED** submission: member ID, GitLab user ID, username, item response type/value/language, submitted/updated time, reflection, commit ID/message.
 - **CONFIRMED** settings: workspace timezone, change-note rule, notification toggles.
 
-### 3.4 Team documents, messages, announcements, reviews
+### 3.4 팀 문서, message, 공지, review
 
 | 상태 | 저장 위치 | 데이터 | 생성·이용 | 삭제/보유 |
 |---|---|---|---|---|
@@ -91,7 +91,7 @@ Important OAuth details:
 | CONFIRMED | PostgreSQL `announcement_reads` | announcement ID, account ID, read time | 공지 읽음 상태 | account/workspace/announcement delete cascade |
 | CONFIRMED | GitLab commit comments | review body, GitLab author identity/avatar, time, commit relation | 제출 review 조회/작성 | Study-ing DB에는 review body를 저장하지 않음; Study-ing deletion does not delete GitLab comment/history |
 
-### 3.5 Notifications, activity, audit, sync
+### 3.5 알림, activity, audit, sync
 
 | 상태 | 저장 위치 | 데이터 | 목적 | 삭제/보유 |
 |---|---|---|---|---|
@@ -101,7 +101,7 @@ Important OAuth details:
 | CONFIRMED | PostgreSQL `sync_jobs` | workspace ID, job type/status, sanitized domain error code/message, start/end | GitLab sync 상태/실패 진단 | 최근 20개 조회; 30일 초과 record daily cleanup; workspace purge 시 cascade |
 | CONFIRMED | In-memory rate limiter | session ID 또는 unauthenticated remote IP, read/write counter/window | 요청 제한 | 약 2분 이상 지난 window는 주기적 opportunistic cleanup; persistent DB 저장 없음 |
 
-### 3.6 Server and proxy logs
+### 3.6 Server와 proxy log
 
 | 상태 | 사실 |
 |---|---|
@@ -112,7 +112,7 @@ Important OAuth details:
 | UNKNOWN | External Nginx Proxy Manager, load balancer, Docker logging driver, host journal, log shipping, monitoring retention, and redaction policy. The public sandbox uses an external Nginx Proxy Manager network. |
 | UNKNOWN | Whether production error logs can contain user-authored content through an unforeseen exception message. No deliberate content/token logging was found, but no centralized redaction filter exists. |
 
-## 4. GitLab data boundary
+## 4. GitLab 데이터 경계
 
 ### GitLab → Study-ing
 
@@ -140,7 +140,7 @@ Important OAuth details:
 
 Study-ing is an API client and cache/metadata store for repository content. It does not take ownership of the GitLab repository in code. The user or project administrator controls the repository and its Git history under GitLab's rules.
 
-## 5. Cookie and browser-storage inventory
+## 5. Cookie와 browser storage 목록
 
 | 상태 | Storage | Purpose | Flags/expiry |
 |---|---|---|---|
@@ -151,9 +151,9 @@ Study-ing is an API client and cache/metadata store for repository content. It d
 | CONFIRMED | Analytics/marketing cookie or SDK | none found in dependencies or source |
 | UNKNOWN | Cookies added by an external reverse proxy/CDN | external infrastructure not inventoried |
 
-## 6. Deletion and revocation matrix
+## 6. 삭제와 revoke 기준표
 
-### 6.1 Logout
+### 6.1 Logout 처리
 
 | 상태 | Effect |
 |---|---|
@@ -161,7 +161,7 @@ Study-ing is an API client and cache/metadata store for repository content. It d
 | CONFIRMED | Does not delete `user_accounts`, profile, memberships, content, notifications, audit, or GitLab repository data. |
 | CONFIRMED | If GitLab revoke fails, local logout still completes; remote token validity until expiry/revocation is not guaranteed by Study-ing. |
 
-### 6.2 Account deletion
+### 6.2 Account 삭제
 
 | 상태 | Data | Actual effect |
 |---|---|---|
@@ -176,7 +176,7 @@ Study-ing is an API client and cache/metadata store for repository content. It d
 | CONFIRMED | in-app notifications | recipient GitLab user ID 기준 record를 계정 탈퇴 transaction에서 삭제 |
 | CONFIRMED | soft-deleted owned Workspace | account deletion is allowed because owner check only considers active Workspace; anonymized former owner can no longer restore through active-member/owner checks |
 
-### 6.3 Workspace deletion
+### 6.3 Workspace 삭제
 
 | 상태 | Effect |
 |---|---|
@@ -188,7 +188,7 @@ Study-ing is an API client and cache/metadata store for repository content. It d
 | CONFIRMED | GitLab repository files, commit history and review comments are not deleted or changed. |
 | INFERRED | “7일 후 영구 삭제” means permanent removal of the Workspace's Study-ing DB state and cascade-linked records, not all traces and not GitLab data. Exact purge may occur after the expiry time at the next daily job, rather than exactly at 7×24 hours. |
 
-### 6.4 Member removal and repository revocation
+### 6.4 Member 제거와 repository 권한 철회
 
 | 상태 | Effect |
 |---|---|
@@ -199,7 +199,7 @@ Study-ing is an API client and cache/metadata store for repository content. It d
 | CONFIRMED | Access is checked at login bulk verification, workspace switch/read after TTL, and write actions through the workspace interceptor; default verification TTL is 5 minutes. |
 | CONFIRMED | Rejoin can reactivate an existing member entry as `MEMBER`, preserving member ID and filename; historical attribution remains. |
 
-## 7. Retention inventory
+## 7. 보유 기간 목록
 
 | 상태 | Dataset | Current automatic retention |
 |---|---|---|
@@ -217,7 +217,7 @@ Study-ing is an API client and cache/metadata store for repository content. It d
 | CONFIRMED policy / UNKNOWN deployment | Production backup target | backup을 사용하는 경우 암호화하고 7일 rotation한다는 운영 목표; 실제 provider/config는 UNKNOWN |
 | CONFIRMED policy / UNKNOWN deployment | Nginx/Docker/host/monitoring log target | 30일 이내 보유 목표; 실제 provider/config는 UNKNOWN |
 
-## 8. External-service and infrastructure inventory
+## 8. 외부 서비스와 인프라 목록
 
 | Service | Status | Purpose | Data that may be handled | Region/country | Legal classification |
 |---|---|---|---|---|---|
@@ -229,7 +229,7 @@ Study-ing is an API client and cache/metadata store for repository content. It d
 | CDN, error tracking, email, object storage, analytics/ads | CONFIRMED not present in application dependencies/config reviewed | none in current repository | none confirmed | N/A | NOT APPLICABLE on repository evidence; verify production account inventory |
 | Docker Hub/npm/Maven repositories | INFERRED build-time suppliers | fetch public dependencies/images | build metadata/IP, not Study-ing end-user records by application design | provider-dependent | normally not an end-user data processor; operational review only |
 
-### Cross-border processing table
+### 국외 처리 표
 
 | Service | Country/Region | Transferred data | Purpose | Legal classification | Status |
 |---|---|---|---|---|---|
@@ -240,7 +240,7 @@ Study-ing is an API client and cache/metadata store for repository content. It d
 
 GitLab's official documentation confirms that Self-Managed repository storage and backups depend on the administrator's deployment and storage configuration. It therefore does not establish the country of `lab.ssafy.com`: <https://docs.gitlab.com/administration/repository_storage_paths/> and <https://docs.gitlab.com/administration/backup_restore/backup_gitlab/>.
 
-## 9. Security measures actually implemented
+## 9. 실제 구현된 보안 조치
 
 | 상태 | Measure |
 |---|---|
@@ -257,7 +257,7 @@ GitLab's official documentation confirms that Self-Managed repository storage an
 | UNKNOWN | Production HTTPS/TLS certificate and external proxy config are operational, not proven by code. |
 | UNKNOWN | DB/disk encryption, backup encryption, secret-manager product, key access control/rotation, centralized log redaction, vulnerability/incident runbook execution. |
 
-## 10. User rights currently supported
+## 10. 현재 지원하는 사용자 권리
 
 | 상태 | Capability |
 |---|---|
@@ -271,7 +271,7 @@ GitLab's official documentation confirms that Self-Managed repository storage an
 | CONFIRMED | No UI/API for erasing a GitLab commit/comment through Study-ing. |
 | UNKNOWN | Operational channel and procedure for access, copy, correction, deletion, suspension, objection or complaint requests. |
 
-## 11. Consent/versioning facts
+## 11. 동의와 version 관리 사실
 
 | 상태 | Fact |
 |---|---|
@@ -281,7 +281,7 @@ GitLab's official documentation confirms that Self-Managed repository storage an
 | CONFIRMED | General profile settings do not write consent. Agreed timestamps change only when a newly required document version is explicitly accepted. |
 | CONFIRMED | Profile response computes `requiresReconsent` by comparing accepted and required versions. Dedicated re-consent UI/route remains a follow-up. |
 
-## 12. Current public-copy mismatches
+## 12. 현재 공개 문구와 구현의 차이
 
 | Severity | Status | Current copy/assumption | Actual implementation |
 |---|---|---|---|
@@ -295,7 +295,7 @@ GitLab's official documentation confirms that Self-Managed repository storage an
 
 The draft policy documents must not be promoted to `/terms` or `/privacy` until the blockers in `policy-decisions-required.md` are resolved and legal review is complete.
 
-## 13. Unknown or missing operational facts
+## 13. 미확정 또는 누락된 운영 사실
 
 - **UNKNOWN** service operator legal name/type, address, representative, privacy officer/contact and general support channel.
 - **UNKNOWN** production host/DB/proxy provider, contract party, server country/region and subprocessors.

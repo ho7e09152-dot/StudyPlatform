@@ -1,4 +1,4 @@
-# Staging OAuth E2E checklist
+# Staging OAuth E2E 체크리스트
 
 이 문서는 외부 GitLab 계정과 HTTPS 배포 주소가 필요한 마지막 출시 승인을 위한 체크리스트다. CI의 데모 브라우저 테스트는 UI 회귀를 검증하고, 이 절차는 실제 OAuth 토큰·프로젝트 권한·GitLab 커밋을 검증한다.
 

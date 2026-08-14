@@ -39,7 +39,7 @@ cp frontend/.env.example frontend/.env.local
 
 GitHub 설정과 기능 플래그는 분리됩니다. 현재 `GITHUB_ACCOUNT_LINKING_ENABLED`만 사용할 수 있으며 GitHub 로그인과 Repository Provider는 아직 capability에 노출되지 않습니다. 자세한 값과 secret mount 방식은 [GitHub App configuration](architecture/providers/github-app-configuration.md)을 따릅니다.
 
-## Local infrastructure
+## 로컬 인프라
 
 ```bash
 docker compose up -d
@@ -56,7 +56,7 @@ docker compose down
 
 `docker compose down -v`는 로컬 DB volume까지 삭제하므로 데이터가 필요 없을 때만 사용합니다.
 
-## Backend
+## Backend 실행
 
 ```bash
 cd backend
@@ -69,7 +69,7 @@ cd backend
 curl http://localhost:8080/actuator/health/readiness
 ```
 
-환경변수 없이 실행하면 H2 file DB `backend/.data/study-platform`을 사용합니다. Flyway V1~V12가 적용되며 실제 OAuth/Provider 기능은 설정 상태에 따라 비활성화됩니다.
+환경변수 없이 실행하면 H2 file DB `backend/.data/study-platform`을 사용합니다. Flyway V1~V13이 적용되며 실제 OAuth/Provider 기능은 설정 상태에 따라 비활성화됩니다.
 
 Backend 주요 package:
 
@@ -88,7 +88,7 @@ com.studyworkspace/
 └── common,policy/ # security, errors, retention과 shared configuration
 ```
 
-## Frontend
+## Frontend 실행
 
 ```bash
 cd frontend
