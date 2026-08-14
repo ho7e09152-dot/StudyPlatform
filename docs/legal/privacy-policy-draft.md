@@ -203,14 +203,14 @@ Study-ing은 인증에 필요한 HttpOnly session cookie를 사용한다. 기본
 
 중대한 변경의 재동의 필요 여부와 고지 절차는 법률 검토 후 확정한다. Backend는 현재 accepted version과 required version이 다른지를 식별할 수 있으나 전용 재동의 화면은 후속 작업이다.
 
-## Official review references
+## 공식 검토 참고 자료
 
 - 개인정보 보호위원회, 개인정보 처리방침 작성지침(2026.4 개정): https://www.pipc.go.kr/np/cop/bbs/selectBoardArticle.do?bbsId=BS217&mCode=D010030000.Updated&nttId=12018
 - 개인정보 보호법 제30조: https://law.go.kr/LSW/lsLinkCommonInfo.do?lsJoLnkSeq=1033214957
 - 개인정보 보호법 시행령 제31조: https://www.law.go.kr/LSW/lsLawLinkInfo.do?chrClsCd=010202&lsJoLnkSeq=900079801
 - 개인정보 보호법 제22조의2: https://www.law.go.kr/LSW/lsLinkCommonInfo.do?ancYnChk=&chrClsCd=010202&lsJoLnkSeq=1029334873
 
-## Publication requirement checklist
+## 공개 요건 체크리스트
 
 | 항목 | Applicability | Draft status |
 |---|---|---|

@@ -3,60 +3,60 @@
 Status: implemented, capability-gated
 Updated: 2026-08-13
 
-## Scope
+## 범위
 
-This flow links a GitHub identity to an already authenticated Study-ing user. GitHub login and repository operations now use separate capability-gated flows; account linking remains explicit and never performs automatic merging.
+이 흐름은 이미 인증된 Study-ing 사용자에게 GitHub identity를 연결한다. GitHub login과 repository 작업은 별도의 capability-gated 흐름을 사용한다. Account linking은 항상 명시적으로 수행하며 account를 자동으로 merge하지 않는다.
 
-## Flow
+## 흐름
 
-1. An authenticated user opens Settings > 연결된 계정.
-2. The UI renders GitHub only when `accountLinkProviders` contains `GITHUB`.
-3. `GET /api/v1/provider-accounts/github/link` stores server-side link state bound to the current Study-ing user and redirects to GitHub.
-4. GitHub returns to `/api/v1/provider-accounts/github/callback`.
-5. The backend consumes and clears state, validates expiry/action/user binding, exchanges the code with PKCE, and calls `GET /user` for the current GitHub identity.
-6. The GitHub adapter emits normalized `ProviderIdentity` and `ProviderOAuthCredential` values.
-7. The linking service creates or reauthorizes the current user's `GITHUB` ProviderAccount and AES-GCM encrypted credential.
-8. The user returns to `/settings/accounts`; success is announced by the existing Toast system.
+1. 인증된 사용자가 Settings > 연결된 계정을 연다.
+2. UI는 `accountLinkProviders`에 `GITHUB`가 있을 때만 GitHub를 표시한다.
+3. `GET /api/v1/provider-accounts/github/link`가 현재 Study-ing 사용자에 묶인 link state를 서버에 저장하고 GitHub로 redirect한다.
+4. GitHub가 `/api/v1/provider-accounts/github/callback`으로 돌아온다.
+5. Backend는 state를 소비·삭제하고 expiry/action/user binding을 검증한 뒤 PKCE로 code를 교환하고 `GET /user`로 현재 GitHub identity를 확인한다.
+6. GitHub adapter가 정규화된 `ProviderIdentity`와 `ProviderOAuthCredential`을 만든다.
+7. linking service가 현재 사용자의 `GITHUB` ProviderAccount와 AES-GCM 암호화 credential을 생성하거나 재인가한다.
+8. 사용자는 `/settings/accounts`로 돌아오고 기존 Toast system이 성공을 알린다.
 
-Callback query parameters never contain a Study-ing user id or ProviderAccount id. The authenticated session is the only owner input.
+Callback query parameter에는 Study-ing user id나 ProviderAccount id를 넣지 않는다. 인증 session만 소유자 입력으로 사용한다.
 
-## GitHub App user authorization and permissions
+## GitHub App 사용자 인가와 permission
 
-This implementation uses the GitHub App web application flow with `state` and PKCE S256. GitHub App user access tokens use the app's fine-grained permissions rather than classic OAuth scopes. Email and repository data are neither requested nor stored in this phase. The Client ID and Client Secret are still required for user authorization even though the registered integration is a GitHub App.
+이 구현은 `state`와 PKCE S256을 사용하는 GitHub App web application flow를 사용한다. GitHub App user access token은 classic OAuth scope가 아니라 App의 세분화된 permission을 사용한다. 이 단계에서는 email과 repository data를 요청하거나 저장하지 않는다. 등록된 통합이 GitHub App이어도 사용자 인가에는 Client ID와 Client Secret이 필요하다.
 
-Official references:
+공식 참고 자료:
 
 - GitHub App user access-token web flow: <https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app>
 - GitHub App authentication overview: <https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app>
 
-App JWT and installation-token handling are separate from this user flow. See [GitHub App configuration](github-app-configuration.md).
+App JWT와 installation token 처리는 이 사용자 흐름과 분리된다. [GitHub App 설정](github-app-configuration.md)을 참고한다.
 
-## State and CSRF protection
+## State와 CSRF 보호
 
-The server stores an unguessable state, creation time, intended action `LINK`, authenticated internal user id and PKCE verifier in the existing HttpSession. State is constant-time compared and expires after 10 minutes. Callback processing fails before token exchange if any binding differs. State is one-time because it is removed before exchange.
+서버는 추측할 수 없는 state, 생성 시각, action `LINK`, 인증된 내부 user id와 PKCE verifier를 기존 HttpSession에 저장한다. State는 constant-time으로 비교하고 10분 후 만료하며 교환 전에 삭제해 한 번만 사용한다. binding이 다르면 token 교환 전에 실패한다.
 
-Gateway access logging is disabled for the exact GitHub callback path so `code` and `state` do not enter the configured nginx access log. Token DTOs redact credentials from `toString()` and controlled errors do not include upstream bodies.
+`code`와 `state`가 nginx access log에 남지 않도록 정확한 GitHub callback path의 gateway access logging을 끈다. Token DTO는 `toString()`에서 credential을 가리고 통제된 오류에 upstream body를 포함하지 않는다.
 
-## Identity and collisions
+## Identity와 충돌
 
-The unique identity is `(GITHUB, externalUserId)`. Email, username and display name are never merge evidence.
+고유 identity는 `(GITHUB, externalUserId)`다. Email, username과 display name을 merge 근거로 사용하지 않는다.
 
-- Not connected: create a GITHUB ProviderAccount owned by the authenticated Study-ing user.
-- Same user and same GitHub identity: update metadata and rotate the existing credential.
-- Same GitHub identity linked to another Study-ing user: reject with `PROVIDER_ACCOUNT_COLLISION`; never merge.
-- Same Study-ing user with a different GitHub identity already linked: reject until a future explicit disconnect/switch policy exists.
+- 미연결: 인증된 Study-ing 사용자가 소유하는 GITHUB ProviderAccount를 생성한다.
+- 같은 사용자·같은 GitHub identity: metadata를 갱신하고 기존 credential을 교체한다.
+- 다른 Study-ing 사용자에게 이미 연결된 identity: `PROVIDER_ACCOUNT_COLLISION`으로 거부하고 merge하지 않는다.
+- 같은 Study-ing 사용자에게 다른 GitHub identity가 이미 연결됨: 명시적 disconnect/switch 정책이 생길 때까지 거부한다.
 
-## Credential lifecycle
+## Credential 생명주기
 
-The user access credential belongs to ProviderAccount and is encrypted by the existing `TokenCipher`. GitHub App user tokens expire by default and can include a refresh token; Study-ing stores the returned access expiry and refresh token when present. Reauthorization replaces ciphertext in the existing row. Study-ing account deletion cascades through all ProviderAccounts and credentials.
+사용자 access credential은 ProviderAccount 소유이며 기존 `TokenCipher`로 암호화한다. GitHub App user token은 기본적으로 만료되며 refresh token을 포함할 수 있다. Study-ing은 응답에 포함된 access expiry와 refresh token을 저장한다. 재인가는 기존 row의 ciphertext를 교체한다. Study-ing account 삭제는 모든 ProviderAccount와 credential로 cascade한다.
 
-Provider disconnect is intentionally not exposed in this phase. The schema supports it, but a future implementation must define Workspace dependency checks, remote token revocation and reconnect behavior.
+이 단계에는 Provider disconnect를 노출하지 않는다. 향후 구현은 Workspace 의존성, remote token revoke와 reconnect 동작을 정의해야 한다.
 
 ## Capability rollout
 
-- Feature disabled or user authorization config incomplete: `accountLinkProviders = [GITLAB]`; GitHub UI is absent.
-- `GITHUB_ACCOUNT_LINKING_ENABLED=true` plus complete Client ID/Secret/redirect: `accountLinkProviders = [GITLAB, GITHUB]`.
-- `GITHUB_LOGIN_ENABLED=true` independently adds GitHub to `authProviders`.
-- `GITHUB_REPOSITORY_ENABLED=true` plus validated App authentication independently adds GitHub to `repositoryProviders`.
+- 기능이 비활성 상태이거나 사용자 인가 설정이 불완전함: `accountLinkProviders = [GITLAB]`, GitHub UI 미표시.
+- `GITHUB_ACCOUNT_LINKING_ENABLED=true`이고 Client ID/Secret/redirect가 완전함: `accountLinkProviders = [GITLAB, GITHUB]`.
+- `GITHUB_LOGIN_ENABLED=true`이면 독립적으로 `authProviders`에 GitHub를 추가한다.
+- `GITHUB_REPOSITORY_ENABLED=true`이고 App 인증이 검증되면 독립적으로 `repositoryProviders`에 GitHub를 추가한다.
 
-Connecting a GitHub account never changes the current Workspace repository Provider or Sidebar status. Login, account linking and repository capabilities remain independent.
+GitHub account 연결은 현재 Workspace repository Provider나 Sidebar 상태를 바꾸지 않는다. Login, account linking과 repository capability는 서로 독립적이다.
