@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   AlertTriangle,
@@ -46,7 +46,7 @@ import {
 } from "@/lib/api/services/authApi";
 import { ProviderIcon } from "@/components/providers/ProviderIcon";
 import { getProviderDescriptor } from "@/lib/providers/provider-descriptors";
-import { buildProviderAccountRows, parseProviderLinkResult, type ProviderLinkResult } from "@/lib/providers/connected-accounts";
+import { buildProviderAccountRows, getProviderLinkNotice, parseProviderLinkResult, type ProviderLinkResult } from "@/lib/providers/connected-accounts";
 import {
   listAuditEvents,
   listMemberCandidates,
@@ -263,6 +263,7 @@ function auditLabel(type: string) {
 }
 
 export function SettingsWorkspace({ section = "general" }: { section?: SettingsSection }) {
+	const searchParams = useSearchParams();
   const { mode, user, setUser } = useAuth();
   const { themeMode, accentColor, setThemeMode, setAccentColor, saving: themeSaving } = useAppTheme();
   const {
@@ -293,6 +294,10 @@ export function SettingsWorkspace({ section = "general" }: { section?: SettingsS
   const [actionError, setActionError] = useState("");
   const [confirmation, setConfirmation] = useState<"workspace" | "account" | null>(null);
   const [deleting, setDeleting] = useState(false);
+	const [providerLinkResult] = useState<ProviderLinkResult>(() =>
+		parseProviderLinkResult(searchParams.get("providerLink")),
+	);
+	const providerLinkHandled = useRef(false);
   const requestWorkspaceId = useRef(workspace.id);
   requestWorkspaceId.current = workspace.id;
 
@@ -325,6 +330,13 @@ export function SettingsWorkspace({ section = "general" }: { section?: SettingsS
     }
   }, [canManage, mode, refreshMembers, section, workspace.id]);
 
+	useEffect(() => {
+		if (mode === "demo" || section !== "accounts" || !providerLinkResult || providerLinkHandled.current) return;
+		providerLinkHandled.current = true;
+		if (providerLinkResult === "success") notify("GitHub 계정을 연결했어요.");
+		window.history.replaceState(window.history.state, "", APP_ROUTES.settingsSection("accounts"));
+	}, [mode, notify, providerLinkResult, section]);
+
   const copy = SECTION_COPY[section];
   return (
     <div className="page-stack settings-page settings-hub-page">
@@ -347,7 +359,7 @@ export function SettingsWorkspace({ section = "general" }: { section?: SettingsS
           {section === "repository" ? <RepositorySettings /> : null}
           {section === "data" ? <DataSettings syncJobs={syncJobs} canManage={canManage} /> : null}
           {section === "profile" ? <ProfileSettings /> : null}
-          {section === "accounts" ? <ConnectedAccountsSettings /> : null}
+          {section === "accounts" ? <ConnectedAccountsSettings linkResult={providerLinkResult} /> : null}
           {section === "appearance" ? <AppearanceSettings /> : null}
           {section === "account" ? <AccountSettings onDelete={() => setConfirmation("account")} /> : null}
           {section === "security" ? <SecuritySettings canManage={canManage} events={auditEvents} /> : null}
@@ -654,11 +666,10 @@ export function SettingsWorkspace({ section = "general" }: { section?: SettingsS
     return <form className="settings-form" onSubmit={submit}><section className="settings-section-block"><h3>기본 정보</h3><div className="settings-form-fields"><label className="is-primary"><span>표시 이름</span><input value={displayName} onChange={(event) => setDisplayName(event.target.value)} minLength={2} maxLength={40} required /><small>Workspace, 일정, 제출과 리뷰에서 표시됩니다.</small></label><label><span>학습 기록 이름</span><div className="settings-file-input"><FileText size={16} /><input value={recordName} onChange={(event) => setRecordName(event.target.value)} required maxLength={80} /><em>.md</em></div><small>새 학습 기록 파일 이름에 사용됩니다. 기존 제출 파일 경로는 유지됩니다.</small></label><label><span>개인 시간대</span><TimezoneSelect value={timezone} onChange={setTimezone} describedBy="profile-timezone-help" /><small id="profile-timezone-help">내 화면에서 날짜와 시간을 표시할 때 사용됩니다. Workspace 마감 기준 시간대와는 별개입니다.</small></label></div></section>{error ? <div className="onboarding-error" role="alert">{error}</div> : null}<footer className="settings-form-actions"><span className="settings-save-state" aria-live="polite">{dirty ? "저장하지 않은 변경사항이 있습니다." : "모든 변경사항이 저장되었습니다."}</span><button className="button button--primary" type="submit" disabled={!dirty || saving || displayName.trim().length < 2 || !recordName.trim() || !validTimezone}>{saving ? "저장 중…" : "프로필 저장"}</button></footer></form>;
   }
 
-  function ConnectedAccountsSettings() {
+  function ConnectedAccountsSettings({ linkResult }: { linkResult: ProviderLinkResult }) {
     const [accounts, setAccounts] = useState<ProviderAccount[]>([]);
 		const [accountLinkProviders, setAccountLinkProviders] = useState<Array<ProviderAccount["provider"]>>(["GITLAB"]);
     const [failed, setFailed] = useState(false);
-		const [linkResult, setLinkResult] = useState<Exclude<ProviderLinkResult, "success">>(null);
     useEffect(() => {
       if (mode === "demo") return;
       const controller = new AbortController();
@@ -673,21 +684,9 @@ export function SettingsWorkspace({ section = "general" }: { section?: SettingsS
 			});
       return () => controller.abort();
     }, []);
-		useEffect(() => {
-			if (mode === "demo") return;
-			const result = parseProviderLinkResult(new URLSearchParams(window.location.search).get("providerLink"));
-			if (!result) return;
-			if (result === "success") notify("GitHub 계정을 연결했어요.");
-			else setLinkResult(result);
-			window.history.replaceState({}, "", APP_ROUTES.settingsSection("accounts"));
-		}, []);
 		const demoAccount = { id: "demo", provider: "GITLAB", externalUserId: "demo", username: user?.username ?? currentMember?.username ?? "demo", displayName: user?.name ?? null, avatarUrl: null, webUrl: null, status: "CONNECTED" } satisfies ProviderAccount;
 		const visibleAccounts = mode === "demo" ? [demoAccount] : buildProviderAccountRows(accounts, accountLinkProviders);
-		const resultCopy = linkResult === "cancelled" ? "GitHub 계정 연결이 취소되었습니다."
-			: linkResult === "collision" ? "이 GitHub 계정은 이미 다른 Study-ing 계정에 연결되어 있습니다."
-			: linkResult === "account-exists" ? "이미 다른 GitHub 계정이 연결되어 있습니다."
-			: linkResult === "expired" ? "GitHub 계정 연결 요청이 만료되었습니다. 다시 시도해 주세요."
-			: linkResult === "failed" ? "GitHub 계정을 연결하지 못했어요." : null;
+		const linkNotice = getProviderLinkNotice(linkResult);
 		return <section className="settings-section-block">
 			{visibleAccounts.map((account) => {
 				const descriptor = getProviderDescriptor(account.provider);
@@ -700,7 +699,7 @@ export function SettingsWorkspace({ section = "general" }: { section?: SettingsS
 					<a className="button button--secondary button--small" href={connectUrl}><RefreshCcw size={14} /> {connected ? descriptor.reconnectLabel : descriptor.connectLabel}</a>
 				</div>;
 			})}
-			{resultCopy ? <div className={`onboarding-error provider-link-result${linkResult === "cancelled" ? " is-neutral" : ""}`} role={linkResult === "cancelled" ? "status" : "alert"}><span>{resultCopy}</span>{linkResult !== "cancelled" ? <a className="button button--secondary button--small" href={getProviderAccountLinkUrl("GITHUB")}>다시 시도</a> : null}</div> : null}
+			{linkNotice ? <div className={`onboarding-error provider-link-result${linkNotice.tone === "neutral" ? " is-neutral" : ""}`} role={linkNotice.tone === "neutral" ? "status" : "alert"}><span>{linkNotice.message}</span>{linkNotice.retry ? <a className="button button--secondary button--small" href={getProviderAccountLinkUrl("GITHUB")}>다시 시도</a> : null}</div> : null}
 			{failed ? <p className="settings-scope-note" role="alert">연결된 계정을 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.</p> : null}
 			<p className="settings-scope-note">재승인은 개인 Provider 권한만 갱신하며 Workspace 저장소 연결은 바뀌지 않습니다.</p>
 		</section>;

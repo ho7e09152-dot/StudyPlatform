@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildProviderAccountRows, parseProviderLinkResult } from "../lib/providers/connected-accounts.ts";
+import { buildProviderAccountRows, getProviderLinkNotice, parseProviderLinkResult } from "../lib/providers/connected-accounts.ts";
 
 const gitLabAccount = {
   id: "gitlab-account",
@@ -52,4 +52,18 @@ test("callback result parsing keeps success, cancel, collision, existing account
   assert.equal(parseProviderLinkResult("github_expired"), "expired");
   assert.equal(parseProviderLinkResult("github_failed"), "failed");
   assert.equal(parseProviderLinkResult(null), null);
+});
+
+test("every provider linking failure has visible guidance and appropriate retry behavior", () => {
+  assert.deepEqual(getProviderLinkNotice("collision"), {
+    message: "이 GitHub 계정은 이미 다른 Study-ing 계정에 연결되어 있습니다.",
+    tone: "danger",
+    retry: true,
+  });
+  assert.equal(getProviderLinkNotice("account-exists")?.retry, false);
+  assert.match(getProviderLinkNotice("account-exists")?.message ?? "", /다시 승인/);
+  for (const result of ["cancelled", "expired", "failed"]) {
+    assert.equal(getProviderLinkNotice(result)?.retry, true);
+  }
+  assert.equal(getProviderLinkNotice("success"), null);
 });

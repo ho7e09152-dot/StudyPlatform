@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { initialWorkspaces } from "../lib/data/seed";
 
 function captureUnexpectedErrors(page: Page) {
   const errors: string[] = [];
@@ -14,6 +15,81 @@ async function openWorkspacePage(page: Page, path: string) {
     .some((candidate) => path === candidate || path.startsWith(`${candidate}?`));
   await page.goto(publicPath ? path : `/demo?returnTo=${encodeURIComponent(path)}`);
   await page.waitForLoadState("networkidle");
+}
+
+async function mockAuthenticatedWorkspace(page: Page) {
+  await page.route("**/api/v1/**", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: "[]",
+  }));
+  await page.route("**/api/v1/auth/me", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      authenticated: true,
+      identityProvider: "GITLAB",
+      user: {
+        id: "study-user-a",
+        legacyGitLabUserId: 101,
+        username: "gitlab-user-a",
+        name: "김서연",
+        profileCompleted: true,
+        repositoryFileName: "member-a.md",
+        timezone: "Asia/Seoul",
+        themeMode: "LIGHT",
+        accentColor: "PURPLE",
+      },
+    }),
+  }));
+  await page.route("**/api/v1/workspaces", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify(initialWorkspaces),
+  }));
+  await page.route("**/api/v1/me/provider-accounts", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify([{
+      id: "gitlab-account",
+      provider: "GITLAB",
+      externalUserId: "101",
+      username: "gitlab-user-a",
+      displayName: "김서연",
+      avatarUrl: null,
+      webUrl: null,
+      status: "CONNECTED",
+    }]),
+  }));
+  await page.route("**/api/v1/capabilities", (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    body: JSON.stringify({
+      authProviders: ["GITLAB", "GITHUB"],
+      accountLinkProviders: ["GITLAB", "GITHUB"],
+      repositoryProviders: ["GITLAB"],
+      features: { workspaceDiscovery: true },
+    }),
+  }));
+  await page.route("**/api/v1/repositories/GITLAB/48213", async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 350));
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        provider: "GITLAB",
+        externalId: "48213",
+        name: "evening-workspace",
+        fullName: "study-team/evening-workspace",
+        visibility: "private",
+        defaultBranch: "main",
+        webUrl: null,
+        capabilities: { canRead: true, canWrite: true, canManage: true },
+        providerPermission: "40",
+        connectionState: "AVAILABLE",
+      }),
+    });
+  });
 }
 
 test.describe("Workspace release smoke", () => {
@@ -431,6 +507,60 @@ test.describe("Workspace release smoke", () => {
 		await expect(page.getByText("GitLab 계정", { exact: true })).toBeVisible();
 		expect(errors).toEqual([]);
 	});
+
+  test("Provider 연결 callback 결과는 첫 Settings 렌더와 후속 context 갱신 뒤에도 안내된다", async ({ page }) => {
+    const errors = captureUnexpectedErrors(page);
+    await mockAuthenticatedWorkspace(page);
+    const cases = [
+      ["github_collision", "이 GitHub 계정은 이미 다른 Study-ing 계정에 연결되어 있습니다."],
+      ["github_account_exists", "이미 다른 GitHub 계정이 연결되어 있습니다."],
+      ["github_expired", "GitHub 계정 연결 요청이 만료되었습니다."],
+      ["github_failed", "GitHub 계정을 연결하지 못했어요."],
+      ["github_cancelled", "GitHub 계정 연결이 취소되었습니다."],
+    ] as const;
+
+    for (const [result, message] of cases) {
+      await page.goto(`/settings/accounts?providerLink=${result}`);
+      const notice = page.locator(".provider-link-result");
+      await expect(notice).toContainText(message);
+      await page.waitForTimeout(500);
+      await expect(notice).toContainText(message);
+      await expect(page).toHaveURL(/\/settings\/accounts$/);
+    }
+    expect(errors).toEqual([]);
+  });
+
+  test("GitHub와 GitLab 로그인 callback 오류는 첫 Login 렌더에서 안내된다", async ({ page }) => {
+    const errors = captureUnexpectedErrors(page);
+    await page.route("**/api/v1/auth/me", (route) => route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ authenticated: false }),
+    }));
+    await page.route("**/api/v1/capabilities", (route) => route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        authProviders: ["GITLAB", "GITHUB"],
+        accountLinkProviders: ["GITLAB", "GITHUB"],
+        repositoryProviders: ["GITLAB"],
+        features: { workspaceDiscovery: true },
+      }),
+    }));
+
+    for (const provider of ["GITLAB", "GITHUB"] as const) {
+      for (const [error, expected] of [
+        ["access_denied", `${provider === "GITHUB" ? "GitHub" : "GitLab"} 로그인이 취소되었습니다.`],
+        ["session_expired", "로그인이 만료되었습니다."],
+        ["oauth_failed", `${provider === "GITHUB" ? "GitHub" : "GitLab"}로 로그인하지 못했습니다.`],
+      ] as const) {
+        await page.goto(`/login?provider=${provider}&oauthError=${error}`);
+        await expect(page.locator(".auth-notice")).toContainText(expected);
+        await expect(page.getByRole("link", { name: new RegExp(`${provider === "GITHUB" ? "GitHub" : "GitLab"}로 계속하기`) })).toBeVisible();
+      }
+    }
+    expect(errors).toEqual([]);
+  });
 
   test("공통 Motion은 route와 overlay의 open/close 상태를 설명한다", async ({ page }) => {
     const errors = captureUnexpectedErrors(page);
