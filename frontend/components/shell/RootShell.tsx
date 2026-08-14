@@ -5,7 +5,7 @@ import type { ReactNode } from "react";
 import { AuthProvider } from "@/components/providers/AuthProvider";
 import { WorkspaceProvider } from "@/components/providers/WorkspaceProvider";
 import { AppShell } from "@/components/shell/AppShell";
-import { GitLabConnectionProvider } from "@/lib/api/hooks/useGitLabConnection";
+import { RepositoryConnectionProvider } from "@/lib/api/hooks/useRepositoryConnection";
 
 const publicRoutes = new Set(["/", "/login", "/demo", "/auth/callback", "/terms", "/privacy"]);
 const protectedPrefixes = [
@@ -33,9 +33,9 @@ export function RootShell({ children }: { children: ReactNode }) {
   return (
     <AuthProvider>
       <WorkspaceProvider>
-        <GitLabConnectionProvider>
+        <RepositoryConnectionProvider>
           <AppShell>{children}</AppShell>
-        </GitLabConnectionProvider>
+        </RepositoryConnectionProvider>
       </WorkspaceProvider>
     </AuthProvider>
   );

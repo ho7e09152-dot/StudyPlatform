@@ -20,17 +20,16 @@ This phase links a GitHub identity to an already authenticated Study-ing user. I
 
 Callback query parameters never contain a Study-ing user id or ProviderAccount id. The authenticated session is the only owner input.
 
-## OAuth and scope
+## GitHub App user authorization and permissions
 
-This implementation uses a GitHub OAuth App authorization-code flow with `state` and PKCE S256. It requests no OAuth scope because GitHub documents that no scope is sufficient for read-only public identity. Email and repository data are neither requested nor stored. GitHub also documents that an OAuth App needs the broad `repo` scope for private repository contents.
+This implementation uses the GitHub App web application flow with `state` and PKCE S256. GitHub App user access tokens use the app's fine-grained permissions rather than classic OAuth scopes. Email and repository data are neither requested nor stored in this phase. The Client ID and Client Secret are still required for user authorization even though the registered integration is a GitHub App.
 
 Official references:
 
-- OAuth web flow, state, PKCE and identity revalidation: <https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps>
-- OAuth scopes: <https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/scopes-for-oauth-apps>
-- GitHub App versus OAuth App: <https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/differences-between-github-apps-and-oauth-apps>
+- GitHub App user access-token web flow: <https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app/generating-a-user-access-token-for-a-github-app>
+- GitHub App authentication overview: <https://docs.github.com/en/apps/creating-github-apps/authenticating-with-a-github-app>
 
-Before repository integration, prefer evaluating a GitHub App. GitHub recommends GitHub Apps in general because permissions are fine-grained, repository selection is explicit and tokens can be short-lived. This account-link phase does not request `repo` preemptively.
+App JWT and installation-token handling are separate from this user flow. See [GitHub App configuration](github-app-configuration.md).
 
 ## State and CSRF protection
 
@@ -49,14 +48,14 @@ The unique identity is `(GITHUB, externalUserId)`. Email, username and display n
 
 ## Credential lifecycle
 
-The credential belongs to ProviderAccount, is encrypted by the existing `TokenCipher`, and may have no expiry/refresh token because GitHub OAuth App tokens are non-expiring by default. Reauthorization replaces ciphertext in the existing row. Study-ing account deletion cascades through all ProviderAccounts and credentials.
+The user access credential belongs to ProviderAccount and is encrypted by the existing `TokenCipher`. GitHub App user tokens expire by default and can include a refresh token; Study-ing stores the returned access expiry and refresh token when present. Reauthorization replaces ciphertext in the existing row. Study-ing account deletion cascades through all ProviderAccounts and credentials.
 
 Provider disconnect is intentionally not exposed in this phase. The schema supports it, but a future implementation must define Workspace dependency checks, remote token revocation and reconnect behavior.
 
 ## Capability rollout
 
-- No GitHub config: `accountLinkProviders = [GITLAB]`; GitHub UI is absent.
-- Configured and tested GitHub OAuth: `accountLinkProviders = [GITLAB, GITHUB]`.
+- Feature disabled or user authorization config incomplete: `accountLinkProviders = [GITLAB]`; GitHub UI is absent.
+- `GITHUB_ACCOUNT_LINKING_ENABLED=true` plus complete Client ID/Secret/redirect: `accountLinkProviders = [GITLAB, GITHUB]`.
 - Always in this phase: `authProviders = [GITLAB]`, `repositoryProviders = [GITLAB]`.
 
 Thus a connected GitHub account cannot affect the current GitLab Workspace, Sidebar provider status or Login provider list.

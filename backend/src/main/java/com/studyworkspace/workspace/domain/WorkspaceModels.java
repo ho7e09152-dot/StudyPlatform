@@ -230,7 +230,9 @@ public final class WorkspaceModels {
 		String expectedTreeFingerprint,
 		String ownerRepositoryFileName,
 		String repositoryWebUrl,
-		String repositoryVisibility
+		String repositoryVisibility,
+		String provider,
+		String externalRepositoryId
 	) {
 		public CreateWorkspaceRequest(
 			String name, long gitlabProjectId, String gitlabProjectPath, String defaultBranch, String timezone,
@@ -238,13 +240,24 @@ public final class WorkspaceModels {
 			String expectedTreeFingerprint, String ownerRepositoryFileName
 		) {
 			this(name, gitlabProjectId, gitlabProjectPath, defaultBranch, timezone, repositoryBasePath,
-				repositorySchemaVersion, importMode, expectedTreeFingerprint, ownerRepositoryFileName, null, null);
+				repositorySchemaVersion, importMode, expectedTreeFingerprint, ownerRepositoryFileName, null, null, null, null);
+		}
+
+		public CreateWorkspaceRequest(
+			String name, long gitlabProjectId, String gitlabProjectPath, String defaultBranch, String timezone,
+			String repositoryBasePath, Integer repositorySchemaVersion, String importMode,
+			String expectedTreeFingerprint, String ownerRepositoryFileName, String repositoryWebUrl,
+			String repositoryVisibility
+		) {
+			this(name, gitlabProjectId, gitlabProjectPath, defaultBranch, timezone, repositoryBasePath,
+				repositorySchemaVersion, importMode, expectedTreeFingerprint, ownerRepositoryFileName,
+				repositoryWebUrl, repositoryVisibility, null, null);
 		}
 
 		public CreateWorkspaceRequest(
 			String name, long gitlabProjectId, String gitlabProjectPath, String defaultBranch, String timezone
 		) {
-			this(name, gitlabProjectId, gitlabProjectPath, defaultBranch, timezone, "", 1, "COMPATIBLE", null, null, null, null);
+			this(name, gitlabProjectId, gitlabProjectPath, defaultBranch, timezone, "", 1, "COMPATIBLE", null, null, null, null, null, null);
 		}
 	}
 

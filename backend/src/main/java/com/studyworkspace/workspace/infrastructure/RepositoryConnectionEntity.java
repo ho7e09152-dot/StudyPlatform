@@ -36,6 +36,18 @@ public class RepositoryConnectionEntity {
 	@Column(name = "default_branch")
 	private String defaultBranch;
 
+	@Column(name = "can_read", nullable = false)
+	private boolean canRead;
+
+	@Column(name = "can_write", nullable = false)
+	private boolean canWrite;
+
+	@Column(name = "can_manage", nullable = false)
+	private boolean canManage;
+
+	@Column(name = "provider_permission", length = 64)
+	private String providerPermission;
+
 	@Column(name = "created_at", nullable = false)
 	private Instant createdAt;
 
@@ -54,6 +66,10 @@ public class RepositoryConnectionEntity {
 		entity.webUrl = repository.webUrl();
 		entity.visibility = repository.visibility();
 		entity.defaultBranch = repository.defaultBranch();
+		entity.canRead = repository.canRead();
+		entity.canWrite = repository.canWrite();
+		entity.canManage = repository.canManage();
+		entity.providerPermission = repository.providerPermission();
 		entity.createdAt = previous == null ? Instant.now() : previous.createdAt;
 		entity.updatedAt = Instant.now();
 		return entity;
@@ -64,6 +80,6 @@ public class RepositoryConnectionEntity {
 	public String externalRepositoryId() { return externalRepositoryId; }
 	public RepositoryIdentity toIdentity() {
 		return new RepositoryIdentity(provider, externalRepositoryId, fullName, webUrl, visibility,
-			defaultBranch, true, true, false, null);
+			defaultBranch, canRead, canWrite, canManage, providerPermission);
 	}
 }

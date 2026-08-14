@@ -5,10 +5,10 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
-import com.studyworkspace.common.exception.GitLabApiException;
-import com.studyworkspace.gitlab.dto.GitLabFileContent;
-import com.studyworkspace.gitlab.dto.GitLabTreeItem;
+import com.studyworkspace.common.exception.RepositoryProviderException;
 import com.studyworkspace.gitlab.service.GitLabOAuthProjectService;
+import com.studyworkspace.gitlab.service.GitLabRepositoryDataAdapter;
+import com.studyworkspace.workspace.port.RepositoryDataPort;
 import com.studyworkspace.workspace.domain.WorkspaceException;
 import com.studyworkspace.workspace.domain.WorkspaceModels.StudySession;
 import com.studyworkspace.workspace.domain.WorkspaceModels.StudyMember;
@@ -18,57 +18,63 @@ import com.studyworkspace.workspace.domain.WorkspaceModels.WorkspaceState;
 import com.studyworkspace.workspace.dto.WorkspaceSyncResponse;
 import com.studyworkspace.workspace.dto.WorkspaceSyncResponse.SyncFailure;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Service
 public class GitLabSessionSyncService {
-	private final GitLabOAuthProjectService gitLab;
+	private final RepositoryDataService repositories;
 	private final SessionYamlParser parser;
 	private final WorkspaceService workspaces;
 	private final SubmissionMarkdownCodec submissionCodec;
 
+	@Autowired
 	public GitLabSessionSyncService(
-		GitLabOAuthProjectService gitLab,
+		RepositoryDataService repositories,
 		SessionYamlParser parser,
 		WorkspaceService workspaces,
 		SubmissionMarkdownCodec submissionCodec
 	) {
-		this.gitLab = gitLab;
+		this.repositories = repositories;
 		this.parser = parser;
 		this.workspaces = workspaces;
 		this.submissionCodec = submissionCodec;
 	}
 
+	public GitLabSessionSyncService(GitLabOAuthProjectService gitLab, SessionYamlParser parser,
+		WorkspaceService workspaces, SubmissionMarkdownCodec submissionCodec) {
+		this(new RepositoryDataService(List.of(new GitLabRepositoryDataAdapter(gitLab))), parser, workspaces, submissionCodec);
+	}
+
 	public WorkspaceSyncResponse sync(String accessToken, String workspaceId) {
 		WorkspaceState current = workspaces.get(workspaceId);
-		List<GitLabTreeItem> tree = gitLab.getAllRepositoryTree(
-			accessToken, current.gitlabProjectId(), current.defaultBranch()
-		);
+		RepositoryDataPort repository = repositories.require(current.repository());
+		List<RepositoryDataPort.TreeEntry> tree = repository.listTree(accessToken, current.repository());
 		Map<String, StudySession> imported = new LinkedHashMap<>();
 		Map<String, String> failedDates = new LinkedHashMap<>();
 		List<SyncFailure> failures = new java.util.ArrayList<>();
 		int validSessionCount = 0;
 		int schemaVersion = WorkspaceRepositoryLayout.schemaVersion(current.repositorySchemaVersion());
 
-		for (GitLabTreeItem item : tree) {
+		for (RepositoryDataPort.TreeEntry item : tree) {
 			String relativePath = WorkspaceRepositoryPath.relative(current.repositoryBasePath(), item.path());
 			if (!"blob".equals(item.type())) continue;
 			var location = WorkspaceRepositoryLayout.matchSession(relativePath, schemaVersion).orElse(null);
 			if (location == null) continue;
 			String date = location.date();
 			try {
-				GitLabFileContent file = gitLab.getRepositoryFile(
-					accessToken, current.gitlabProjectId(), item.path(), current.defaultBranch()
+				RepositoryDataPort.RepositoryFile file = repository.getFile(
+					accessToken, current.repository(), item.path(), current.defaultBranch()
 				);
-				StudySession session = parser.parse(relativePath, file.content(), file.lastCommitId());
+				StudySession session = parser.parse(relativePath, file.content(), file.version());
 				imported.put(session.date(), session);
 				validSessionCount++;
 			} catch (WorkspaceException exception) {
 				failedDates.put(date, item.path());
 				failures.add(new SyncFailure(item.path(), exception.code(), exception.getMessage()));
-			} catch (GitLabApiException exception) {
+			} catch (RepositoryProviderException exception) {
 				if (exception.upstreamStatus() != 404) throw exception;
 				failedDates.put(date, item.path());
-				failures.add(new SyncFailure(item.path(), "GITLAB_SESSION_FILE_NOT_FOUND", "목록에 있던 일정 파일을 다시 찾지 못했습니다."));
+				failures.add(new SyncFailure(item.path(), "REPOSITORY_SESSION_FILE_NOT_FOUND", "목록에 있던 일정 파일을 다시 찾지 못했습니다."));
 			}
 		}
 
@@ -83,7 +89,7 @@ public class GitLabSessionSyncService {
 		Map<String, MemberSubmissionFile> importedSubmissions = new LinkedHashMap<>();
 		Set<String> failedSubmissionKeys = new java.util.HashSet<>();
 		int validSubmissionCount = 0;
-		for (GitLabTreeItem item : tree) {
+		for (RepositoryDataPort.TreeEntry item : tree) {
 			String relativePath = WorkspaceRepositoryPath.relative(current.repositoryBasePath(), item.path());
 			if (!"blob".equals(item.type())) continue;
 			var location = WorkspaceRepositoryLayout.matchSubmission(relativePath, schemaVersion).orElse(null);
@@ -97,20 +103,20 @@ public class GitLabSessionSyncService {
 			}
 			String key = session.folder() + "/" + member.id();
 			try {
-				GitLabFileContent file = gitLab.getRepositoryFile(
-					accessToken, current.gitlabProjectId(), item.path(), current.defaultBranch()
+				RepositoryDataPort.RepositoryFile file = repository.getFile(
+					accessToken, current.repository(), item.path(), current.defaultBranch()
 				);
-				MemberSubmissionFile submission = submissionCodec.decode(file.content(), file.lastCommitId());
+				MemberSubmissionFile submission = submissionCodec.decode(file.content(), file.version());
 				validateSubmissionFile(submission, session, member);
 				importedSubmissions.put(key, submission);
 				validSubmissionCount++;
 			} catch (WorkspaceException exception) {
 				failedSubmissionKeys.add(key);
 				failures.add(new SyncFailure(item.path(), exception.code(), exception.getMessage()));
-			} catch (GitLabApiException exception) {
+			} catch (RepositoryProviderException exception) {
 				if (exception.upstreamStatus() != 404) throw exception;
 				failedSubmissionKeys.add(key);
-				failures.add(new SyncFailure(item.path(), "GITLAB_SUBMISSION_FILE_NOT_FOUND", "목록에 있던 제출 파일을 다시 찾지 못했습니다."));
+				failures.add(new SyncFailure(item.path(), "REPOSITORY_SUBMISSION_FILE_NOT_FOUND", "목록에 있던 제출 파일을 다시 찾지 못했습니다."));
 			}
 		}
 		for (String failedKey : failedSubmissionKeys) {

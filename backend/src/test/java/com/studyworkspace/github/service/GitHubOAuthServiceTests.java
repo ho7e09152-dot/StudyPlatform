@@ -11,7 +11,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
-import com.studyworkspace.github.config.GitHubOAuthProperties;
+import com.studyworkspace.github.config.GitHubAppProperties;
 import com.studyworkspace.workspace.domain.RepositoryProvider;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
@@ -27,9 +27,11 @@ class GitHubOAuthServiceTests {
 
 	@Test
 	void authorizationUrlUsesStatePkceAndMinimumIdentityScope() {
-		GitHubOAuthProperties properties = new GitHubOAuthProperties(
-			"client-id", "client-secret", "https://study-ing.example/api/v1/provider-accounts/github/callback",
-			"", "https://github.com", "https://api.github.com", Duration.ofSeconds(10), Duration.ofMinutes(10)
+		GitHubAppProperties properties = new GitHubAppProperties(
+			"", "study-ing", "client-id", "client-secret",
+			"https://study-ing.example/api/v1/provider-accounts/github/callback", "",
+			new GitHubAppProperties.Features(true, false, false),
+			"https://github.com", "https://api.github.com", Duration.ofSeconds(10), Duration.ofMinutes(10)
 		);
 		GitHubOAuthService service = new GitHubOAuthService(WebClient.builder(), properties);
 		String verifier = service.createCodeVerifier();
@@ -50,7 +52,7 @@ class GitHubOAuthServiceTests {
 		server.createContext("/login/oauth/access_token", exchange -> {
 			tokenRequestBody.set(new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8));
 			respondJson(exchange, """
-				{"access_token":"github-token","token_type":"bearer","scope":"read:user"}
+				{"access_token":"github-token","token_type":"bearer","scope":""}
 				""");
 		});
 		server.createContext("/user", exchange -> {
@@ -62,9 +64,11 @@ class GitHubOAuthServiceTests {
 		server.start();
 
 		String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort();
-		GitHubOAuthProperties properties = new GitHubOAuthProperties(
-			"client-id", "client-secret", "https://study-ing.example/api/v1/provider-accounts/github/callback",
-			"read:user", baseUrl, baseUrl, Duration.ofSeconds(5), Duration.ofMinutes(10)
+		GitHubAppProperties properties = new GitHubAppProperties(
+			"", "study-ing", "client-id", "client-secret",
+			"https://study-ing.example/api/v1/provider-accounts/github/callback", "",
+			new GitHubAppProperties.Features(true, false, false),
+			baseUrl, baseUrl, Duration.ofSeconds(5), Duration.ofMinutes(10)
 		);
 		GitHubAccountLinkProof proof = new GitHubOAuthService(WebClient.builder(), properties)
 			.exchangeAndLoadIdentity("authorization-code", "pkce-verifier");
@@ -82,7 +86,7 @@ class GitHubOAuthServiceTests {
 		assertThat(proof.identity().username()).isEqualTo("octocat");
 		assertThat(proof.identity().displayName()).isEqualTo("The Octocat");
 		assertThat(proof.credential().accessToken()).isEqualTo("github-token");
-		assertThat(proof.credential().scope()).isEqualTo("read:user");
+		assertThat(proof.credential().scope()).isEmpty();
 		assertThat(proof.credential().expiresAt()).isNull();
 		assertThat(proof.toString()).doesNotContain("github-token", "client-secret");
 	}

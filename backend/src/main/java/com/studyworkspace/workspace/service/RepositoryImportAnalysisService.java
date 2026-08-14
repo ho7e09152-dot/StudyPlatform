@@ -8,39 +8,55 @@ import java.util.HexFormat;
 import java.util.List;
 import java.util.regex.Pattern;
 
-import com.studyworkspace.gitlab.dto.GitLabFileContent;
-import com.studyworkspace.gitlab.dto.GitLabProject;
 import com.studyworkspace.gitlab.dto.GitLabTreeItem;
 import com.studyworkspace.gitlab.service.GitLabOAuthProjectService;
+import com.studyworkspace.gitlab.service.GitLabRepositoryDataAdapter;
+import com.studyworkspace.workspace.domain.RepositoryProvider;
+import com.studyworkspace.workspace.domain.WorkspaceModels.RepositoryIdentity;
+import com.studyworkspace.workspace.dto.RepositorySummary;
+import com.studyworkspace.workspace.port.RepositoryDataPort;
 import com.studyworkspace.workspace.domain.WorkspaceException;
 import com.studyworkspace.workspace.dto.RepositoryImportAnalysis;
 import com.studyworkspace.workspace.dto.RepositoryImportAnalysis.ImportIssue;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Service
 public class RepositoryImportAnalysisService {
 	private static final Pattern CONFIG_SCHEMA = Pattern.compile("(?m)^repositorySchemaVersion:\\s*(\\d+)\\s*$");
 	private static final int MAX_ANALYZED_SESSION_FILES = 500;
 
-	private final GitLabOAuthProjectService gitLab;
+	private final RepositoryDataService repositories;
 	private final SessionYamlParser parser;
 
-	public RepositoryImportAnalysisService(GitLabOAuthProjectService gitLab, SessionYamlParser parser) {
-		this.gitLab = gitLab;
+	@Autowired
+	public RepositoryImportAnalysisService(RepositoryDataService repositories, SessionYamlParser parser) {
+		this.repositories = repositories;
 		this.parser = parser;
 	}
 
-	public RepositoryImportAnalysis analyze(String accessToken, long projectId) {
-		GitLabProject project = gitLab.getProject(accessToken, projectId);
-		String branch = project.defaultBranch() == null || project.defaultBranch().isBlank() ? "main" : project.defaultBranch();
-		List<GitLabTreeItem> tree = project.defaultBranch() == null || project.defaultBranch().isBlank()
-			? List.of()
-			: gitLab.getAllRepositoryTree(accessToken, project.id(), branch);
-		return analyze(accessToken, project, branch, tree);
+	/** Test/backward-compatible GitLab constructor. */
+	public RepositoryImportAnalysisService(GitLabOAuthProjectService gitLab, SessionYamlParser parser) {
+		this(new RepositoryDataService(List.of(new GitLabRepositoryDataAdapter(gitLab))), parser);
 	}
 
-	private RepositoryImportAnalysis analyze(String accessToken, GitLabProject project, String branch, List<GitLabTreeItem> tree) {
-		List<GitLabTreeItem> files = tree.stream().filter(item -> "blob".equals(item.type())).toList();
+	public RepositoryImportAnalysis analyze(String accessToken, long projectId) {
+		return analyze(accessToken, RepositoryProvider.GITLAB, Long.toString(projectId));
+	}
+
+	public RepositoryImportAnalysis analyze(String accessToken, RepositoryProvider provider, String externalRepositoryId) {
+		RepositoryDataPort port = repositories.require(provider);
+		RepositorySummary project = port.getRepository(accessToken, externalRepositoryId);
+		String branch = project.defaultBranch() == null || project.defaultBranch().isBlank() ? "main" : project.defaultBranch();
+		RepositoryIdentity identity = identity(project, branch);
+		List<RepositoryDataPort.TreeEntry> tree = project.defaultBranch() == null || project.defaultBranch().isBlank()
+			? List.of() : port.listTree(accessToken, identity);
+		return analyze(accessToken, port, project, identity, branch, tree);
+	}
+
+	private RepositoryImportAnalysis analyze(String accessToken, RepositoryDataPort port, RepositorySummary project,
+		RepositoryIdentity identity, String branch, List<RepositoryDataPort.TreeEntry> tree) {
+		List<RepositoryDataPort.TreeEntry> files = tree.stream().filter(item -> "blob".equals(item.type())).toList();
 		boolean rootV1 = files.stream().anyMatch(item ->
 			WorkspaceRepositoryLayout.isSessionPath(item.path(), WorkspaceRepositoryLayout.LEGACY_SCHEMA_VERSION)
 		);
@@ -60,7 +76,7 @@ public class RepositoryImportAnalysisService {
 		Integer markerSchemaVersion = null;
 		if (hasWorkspaceMarker) {
 			try {
-				GitLabFileContent marker = gitLab.getRepositoryFile(accessToken, project.id(), WorkspaceRepositoryLayout.CONFIG_PATH, branch);
+				RepositoryDataPort.RepositoryFile marker = port.getFile(accessToken, identity, WorkspaceRepositoryLayout.CONFIG_PATH, branch);
 				var matcher = CONFIG_SCHEMA.matcher(marker.content());
 				if (marker.content().startsWith("version: 1\n") && matcher.find()) {
 					int parsed = Integer.parseInt(matcher.group(1));
@@ -95,7 +111,7 @@ public class RepositoryImportAnalysisService {
 			issues.add(new ImportIssue(WorkspaceRepositoryLayout.CONFIG_PATH, "SCHEMA_MARKER_MISMATCH", "설정 파일의 스키마 버전과 실제 파일 경로가 다릅니다."));
 		}
 
-		List<GitLabTreeItem> candidates = files.stream().filter(item -> {
+		List<RepositoryDataPort.TreeEntry> candidates = files.stream().filter(item -> {
 			String relative = WorkspaceRepositoryPath.relative(basePath, item.path());
 			return WorkspaceRepositoryLayout.isSessionPath(relative, schemaVersion);
 		}).toList();
@@ -104,10 +120,10 @@ public class RepositoryImportAnalysisService {
 		}
 
 		int validSessions = 0;
-		for (GitLabTreeItem item : candidates) {
+		for (RepositoryDataPort.TreeEntry item : candidates) {
 			try {
-				GitLabFileContent file = gitLab.getRepositoryFile(accessToken, project.id(), item.path(), branch);
-				parser.parse(WorkspaceRepositoryPath.relative(basePath, item.path()), file.content(), file.lastCommitId());
+				RepositoryDataPort.RepositoryFile file = port.getFile(accessToken, identity, item.path(), branch);
+				parser.parse(WorkspaceRepositoryPath.relative(basePath, item.path()), file.content(), file.version());
 				validSessions++;
 			} catch (RuntimeException exception) {
 				String message = exception instanceof WorkspaceException workspaceException
@@ -138,15 +154,20 @@ public class RepositoryImportAnalysisService {
 		else classification = "LEGACY";
 		int recognized = validSessions + validSubmissions + (validWorkspaceMarker ? 1 : 0);
 		return new RepositoryImportAnalysis(
-			project.id(), project.pathWithNamespace(), branch, classification, basePath, schemaVersion, fingerprint(files),
+			Long.parseLong(project.externalId()), project.fullName(), branch, classification, basePath, schemaVersion, fingerprint(files),
 			files.size(), validSessions, validSubmissions, Math.max(0, files.size() - recognized), List.copyOf(issues)
 		);
 	}
 
-	static String fingerprint(List<GitLabTreeItem> files) {
+	static String fingerprint(List<? extends Object> rawFiles) {
+		List<RepositoryDataPort.TreeEntry> files = rawFiles.stream().map(item -> {
+			if (item instanceof RepositoryDataPort.TreeEntry entry) return entry;
+			GitLabTreeItem legacy = (GitLabTreeItem) item;
+			return new RepositoryDataPort.TreeEntry(legacy.id(), legacy.name(), legacy.type(), legacy.path(), legacy.mode());
+		}).toList();
 		try {
 			MessageDigest digest = MessageDigest.getInstance("SHA-256");
-			files.stream().sorted(Comparator.comparing(GitLabTreeItem::path)).forEach(item -> {
+			files.stream().sorted(Comparator.comparing(RepositoryDataPort.TreeEntry::path)).forEach(item -> {
 				digest.update(item.path().getBytes(StandardCharsets.UTF_8));
 				digest.update((byte) 0);
 				digest.update((item.id() == null ? "" : item.id()).getBytes(StandardCharsets.UTF_8));
@@ -156,5 +177,11 @@ public class RepositoryImportAnalysisService {
 		} catch (java.security.NoSuchAlgorithmException exception) {
 			throw new IllegalStateException(exception);
 		}
+	}
+
+	private static RepositoryIdentity identity(RepositorySummary project, String branch) {
+		return new RepositoryIdentity(project.provider().name(), project.externalId(), project.fullName(), project.webUrl(),
+			project.visibility(), branch, project.capabilities().canRead(), project.capabilities().canWrite(),
+			project.capabilities().canManage(), project.providerPermission());
 	}
 }

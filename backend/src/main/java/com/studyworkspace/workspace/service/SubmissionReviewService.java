@@ -3,9 +3,9 @@ package com.studyworkspace.workspace.service;
 import java.util.List;
 import java.util.Objects;
 
-import com.studyworkspace.gitlab.dto.GitLabCommitComment;
-import com.studyworkspace.gitlab.dto.GitLabUser;
 import com.studyworkspace.gitlab.service.GitLabOAuthProjectService;
+import com.studyworkspace.gitlab.service.GitLabRepositoryDataAdapter;
+import com.studyworkspace.workspace.port.RepositoryDataPort;
 import com.studyworkspace.workspace.domain.WorkspaceException;
 import com.studyworkspace.workspace.domain.WorkspaceModels.MemberSubmissionFile;
 import com.studyworkspace.workspace.domain.WorkspaceModels.StudyMember;
@@ -15,15 +15,21 @@ import com.studyworkspace.workspace.dto.SubmissionReviewThread;
 import com.studyworkspace.workspace.dto.SubmissionReviewThread.ReviewComment;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Service
 public class SubmissionReviewService {
 	private static final int MAX_REVIEW_LENGTH = 4_000;
 
-	private final GitLabOAuthProjectService gitLab;
+	private final RepositoryDataService repositories;
+
+	@Autowired
+	public SubmissionReviewService(RepositoryDataService repositories) {
+		this.repositories = repositories;
+	}
 
 	public SubmissionReviewService(GitLabOAuthProjectService gitLab) {
-		this.gitLab = gitLab;
+		this(new RepositoryDataService(List.of(new GitLabRepositoryDataAdapter(gitLab))));
 	}
 
 	public SubmissionReviewThread list(
@@ -33,8 +39,8 @@ public class SubmissionReviewService {
 		String memberId
 	) {
 		ReviewTarget target = requireTarget(workspace, date, memberId);
-		List<ReviewComment> comments = gitLab.getCommitComments(
-			accessToken, workspace.gitlabProjectId(), target.submission().lastCommitId()
+		List<ReviewComment> comments = repositories.require(workspace.repository()).listCommitComments(
+			accessToken, workspace.repository(), target.submission().lastCommitId()
 		).stream().map(SubmissionReviewService::toReviewComment).toList();
 		return thread(target, comments);
 	}
@@ -54,8 +60,8 @@ public class SubmissionReviewService {
 		if (normalized.length() > MAX_REVIEW_LENGTH) {
 			throw new WorkspaceException("REVIEW_BODY_TOO_LONG", "리뷰 댓글은 4,000자 이하로 입력해 주세요.", 400);
 		}
-		gitLab.createCommitComment(
-			accessToken, workspace.gitlabProjectId(), target.submission().lastCommitId(), normalized
+		repositories.require(workspace.repository()).createCommitComment(
+			accessToken, workspace.repository(), target.submission().lastCommitId(), normalized
 		);
 		return list(accessToken, workspace, date, memberId);
 	}
@@ -91,15 +97,14 @@ public class SubmissionReviewService {
 		);
 	}
 
-	private static ReviewComment toReviewComment(GitLabCommitComment comment) {
-		GitLabUser author = comment.author() == null
-			? new GitLabUser(0, "unknown", "알 수 없는 사용자", null, null)
-			: comment.author();
-		String body = Objects.toString(comment.note(), "");
+	private static ReviewComment toReviewComment(RepositoryDataPort.CommitComment comment) {
+		String body = Objects.toString(comment.body(), "");
 		String createdAt = Objects.toString(comment.createdAt(), "");
-		String id = author.id() + "-" + Integer.toUnsignedString(Objects.hash(createdAt, body), 36);
+		long authorId;
+		try { authorId = Long.parseLong(comment.authorExternalId()); }
+		catch (NumberFormatException exception) { authorId = 0; }
 		return new ReviewComment(
-			id, body, author.id(), author.username(), author.name(), author.avatarUrl(), createdAt
+			comment.id(), body, authorId, comment.authorUsername(), comment.authorName(), comment.authorAvatarUrl(), createdAt
 		);
 	}
 

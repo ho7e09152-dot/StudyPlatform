@@ -10,7 +10,7 @@
 
 The backend callback URL must exactly match `GITLAB_OAUTH_REDIRECT_URI`. `FRONTEND_ORIGINS` must contain only the public frontend origin and no wildcard.
 
-If GitHub Connected Account linking is enabled, register the exact `GITHUB_OAUTH_REDIRECT_URI`. This capability does not enable GitHub login or GitHub Repository Workspace support.
+If GitHub Connected Account linking is enabled, register the exact `GITHUB_REDIRECT_URI` as the GitHub App user authorization callback. This capability does not enable GitHub login or GitHub Repository Workspace support. App authentication additionally uses `GITHUB_APP_ID` and a read-only PEM mount; see [GitHub App configuration](../architecture/providers/github-app-configuration.md).
 
 ## Start and migrate
 
@@ -53,6 +53,16 @@ The repository includes `compose.sandbox.yml`. The public gateway is the only se
 docker compose --env-file .env.sandbox -f compose.sandbox.yml up -d --build
 docker compose --env-file .env.sandbox -f compose.sandbox.yml ps
 ```
+
+When App/installation authentication is enabled, mount the PEM with the optional override instead of copying it into the repository or image:
+
+```bash
+GITHUB_PRIVATE_KEY_HOST_PATH=/absolute/host/path/github-app.pem \
+docker compose --env-file .env.sandbox \
+  -f compose.sandbox.yml -f compose.github-app.yml up -d --build
+```
+
+Set `GITHUB_PRIVATE_KEY_PATH=/run/secrets/study-ing-github-app.pem` inside `backend/.env`. Account linking alone does not require the PEM mount while `GITHUB_REPOSITORY_ENABLED=false`. Enabling the repository flag also requires the GitHub App Setup URL and Contents read/write permission described in the [GitHub repository adapter](../architecture/providers/github-repository-adapter.md).
 
 The default Nginx Proxy Manager upstream is `study-platform-gateway:8080`. Confirm the actual public host, TLS and outer proxy logging policy in the launch checklist.
 

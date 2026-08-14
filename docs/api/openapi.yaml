@@ -114,6 +114,111 @@ paths:
               schema: { type: string, format: uri }
         "401": { $ref: "#/components/responses/AuthRequired" }
 
+  /github/installations/new:
+    get:
+      tags: [Providers]
+      summary: GitHub App 설치 화면으로 이동
+      operationId: startGitHubInstallation
+      x-implementation-status: implemented
+      responses:
+        "302":
+          description: configured GitHub App installation URL
+          headers:
+            Location: { schema: { type: string, format: uri } }
+        "401": { $ref: "#/components/responses/AuthRequired" }
+        "503": { $ref: "#/components/responses/ProviderError" }
+
+  /github/installations/setup:
+    get:
+      tags: [Providers]
+      summary: GitHub App 설치 ID를 현재 연결 계정으로 재검증
+      operationId: verifyGitHubInstallation
+      x-implementation-status: implemented
+      parameters:
+        - name: installation_id
+          in: query
+          required: true
+          schema: { type: integer, format: int64, minimum: 1 }
+      responses:
+        "302":
+          description: 검증 후 GitHub Repository 선택 화면으로 이동
+          headers:
+            Location: { schema: { type: string, format: uri } }
+        "401": { $ref: "#/components/responses/AuthRequired" }
+        "403": { $ref: "#/components/responses/ProviderAccessDenied" }
+
+  /repositories:
+    get:
+      tags: [Repository]
+      summary: 현재 사용자가 접근 가능한 Provider 저장소 목록
+      operationId: listProviderRepositories
+      x-implementation-status: implemented
+      parameters:
+        - name: provider
+          in: query
+          schema: { $ref: "#/components/schemas/RepositoryProvider" }
+        - name: search
+          in: query
+          schema: { type: string, maxLength: 100 }
+        - name: page
+          in: query
+          schema: { type: integer, minimum: 1, default: 1 }
+        - name: perPage
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        "200":
+          description: normalized repositories
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RepositorySummary" }
+
+  /repositories/{provider}/{externalId}:
+    get:
+      tags: [Repository]
+      summary: Provider 저장소와 현재 사용자 권한 재확인
+      operationId: getProviderRepository
+      x-implementation-status: implemented
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/RepositoryProvider" }
+        - name: externalId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: normalized repository
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RepositorySummary" }
+
+  /repositories/{provider}/{externalId}/import-analysis:
+    get:
+      tags: [Repository]
+      summary: Provider 저장소의 Study-ing 구조 분석
+      operationId: analyzeProviderRepository
+      x-implementation-status: implemented
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/RepositoryProvider" }
+        - name: externalId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: import classification and tree fingerprint
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RepositoryImportAnalysis" }
+
   /auth/gitlab/login:
     get:
       tags: [Auth]
@@ -468,7 +573,7 @@ paths:
           $ref: "#/components/responses/AuthRequired"
     post:
       tags: [Workspaces]
-      summary: GitLab 프로젝트와 Workspace 연결
+      summary: Provider 저장소와 Workspace 연결
       operationId: createWorkspace
       x-implementation-status: implemented-db-cache
       requestBody:
@@ -1696,6 +1801,16 @@ components:
             code: GITLAB_PROJECT_ACCESS_DENIED
             message: GitLab 프로젝트에 접근할 수 없습니다.
             timestamp: "2026-07-25T12:00:00Z"
+    ProviderAccessDenied:
+      description: 현재 사용자의 외부 Provider 저장소 또는 설치 접근 권한 부족
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ApiErrorResponse" }
+    ProviderError:
+      description: 외부 Provider 설정, 인증, 요청 제한 또는 일시 장애
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ApiErrorResponse" }
     NotFound:
       description: Workspace, Session, Item 또는 파일을 찾지 못함
       content:
@@ -1775,6 +1890,44 @@ components:
         avatarUrl: { type: [string, "null"], format: uri }
         webUrl: { type: [string, "null"], format: uri }
         status: { type: string, enum: [CONNECTED] }
+
+    RepositoryCapabilities:
+      type: object
+      required: [canRead, canWrite, canManage]
+      properties:
+        canRead: { type: boolean }
+        canWrite: { type: boolean }
+        canManage: { type: boolean }
+
+    RepositorySummary:
+      type: object
+      required: [provider, externalId, name, fullName, visibility, capabilities, connectionState]
+      properties:
+        provider: { $ref: "#/components/schemas/RepositoryProvider" }
+        externalId: { type: string }
+        name: { type: string }
+        fullName: { type: string }
+        visibility: { type: string, enum: [public, private, internal] }
+        defaultBranch: { type: [string, "null"] }
+        webUrl: { type: [string, "null"], format: uri }
+        capabilities: { $ref: "#/components/schemas/RepositoryCapabilities" }
+        providerPermission: { type: [string, "null"] }
+        connectionState: { type: string, enum: [AVAILABLE] }
+
+    RepositoryIdentity:
+      type: object
+      required: [provider, externalRepositoryId, fullName, defaultBranch, canRead, canWrite, canManage]
+      properties:
+        provider: { $ref: "#/components/schemas/RepositoryProvider" }
+        externalRepositoryId: { type: string }
+        fullName: { type: string }
+        webUrl: { type: [string, "null"], format: uri }
+        visibility: { type: [string, "null"] }
+        defaultBranch: { type: string }
+        canRead: { type: boolean }
+        canWrite: { type: boolean }
+        canManage: { type: boolean }
+        providerPermission: { type: [string, "null"] }
 
     ApiErrorResponse:
       type: object
@@ -2068,6 +2221,9 @@ components:
             gitlabProjectId:
               type: integer
               format: int64
+              deprecated: true
+            repository:
+              $ref: "#/components/schemas/RepositoryIdentity"
             members:
               type: array
               items:
@@ -2116,7 +2272,7 @@ components:
     CreateWorkspaceRequest:
       type: object
       required:
-        [name, gitlabProjectId, repositoryBasePath, repositorySchemaVersion, importMode, expectedTreeFingerprint]
+        [name, provider, externalRepositoryId, repositoryBasePath, repositorySchemaVersion, importMode, expectedTreeFingerprint]
       properties:
         name:
           type: string
@@ -2125,6 +2281,11 @@ components:
         gitlabProjectId:
           type: integer
           format: int64
+          deprecated: true
+        provider:
+          $ref: "#/components/schemas/RepositoryProvider"
+        externalRepositoryId:
+          type: string
         repositoryBasePath:
           type: string
           enum: ["", ".study-workspace"]

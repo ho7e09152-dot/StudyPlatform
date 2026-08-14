@@ -14,7 +14,7 @@ import java.time.Instant;
 import com.studyworkspace.auth.security.AuthSessionAttributes;
 import com.studyworkspace.auth.security.StudyIngPrincipal;
 import com.studyworkspace.auth.service.ProviderAccountLinkingService;
-import com.studyworkspace.github.config.GitHubOAuthProperties;
+import com.studyworkspace.github.config.GitHubAppProperties;
 import com.studyworkspace.github.service.GitHubAccountLinkProof;
 import com.studyworkspace.github.service.GitHubOAuthService;
 import com.studyworkspace.provider.ProviderCapabilities;
@@ -32,7 +32,7 @@ class GitHubAccountLinkControllerTests {
 	private GitHubOAuthService githubOAuth;
 	private ProviderCapabilities capabilities;
 	private ProviderAccountLinkingService linkingService;
-	private GitHubOAuthProperties properties;
+	private GitHubAppProperties properties;
 	private GitHubAccountLinkController controller;
 
 	@BeforeEach
@@ -40,8 +40,9 @@ class GitHubAccountLinkControllerTests {
 		githubOAuth = mock(GitHubOAuthService.class);
 		capabilities = mock(ProviderCapabilities.class);
 		linkingService = mock(ProviderAccountLinkingService.class);
-		properties = new GitHubOAuthProperties(
-			"client", "secret", "http://localhost/callback", "read:user", "https://github.com",
+		properties = new GitHubAppProperties(
+			"", "study-ing", "client", "secret", "http://localhost/callback", "",
+			new GitHubAppProperties.Features(true, false, false), "https://github.com",
 			"https://api.github.com", Duration.ofSeconds(10), Duration.ofMinutes(10)
 		);
 		controller = new GitHubAccountLinkController(

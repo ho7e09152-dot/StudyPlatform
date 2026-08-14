@@ -14,9 +14,12 @@ import java.util.Map;
 import java.util.Set;
 
 import com.studyworkspace.gitlab.dto.GitLabUser;
-import com.studyworkspace.gitlab.dto.GitLabProject;
-import com.studyworkspace.gitlab.service.GitLabOAuthProjectService;
-import com.studyworkspace.auth.dto.GitLabOAuthSession;
+import com.studyworkspace.github.service.GitHubUserTokenProvider;
+import com.studyworkspace.provider.ProviderCapabilities;
+import com.studyworkspace.workspace.domain.RepositoryProvider;
+import com.studyworkspace.workspace.dto.RepositorySummary;
+import com.studyworkspace.workspace.service.RepositoryDataService;
+import com.studyworkspace.workspace.service.RepositoryCredentialResolver;
 import com.studyworkspace.auth.service.GitLabOAuthTokenProvider;
 import com.studyworkspace.auth.service.OAuthAccountService;
 import com.studyworkspace.auth.security.StudyIngPrincipal;
@@ -36,7 +39,7 @@ import com.studyworkspace.workspace.security.WorkspaceRepositoryAccessVerifier;
 import com.studyworkspace.workspace.service.SyncJobService;
 import com.studyworkspace.workspace.service.AuditEventService;
 import com.studyworkspace.workspace.service.InAppNotificationService;
-import com.studyworkspace.common.exception.GitLabApiException;
+import com.studyworkspace.common.exception.RepositoryProviderException;
 import com.studyworkspace.workspace.dto.WorkspaceSyncResponse;
 import com.studyworkspace.workspace.dto.RepositoryImportAnalysis;
 import com.studyworkspace.workspace.dto.RepositorySchemaMigrationPreview;
@@ -71,7 +74,10 @@ public class WorkspaceController {
 
 	private final WorkspaceService service;
 	private final GitLabOAuthTokenProvider tokenProvider;
-	private final GitLabOAuthProjectService projectService;
+	private final GitHubUserTokenProvider githubTokens;
+	private final ProviderCapabilities providerCapabilities;
+	private final RepositoryDataService repositories;
+	private final RepositoryCredentialResolver credentialResolver;
 	private final GitLabSessionFileService sessionFileService;
 	private final GitLabSessionSyncService sessionSyncService;
 	private final GitLabSubmissionFileService submissionFileService;
@@ -93,7 +99,10 @@ public class WorkspaceController {
 	public WorkspaceController(
 		WorkspaceService service,
 		GitLabOAuthTokenProvider tokenProvider,
-		GitLabOAuthProjectService projectService,
+		GitHubUserTokenProvider githubTokens,
+		ProviderCapabilities providerCapabilities,
+		RepositoryDataService repositories,
+		RepositoryCredentialResolver credentialResolver,
 		GitLabSessionFileService sessionFileService,
 		GitLabSessionSyncService sessionSyncService,
 		GitLabSubmissionFileService submissionFileService,
@@ -114,7 +123,10 @@ public class WorkspaceController {
 	) {
 		this.service = service;
 		this.tokenProvider = tokenProvider;
-		this.projectService = projectService;
+		this.githubTokens = githubTokens;
+		this.providerCapabilities = providerCapabilities;
+		this.repositories = repositories;
+		this.credentialResolver = credentialResolver;
 		this.sessionFileService = sessionFileService;
 		this.sessionSyncService = sessionSyncService;
 		this.submissionFileService = submissionFileService;
@@ -142,15 +154,17 @@ public class WorkspaceController {
 		String studyIngUserId = user instanceof StudyIngPrincipal principal ? principal.userId() : null;
 		List<WorkspaceState> joined = service.list(studyIngUserId, user.id());
 		if (joined.isEmpty()) return joined;
-		return repositoryAccessVerifier.verifyAtLogin(
-			joined,
-			tokenProvider.requireValidSession(servletRequest)
-		);
+		return user instanceof StudyIngPrincipal principal
+			? repositoryAccessVerifier.verifyAtLogin(joined, principal, servletRequest)
+			: repositoryAccessVerifier.verifyAtLogin(joined, tokenProvider.requireValidSession(servletRequest));
 	}
 
 	@GetMapping("/discoverable")
-	public List<DiscoverableWorkspace> listDiscoverableWorkspaces(HttpServletRequest servletRequest) {
-		return discoveryService.discover(tokenProvider.requireValidSession(servletRequest));
+	public List<DiscoverableWorkspace> listDiscoverableWorkspaces(
+		@AuthenticationPrincipal StudyIngPrincipal user,
+		HttpServletRequest servletRequest
+	) {
+		return discoveryService.discover(user, servletRequest);
 	}
 
 	@PostMapping("/{workspaceId}/join")
@@ -159,10 +173,7 @@ public class WorkspaceController {
 		@AuthenticationPrincipal StudyIngPrincipal user,
 		HttpServletRequest servletRequest
 	) {
-		WorkspaceJoinResponse result = discoveryService.join(
-			workspaceId,
-			tokenProvider.requireValidSession(servletRequest)
-		);
+		WorkspaceJoinResponse result = discoveryService.join(workspaceId, user, servletRequest);
 		if (result.joined()) {
 			auditEventService.record(workspaceId, user, "WORKSPACE_MEMBER_JOINED", "MEMBER", Long.toString(user.id()), Map.of("role", "MEMBER"));
 		}
@@ -181,19 +192,29 @@ public class WorkspaceController {
 		@AuthenticationPrincipal StudyIngPrincipal user,
 		HttpServletRequest servletRequest
 	) {
-		if (request == null || request.gitlabProjectId() <= 0 || !StringUtils.hasText(request.name())) {
-			throw new WorkspaceException("INVALID_REQUEST", "Workspace 이름과 GitLab 프로젝트가 필요합니다.", 400);
+		RepositoryProvider provider = request == null || !StringUtils.hasText(request.provider())
+			? RepositoryProvider.GITLAB : parseProvider(request.provider());
+		String externalRepositoryId = request == null ? null : StringUtils.hasText(request.externalRepositoryId())
+			? request.externalRepositoryId().trim()
+			: request.gitlabProjectId() > 0 ? Long.toString(request.gitlabProjectId()) : null;
+		if (request == null || !StringUtils.hasText(externalRepositoryId) || !StringUtils.hasText(request.name())) {
+			throw new WorkspaceException("INVALID_REQUEST", "Workspace 이름과 저장소가 필요합니다.", 400);
 		}
-		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
-		GitLabProject project = projectService.getProject(oauth.accessToken(), request.gitlabProjectId());
-		if (project.accessLevel() == null || project.accessLevel() < WorkspaceDiscoveryService.JOIN_MINIMUM_ACCESS_LEVEL) {
-			throw new WorkspaceException("REPOSITORY_WRITE_PERMISSION_REQUIRED", "Workspace 연결과 학습 제출을 위해 GitLab 프로젝트 쓰기 권한이 필요합니다.", 403);
+		if (!providerCapabilities.supportsRepositoryProvider(provider)) {
+			throw new WorkspaceException("REPOSITORY_PROVIDER_UNAVAILABLE", "현재 선택한 저장소 Provider를 사용할 수 없습니다.", 503);
 		}
-		OAuthAccountService.AccountProfile profile = accountService.requireProfile(oauth.user().id());
+		String accessToken = provider == RepositoryProvider.GITLAB
+			? tokenProvider.requireValidSession(servletRequest).accessToken()
+			: githubTokens.requireValidCredential(user.userId()).accessToken();
+		RepositorySummary project = repositories.require(provider).getRepository(accessToken, externalRepositoryId);
+		if (!project.capabilities().canWrite()) {
+			throw new WorkspaceException("REPOSITORY_WRITE_PERMISSION_REQUIRED", "Workspace 연결과 학습 제출을 위해 저장소 쓰기 권한이 필요합니다.", 403);
+		}
+		OAuthAccountService.AccountProfile profile = accountService.requireProfileByUserId(user.userId());
 		if (!profile.profileCompleted()) {
 			throw new WorkspaceException("PROFILE_REQUIRED", "Workspace를 만들기 전에 프로필을 설정해 주세요.", 409);
 		}
-		RepositoryImportAnalysis analysis = importAnalysisService.analyze(oauth.accessToken(), project.id());
+		RepositoryImportAnalysis analysis = importAnalysisService.analyze(accessToken, provider, project.externalId());
 		if (!StringUtils.hasText(request.expectedTreeFingerprint())
 			|| !request.expectedTreeFingerprint().equals(analysis.treeFingerprint())) {
 			throw new WorkspaceException("REPOSITORY_CHANGED", "저장소가 분석 이후 변경되었습니다. 다시 분석해 주세요.", 409);
@@ -203,8 +224,8 @@ public class WorkspaceController {
 		}
 		CreateWorkspaceRequest verified = new CreateWorkspaceRequest(
 			request.name(),
-			project.id(),
-			project.pathWithNamespace(),
+			provider == RepositoryProvider.GITLAB ? Long.parseLong(project.externalId()) : 0,
+			project.fullName(),
 			StringUtils.hasText(project.defaultBranch()) ? project.defaultBranch() : "main",
 			profile.timezone(),
 			analysis.repositoryBasePath(),
@@ -213,16 +234,26 @@ public class WorkspaceController {
 			analysis.treeFingerprint(),
 			profile.repositoryFileName(),
 			project.webUrl(),
-			project.visibility()
+			project.visibility(),
+			provider.name(),
+			project.externalId()
 		);
-		WorkspaceState created = service.create(verified, user, project.accessLevel());
+		int accessLevel = project.capabilities().canManage() ? 40 : 30;
+		RepositoryIdentity identity = new RepositoryIdentity(
+			provider.name(), project.externalId(), project.fullName(), project.webUrl(), project.visibility(),
+			StringUtils.hasText(project.defaultBranch()) ? project.defaultBranch() : "main",
+			project.capabilities().canRead(), project.capabilities().canWrite(), project.capabilities().canManage(),
+			project.providerPermission()
+		);
+		WorkspaceState created = service.create(verified, user, accessLevel, identity);
 		try {
-			repositoryInitializationService.initialize(oauth.accessToken(), created, profile.name());
+			repositoryInitializationService.initialize(accessToken, created, profile.name());
 		} catch (RuntimeException exception) {
 			service.rollbackCreate(created.id());
 			throw exception;
 		}
-		auditEventService.record(created.id(), user, "WORKSPACE_CREATED", "WORKSPACE", created.id(), Map.of("projectPath", created.gitlabProjectPath()));
+		auditEventService.record(created.id(), user, "WORKSPACE_CREATED", "WORKSPACE", created.id(),
+			Map.of("provider", provider.name(), "repository", project.fullName()));
 		return created;
 	}
 
@@ -265,21 +296,24 @@ public class WorkspaceController {
 	}
 
 	@GetMapping("/{workspaceId}/member-candidates")
-	public List<StudyMember> listMemberCandidates(@PathVariable String workspaceId, HttpServletRequest servletRequest) {
-		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
-		return memberService.candidates(oauth.accessToken(), workspaceId);
+	public List<StudyMember> listMemberCandidates(@PathVariable String workspaceId,
+		@AuthenticationPrincipal StudyIngPrincipal user, HttpServletRequest servletRequest) {
+		requireGitLabWorkspace(workspaceId);
+		String accessToken = credentialResolver.resolve(user, service.get(workspaceId), servletRequest).accessToken();
+		return memberService.candidates(accessToken, workspaceId);
 	}
 
 	@PostMapping("/{workspaceId}/members")
 	public WorkspaceState addMember(
 		@PathVariable String workspaceId,
 		@RequestBody StudyMember member,
-		@AuthenticationPrincipal GitLabUser user,
+		@AuthenticationPrincipal StudyIngPrincipal user,
 		HttpServletRequest servletRequest
 	) {
 		accessService.requireManager(workspaceId, user.id(), false);
-		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
-		WorkspaceState updated = memberService.addVerified(oauth.accessToken(), workspaceId, member.gitlabUserId());
+		requireGitLabWorkspace(workspaceId);
+		String accessToken = credentialResolver.resolve(user, service.get(workspaceId), servletRequest).accessToken();
+		WorkspaceState updated = memberService.addVerified(accessToken, workspaceId, member.gitlabUserId());
 		auditEventService.record(workspaceId, user, "MEMBER_ADDED", "MEMBER", Long.toString(member.gitlabUserId()), Map.of());
 		return updated;
 	}
@@ -313,12 +347,13 @@ public class WorkspaceController {
 	@PostMapping("/{workspaceId}/members/sync")
 	public WorkspaceState syncMembers(
 		@PathVariable String workspaceId,
-		@AuthenticationPrincipal GitLabUser user,
+		@AuthenticationPrincipal StudyIngPrincipal user,
 		HttpServletRequest servletRequest
 	) {
 		accessService.requireManager(workspaceId, user.id(), false);
-		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
-		WorkspaceState updated = memberService.sync(oauth.accessToken(), workspaceId);
+		requireGitLabWorkspace(workspaceId);
+		String accessToken = credentialResolver.resolve(user, service.get(workspaceId), servletRequest).accessToken();
+		WorkspaceState updated = memberService.sync(accessToken, workspaceId);
 		auditEventService.record(workspaceId, user, "MEMBERS_SYNCED", "WORKSPACE", workspaceId, Map.of("memberCount", updated.members().size()));
 		return updated;
 	}
@@ -326,14 +361,14 @@ public class WorkspaceController {
 	@PostMapping("/{workspaceId}/sync")
 	public WorkspaceSyncResponse syncWorkspace(
 		@PathVariable String workspaceId,
-		@AuthenticationPrincipal GitLabUser user,
+		@AuthenticationPrincipal StudyIngPrincipal user,
 		HttpServletRequest servletRequest
 	) {
 		accessService.requireManager(workspaceId, user.id(), false);
-		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
+		String accessToken = credentialResolver.resolve(user, service.get(workspaceId), servletRequest).accessToken();
 		String jobId = syncJobService.start(workspaceId, "REPOSITORY_SYNC");
 		try {
-			WorkspaceSyncResponse result = sessionSyncService.sync(oauth.accessToken(), workspaceId);
+			WorkspaceSyncResponse result = sessionSyncService.sync(accessToken, workspaceId);
 			syncJobService.complete(jobId, !result.failures().isEmpty());
 			auditEventService.record(workspaceId, user, result.failures().isEmpty() ? "REPOSITORY_SYNCED" : "REPOSITORY_SYNC_PARTIAL", "SYNC_JOB", jobId, Map.of("failures", result.failures().size()));
 			if (!result.failures().isEmpty()) {
@@ -344,7 +379,7 @@ public class WorkspaceController {
 			syncJobService.fail(jobId, exception.code(), exception.getMessage());
 			recordSyncFailure(workspaceId, user, jobId, exception.code(), exception.getMessage());
 			throw exception;
-		} catch (GitLabApiException exception) {
+		} catch (RepositoryProviderException exception) {
 			syncJobService.fail(jobId, exception.code(), exception.getMessage());
 			recordSyncFailure(workspaceId, user, jobId, exception.code(), exception.getMessage());
 			throw exception;
@@ -358,27 +393,28 @@ public class WorkspaceController {
 	@GetMapping("/{workspaceId}/repository-schema/migration")
 	public RepositorySchemaMigrationPreview previewRepositorySchemaMigration(
 		@PathVariable String workspaceId,
-		@AuthenticationPrincipal GitLabUser user,
+		@AuthenticationPrincipal StudyIngPrincipal user,
 		HttpServletRequest servletRequest
 	) {
 		accessService.requireOwner(workspaceId, user.id(), false);
-		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
-		return repositorySchemaMigrationService.preview(oauth.accessToken(), service.get(workspaceId));
+		WorkspaceState workspace = service.get(workspaceId);
+		String accessToken = credentialResolver.resolve(user, workspace, servletRequest).accessToken();
+		return repositorySchemaMigrationService.preview(accessToken, workspace);
 	}
 
 	@PostMapping("/{workspaceId}/repository-schema/migrate")
 	public RepositorySchemaMigrationResult migrateRepositorySchema(
 		@PathVariable String workspaceId,
 		@RequestBody RepositorySchemaMigrationRequest request,
-		@AuthenticationPrincipal GitLabUser user,
+		@AuthenticationPrincipal StudyIngPrincipal user,
 		HttpServletRequest servletRequest
 	) {
 		accessService.requireOwner(workspaceId, user.id(), false);
-		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
 		WorkspaceState current = service.get(workspaceId);
-		OAuthAccountService.AccountProfile profile = accountService.requireProfile(user.id());
+		String accessToken = credentialResolver.resolve(user, current, servletRequest).accessToken();
+		OAuthAccountService.AccountProfile profile = accountService.requireProfileByUserId(user.userId());
 		RepositorySchemaMigrationService.MigrationCommit commit = repositorySchemaMigrationService.migrate(
-			oauth.accessToken(),
+			accessToken,
 			current,
 			request == null ? null : request.expectedTreeFingerprint(),
 			profile.name()
@@ -388,7 +424,7 @@ public class WorkspaceController {
 			WorkspaceRepositoryLayout.MANAGED_BASE_PATH,
 			WorkspaceRepositoryLayout.CURRENT_SCHEMA_VERSION
 		);
-		WorkspaceSyncResponse sync = sessionSyncService.sync(oauth.accessToken(), workspaceId);
+		WorkspaceSyncResponse sync = sessionSyncService.sync(accessToken, workspaceId);
 		auditEventService.record(
 			workspaceId,
 			user,
@@ -451,17 +487,17 @@ public class WorkspaceController {
 	public WorkspaceState createSession(
 		@PathVariable String workspaceId,
 		@RequestBody SessionDraft draft,
-		@AuthenticationPrincipal GitLabUser user,
+		@AuthenticationPrincipal StudyIngPrincipal user,
 		HttpServletRequest servletRequest
 	) {
 		accessService.requireManager(workspaceId, user.id(), false);
-		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
+		String accessToken = credentialResolver.resolve(user, service.get(workspaceId), servletRequest).accessToken();
 		WorkspaceState updated = service.saveSession(
 			workspaceId,
 			null,
 			draft,
-			oauth.user().name(),
-			(workspace, current, next) -> sessionFileService.write(oauth.accessToken(), workspace, current, next)
+			user.displayName(),
+			(workspace, current, next) -> sessionFileService.write(accessToken, workspace, current, next)
 		);
 		auditEventService.record(workspaceId, user, "SESSION_CREATED", "SESSION", draft.date(), Map.of("revision", updated.sessions().get(draft.date()).revision()));
 		return updated;
@@ -479,17 +515,17 @@ public class WorkspaceController {
 		@PathVariable String workspaceId,
 		@PathVariable String date,
 		@RequestBody SessionDraft draft,
-		@AuthenticationPrincipal GitLabUser user,
+		@AuthenticationPrincipal StudyIngPrincipal user,
 		HttpServletRequest servletRequest
 	) {
 		accessService.requireManager(workspaceId, user.id(), false);
-		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
+		String accessToken = credentialResolver.resolve(user, service.get(workspaceId), servletRequest).accessToken();
 		WorkspaceState updated = service.saveSession(
 			workspaceId,
 			date,
 			draft,
-			oauth.user().name(),
-			(workspace, current, next) -> sessionFileService.write(oauth.accessToken(), workspace, current, next)
+			user.displayName(),
+			(workspace, current, next) -> sessionFileService.write(accessToken, workspace, current, next)
 		);
 		auditEventService.record(workspaceId, user, "SESSION_UPDATED", "SESSION", date, Map.of("revision", updated.sessions().get(date).revision()));
 		return updated;
@@ -500,17 +536,17 @@ public class WorkspaceController {
 		@PathVariable String workspaceId,
 		@PathVariable String date,
 		@RequestParam(required = false) Integer expectedRevision,
-		@AuthenticationPrincipal GitLabUser user,
+		@AuthenticationPrincipal StudyIngPrincipal user,
 		HttpServletRequest servletRequest
 	) {
 		accessService.requireManager(workspaceId, user.id(), false);
-		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
+		String accessToken = credentialResolver.resolve(user, service.get(workspaceId), servletRequest).accessToken();
 		WorkspaceState updated = service.cancelSession(
 			workspaceId,
 			date,
 			expectedRevision,
-			oauth.user().name(),
-			(workspace, current, next) -> sessionFileService.write(oauth.accessToken(), workspace, current, next)
+			user.displayName(),
+			(workspace, current, next) -> sessionFileService.write(accessToken, workspace, current, next)
 		);
 		auditEventService.record(workspaceId, user, "SESSION_CANCELLED", "SESSION", date, Map.of("revision", updated.sessions().get(date).revision()));
 		return updated;
@@ -558,10 +594,12 @@ public class WorkspaceController {
 		@PathVariable String workspaceId,
 		@PathVariable String date,
 		@PathVariable String memberId,
+		@AuthenticationPrincipal StudyIngPrincipal user,
 		HttpServletRequest servletRequest
 	) {
-		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
-		return submissionReviewService.list(oauth.accessToken(), service.get(workspaceId), date, memberId);
+		WorkspaceState workspace = service.get(workspaceId);
+		String accessToken = credentialResolver.resolve(user, workspace, servletRequest).accessToken();
+		return submissionReviewService.list(accessToken, workspace, date, memberId);
 	}
 
 	@PostMapping("/{workspaceId}/sessions/{date}/members/{memberId}/reviews")
@@ -571,20 +609,20 @@ public class WorkspaceController {
 		@PathVariable String date,
 		@PathVariable String memberId,
 		@RequestBody CreateSubmissionReviewRequest request,
-		@AuthenticationPrincipal GitLabUser user,
+		@AuthenticationPrincipal StudyIngPrincipal user,
 		HttpServletRequest servletRequest
 	) {
-		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
 		WorkspaceState workspace = service.get(workspaceId);
+		String accessToken = credentialResolver.resolve(user, workspace, servletRequest).accessToken();
 		StudyMember target = workspace.members().stream()
 			.filter(member -> member.id().equals(memberId))
 			.findFirst()
 			.orElseThrow(() -> new WorkspaceException("MEMBER_NOT_FOUND", "Workspace 멤버를 찾을 수 없습니다.", 404));
 		SubmissionReviewThread thread = submissionReviewService.add(
-			oauth.accessToken(), workspace, date, memberId, request == null ? null : request.body()
+			accessToken, workspace, date, memberId, request == null ? null : request.body()
 		);
 		auditEventService.record(
-			workspaceId, user, "SUBMISSION_REVIEW_CREATED", "GITLAB_COMMIT", thread.commitId(),
+			workspaceId, user, "SUBMISSION_REVIEW_CREATED", "REPOSITORY_COMMIT", thread.commitId(),
 			Map.of("date", date, "memberId", memberId, "filePath", thread.filePath())
 		);
 		if (target.gitlabUserId() != user.id()) {
@@ -603,14 +641,14 @@ public class WorkspaceController {
 		@PathVariable String date,
 		@PathVariable String itemId,
 		@RequestBody SubmissionRequest request,
-		@AuthenticationPrincipal GitLabUser user,
+		@AuthenticationPrincipal StudyIngPrincipal user,
 		HttpServletRequest servletRequest
 	) {
-		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
+		String accessToken = credentialResolver.resolve(user, service.get(workspaceId), servletRequest).accessToken();
 		WorkspaceState updated = service.upsertSubmission(
 			workspaceId, date, itemId, request, user.id(),
 			(workspace, session, member, current, next, commitMessage) -> submissionFileService.write(
-				oauth.accessToken(), workspace, session, member, current, next, commitMessage
+				accessToken, workspace, session, member, current, next, commitMessage
 			)
 		);
 		auditEventService.record(workspaceId, user, "SUBMISSION_UPSERTED", "SUBMISSION", date + ":" + itemId, Map.of());
@@ -622,14 +660,14 @@ public class WorkspaceController {
 		@PathVariable String workspaceId,
 		@PathVariable String date,
 		@PathVariable String itemId,
-		@AuthenticationPrincipal GitLabUser user,
+		@AuthenticationPrincipal StudyIngPrincipal user,
 		HttpServletRequest servletRequest
 	) {
-		GitLabOAuthSession oauth = tokenProvider.requireValidSession(servletRequest);
+		String accessToken = credentialResolver.resolve(user, service.get(workspaceId), servletRequest).accessToken();
 		WorkspaceState updated = service.deleteSubmission(
 			workspaceId, date, itemId, user.id(),
 			(workspace, session, member, current, next, commitMessage) -> submissionFileService.write(
-				oauth.accessToken(), workspace, session, member, current, next, commitMessage
+				accessToken, workspace, session, member, current, next, commitMessage
 			)
 		);
 		auditEventService.record(workspaceId, user, "SUBMISSION_DELETED", "SUBMISSION", date + ":" + itemId, Map.of());
@@ -737,6 +775,24 @@ public class WorkspaceController {
 
 	private static Map<String, Object> treeItem(String path, String name, String type) {
 		return Map.of("id", "local-" + path, "name", name, "type", type, "path", path, "mode", "blob".equals(type) ? "100644" : "040000");
+	}
+
+	private static RepositoryProvider parseProvider(String value) {
+		try { return RepositoryProvider.valueOf(value.trim().toUpperCase(java.util.Locale.ROOT)); }
+		catch (IllegalArgumentException exception) {
+			throw new WorkspaceException("INVALID_REPOSITORY_PROVIDER", "지원하지 않는 저장소 Provider입니다.", 400);
+		}
+	}
+
+	private void requireGitLabWorkspace(String workspaceId) {
+		WorkspaceState workspace = service.get(workspaceId);
+		if (workspace.repository() != null && !RepositoryProvider.GITLAB.name().equals(workspace.repository().provider())) {
+			throw new WorkspaceException(
+				"MEMBER_SYNC_PROVIDER_UNSUPPORTED",
+				"GitHub Workspace 멤버는 저장소 권한을 통해 직접 참여할 수 있습니다.",
+				409
+			);
+		}
 	}
 
 	private void recordSyncFailure(String workspaceId, GitLabUser user, String jobId, String code, String message) {

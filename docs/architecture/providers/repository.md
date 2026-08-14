@@ -1,7 +1,7 @@
 # Repository Model
 
-Status: normalized foundation implemented; GitLab adapter remains the only implementation
-Updated: 2026-08-13
+Status: GitLab and GitHub adapters implemented; GitHub rollout is capability-gated
+Updated: 2026-08-14
 
 ## Model
 
@@ -24,7 +24,7 @@ API Workspace responses include normalized `repository` metadata and capabilitie
 
 `RepositoryCredentialResolver` accepts the acting Study-ing user and Workspace repository identity. It resolves that user's Provider Account credential. It never resolves a Workspace creator credential. Unsupported providers return a normalized Provider error.
 
-Current GitLab write services still accept a token after resolution. The next backend phase moves Schedule, Submission, Review, Sync, and Migration call sites behind a complete provider operation port.
+`RepositoryDataPort` now normalizes repository list/detail, tree, file create/update, atomic multi-file commit, and commit comments. Schedule, Submission, Review, Sync, import analysis and schema migration route through `RepositoryDataService`. GitLab and GitHub response objects stop inside their adapters.
 
 ## Migration and rollback
 

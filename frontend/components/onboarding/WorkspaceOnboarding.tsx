@@ -10,13 +10,13 @@ import {
   Database,
   ExternalLink,
   FileCheck2,
-  Gitlab,
   LoaderCircle,
   RotateCcw,
   Search,
 } from "lucide-react";
 import { ApiError } from "@/lib/api/client/http";
 import { getGitLabReconnectUrl } from "@/lib/api/services/authApi";
+import { getProviderCapabilities } from "@/lib/api/services/authApi";
 import {
   createWorkspace,
   joinWorkspace,
@@ -24,18 +24,14 @@ import {
   syncWorkspace,
   type DiscoverableWorkspace,
 } from "@/lib/api/services/workspaceApi";
-import {
-  analyzeGitLabRepository,
-  getGitLabConnection,
-} from "@/lib/api/services/gitlabApi";
-import { listRepositories } from "@/lib/api/services/repositoryApi";
+import { analyzeRepository, getRepository, listRepositories } from "@/lib/api/services/repositoryApi";
 import type { RepositoryImportAnalysis } from "@/lib/api/types/gitlab";
 import {
-  getGitLabAccessLabel,
   getRepositoryVisibilityLabel,
-  toRepository,
   type Repository,
 } from "@/lib/domain/repository";
+import { getProviderDescriptor, type ProviderId } from "@/lib/providers/provider-descriptors";
+import { ProviderIcon } from "@/components/providers/ProviderIcon";
 import type { Workspace } from "@/lib/domain/types";
 import { APP_ROUTES } from "@/lib/routes";
 import { getUserFacingError } from "@/lib/api/errors";
@@ -55,10 +51,12 @@ export function WorkspaceConnectionFlow({
   onOpenWorkspace?: (workspace: Workspace) => void;
 }) {
   const [repositories, setRepositories] = useState<Repository[]>([]);
+	const [provider, setProvider] = useState<ProviderId>("GITLAB");
+	const [repositoryProviders, setRepositoryProviders] = useState<ProviderId[]>(["GITLAB"]);
   const [discoverable, setDiscoverable] = useState<DiscoverableWorkspace[]>([]);
   const [search, setSearch] = useState("");
   const [searched, setSearched] = useState(false);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [workspaceName, setWorkspaceName] = useState("");
   const [state, setState] = useState<FlowState>("loading");
   const [permission, setPermission] = useState<PermissionState>("idle");
@@ -69,22 +67,25 @@ export function WorkspaceConnectionFlow({
 	const [joining, setJoining] = useState(false);
 
   const selected = useMemo(
-    () => repositories.find((repository) => repository.id === selectedId) ?? null,
+    () => repositories.find((repository) => repository.externalId === selectedId) ?? null,
     [repositories, selectedId],
   );
   const connectedWorkspace = selected
-    ? existingWorkspaces.find((workspace) => workspace.gitlabProjectId === selected.id)
+    ? existingWorkspaces.find((workspace) =>
+		workspace.repository?.provider === selected.provider
+		&& workspace.repository.externalRepositoryId === selected.externalId)
     : undefined;
   const joinableWorkspace = selected
-    ? discoverable.find((candidate) => Number(candidate.repositoryId) === selected.id)
+    ? discoverable.find((candidate) => candidate.provider === selected.provider && candidate.externalRepositoryId === selected.externalId)
     : undefined;
+	const providerDescriptor = getProviderDescriptor(provider);
 
   async function loadRepositories(query = "") {
     setState("loading");
     setError("");
     setReconnectRequired(false);
     try {
-		const projects = await listRepositories(query);
+		const projects = await listRepositories(query, undefined, provider);
 		setRepositories(projects);
       setSelectedId(null);
       setPermission("idle");
@@ -99,14 +100,24 @@ export function WorkspaceConnectionFlow({
   }
 
   useEffect(() => {
-    void listRepositories("")
+	const controller = new AbortController();
+	void getProviderCapabilities(controller.signal).then((result) => {
+		const available = result.repositoryProviders?.length ? result.repositoryProviders : ["GITLAB"];
+		setRepositoryProviders(available);
+		if (!available.includes(provider)) setProvider(available[0]);
+	}).catch(() => undefined);
+	return () => controller.abort();
+  }, [provider]);
+
+  useEffect(() => {
+    void listRepositories("", undefined, provider)
 		.then((projects) => setRepositories(projects))
       .catch((requestError) => {
-        setReconnectRequired(requestError instanceof ApiError && requestError.code === "GITLAB_RECONNECT_REQUIRED");
-        setError(getUserFacingError(requestError, "프로젝트를 불러오지 못했습니다."));
+		setReconnectRequired(requestError instanceof ApiError && requestError.code.includes("REAUTH"));
+		setError(getUserFacingError(requestError, "저장소를 불러오지 못했습니다."));
       })
       .finally(() => setState("ready"));
-  }, []);
+  }, [provider]);
 
 	useEffect(() => {
 		const controller = new AbortController();
@@ -122,7 +133,7 @@ export function WorkspaceConnectionFlow({
   }
 
   async function selectRepository(repository: Repository) {
-    setSelectedId(repository.id);
+    setSelectedId(repository.externalId);
     setWorkspaceName(repository.name);
     setPermission("checking");
     setVerifiedAccessLevel(repository.accessLevel ?? null);
@@ -131,8 +142,9 @@ export function WorkspaceConnectionFlow({
     setReconnectRequired(false);
 
     const alreadyConnected = existingWorkspaces.some(
-      (workspace) => workspace.gitlabProjectId === repository.id,
-    ) || discoverable.some((workspace) => Number(workspace.repositoryId) === repository.id);
+      (workspace) => workspace.repository?.provider === repository.provider
+		&& workspace.repository.externalRepositoryId === repository.externalId,
+    ) || discoverable.some((workspace) => workspace.provider === repository.provider && workspace.externalRepositoryId === repository.externalId);
     if (alreadyConnected) {
       setPermission("idle");
       return;
@@ -145,12 +157,12 @@ export function WorkspaceConnectionFlow({
     setState("checking");
     try {
       const [connection, repositoryAnalysis] = await Promise.all([
-        getGitLabConnection(repository.id),
-        analyzeGitLabRepository(repository.id),
+        getRepository(repository.provider, repository.externalId),
+        analyzeRepository(repository.provider, repository.externalId),
       ]);
-      const accessLevel = connection.project?.accessLevel ?? repository.accessLevel ?? null;
+	  const accessLevel = connection.capabilities.canManage ? 40 : connection.capabilities.canWrite ? 30 : connection.capabilities.canRead ? 20 : 0;
       setVerifiedAccessLevel(accessLevel);
-      const verifiedCanWrite = connection.project ? toRepository(connection.project).capabilities.canWrite : repository.capabilities.canWrite;
+      const verifiedCanWrite = connection.capabilities.canWrite;
       if (!verifiedCanWrite) {
         setPermission("denied");
         return;
@@ -158,7 +170,7 @@ export function WorkspaceConnectionFlow({
       setAnalysis(repositoryAnalysis);
       setPermission("ready");
     } catch (requestError) {
-      setReconnectRequired(requestError instanceof ApiError && requestError.code === "GITLAB_RECONNECT_REQUIRED");
+	  setReconnectRequired(requestError instanceof ApiError && requestError.code.includes("REAUTH"));
       setError(getUserFacingError(requestError, "프로젝트를 확인하지 못했어요."));
       setPermission(requestError instanceof ApiError && requestError.status === 403 ? "denied" : "idle");
     } finally {
@@ -188,7 +200,9 @@ export function WorkspaceConnectionFlow({
     try {
       const workspace = await createWorkspace({
         name: workspaceName.trim(),
-        gitlabProjectId: selected.id,
+		provider: selected.provider,
+		externalRepositoryId: selected.externalId,
+		gitlabProjectId: selected.provider === "GITLAB" ? selected.id : undefined,
         gitlabProjectPath: selected.path,
         defaultBranch: selected.defaultBranch ?? "main",
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Seoul",
@@ -207,7 +221,7 @@ export function WorkspaceConnectionFlow({
 		try {
 			const available = await listDiscoverableWorkspaces();
 			setDiscoverable(available);
-			const match = available.find((candidate) => Number(candidate.repositoryId) === selected.id);
+			const match = available.find((candidate) => candidate.provider === selected.provider && candidate.externalRepositoryId === selected.externalId);
 			setError(match ? "" : "이미 Study-ing Workspace와 연결된 프로젝트입니다. 현재 계정의 참여 권한을 확인해 주세요.");
 		} catch {
 			setError("이미 Study-ing Workspace와 연결된 프로젝트입니다. Workspace 목록에서 참여 상태를 확인해 주세요.");
@@ -227,31 +241,43 @@ export function WorkspaceConnectionFlow({
         ) : <div className="workspace-connect__brand">Study-ing</div>}
 
         <header className="workspace-connect__header">
-          <div className="workspace-connect__provider"><Gitlab size={17} /> GitLab 프로젝트 연결</div>
+		  <div className="workspace-connect__provider"><ProviderIcon provider={provider} size={17} /> {providerDescriptor.repositoryLabel} 연결</div>
           <h1>{embedded ? "새 Workspace 연결" : "첫 Workspace를 연결해볼까요?"}</h1>
-          <p>GitLab에서 접근 가능한 프로젝트를 선택해 학습 공간으로 연결하세요.</p>
-          <small>GitLab OAuth로 접근 가능한 프로젝트만 표시합니다.</small>
+		  <p>{providerDescriptor.displayName}에서 접근 가능한 저장소를 선택해 학습 공간으로 연결하세요.</p>
+		  <small>연결한 계정과 GitHub App 설치 범위 안에서 접근 가능한 저장소만 표시합니다.</small>
         </header>
+
+		{repositoryProviders.length > 1 ? (
+		  <div className="workspace-connect__provider-selector" role="tablist" aria-label="저장소 Provider">
+			{repositoryProviders.map((item) => (
+			  <button key={item} type="button" role="tab" aria-selected={provider === item}
+				className={provider === item ? "is-selected" : undefined}
+				onClick={() => { setState("loading"); setProvider(item); setSelectedId(null); setAnalysis(null); setError(""); }}>
+				<ProviderIcon provider={item} size={16} /> {getProviderDescriptor(item).displayName}
+			  </button>
+			))}
+		  </div>
+		) : null}
 
         <section className="workspace-connect__section" aria-labelledby="repository-select-title">
           <div className="workspace-connect__section-heading">
             <span>1</span>
-            <div><h2 id="repository-select-title">GitLab 프로젝트 선택</h2><p>연결할 프로젝트를 찾아 선택하세요.</p></div>
+			<div><h2 id="repository-select-title">{providerDescriptor.repositoryLabel} 선택</h2><p>연결할 저장소를 찾아 선택하세요.</p></div>
           </div>
           <form className="repository-search" onSubmit={handleSearch} role="search">
             <Search size={18} aria-hidden="true" />
-            <input aria-label="GitLab 프로젝트 검색" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="프로젝트 이름으로 검색" />
+			<input aria-label={`${providerDescriptor.repositoryLabel} 검색`} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="저장소 이름으로 검색" />
             <button className="button button--secondary" type="submit" disabled={state === "loading"}>검색</button>
           </form>
 
           {state === "loading" ? (
             <div className="workspace-connect__status" role="status" aria-live="polite"><LoaderCircle className="spin" /> 접근 가능한 프로젝트를 불러오고 있어요.</div>
           ) : repositories.length ? (
-            <div className="repository-list" role="listbox" aria-label="접근 가능한 GitLab 프로젝트">
+			<div className="repository-list" role="listbox" aria-label={`접근 가능한 ${providerDescriptor.repositoryLabel}`}>
               {repositories.map((repository) => {
-                const isSelected = repository.id === selectedId;
-                const linked = existingWorkspaces.some((workspace) => workspace.gitlabProjectId === repository.id);
-                const joinable = discoverable.some((workspace) => Number(workspace.repositoryId) === repository.id);
+				const isSelected = repository.externalId === selectedId;
+				const linked = existingWorkspaces.some((workspace) => workspace.repository?.provider === repository.provider && workspace.repository.externalRepositoryId === repository.externalId);
+				const joinable = discoverable.some((workspace) => workspace.provider === repository.provider && workspace.externalRepositoryId === repository.externalId);
                 const denied = !repository.capabilities.canWrite;
                 return (
                   <button
@@ -259,7 +285,7 @@ export function WorkspaceConnectionFlow({
                     role="option"
                     aria-selected={isSelected}
                     className={isSelected ? "is-selected" : undefined}
-                    key={repository.id}
+					key={`${repository.provider}:${repository.externalId}`}
                     onClick={() => void selectRepository(repository)}
                   >
                     <span className="repository-list__copy"><strong>{repository.name}</strong><small>{repository.path}</small></span>
@@ -273,7 +299,10 @@ export function WorkspaceConnectionFlow({
               })}
             </div>
           ) : (
-            <div className="workspace-connect__status">{searched ? "조건에 맞는 GitLab 프로젝트가 없어요." : "현재 계정으로 접근 가능한 프로젝트가 없어요."}</div>
+			<div className="workspace-connect__status">
+			  {searched ? `조건에 맞는 ${providerDescriptor.repositoryLabel}가 없어요.` : `현재 계정으로 접근 가능한 ${providerDescriptor.repositoryLabel}가 없어요.`}
+			  {provider === "GITHUB" ? <a className="button button--secondary button--small" href="/api/v1/github/installations/new">GitHub App 설치 또는 저장소 선택</a> : null}
+			</div>
           )}
         </section>
 
@@ -303,7 +332,7 @@ export function WorkspaceConnectionFlow({
                 <label className="field">
                   <span>Workspace 이름</span>
                   <input value={workspaceName} onChange={(event) => setWorkspaceName(event.target.value)} maxLength={80} required />
-                  <small>GitLab 프로젝트 이름과 다르게 정할 수 있습니다.</small>
+				  <small>저장소 이름과 다르게 정할 수 있습니다.</small>
                 </label>
 
                 <PermissionCheck
@@ -311,6 +340,7 @@ export function WorkspaceConnectionFlow({
                   accessLevel={verifiedAccessLevel}
                   defaultBranch={selected.defaultBranch}
                   webUrl={selected.webUrl}
+				  provider={selected.provider}
                 />
 
                 {state === "checking" ? (
@@ -324,7 +354,7 @@ export function WorkspaceConnectionFlow({
                 {error ? (
                   <div className="workspace-connect__error" role="alert">
                     <AlertTriangle size={18} /><span><strong>프로젝트를 확인하지 못했어요.</strong><small>{error}</small></span>
-                    {reconnectRequired ? <a className="button button--secondary button--small" href={getGitLabReconnectUrl(APP_ROUTES.workspaceNew)}>다시 연결</a> : <button className="button button--secondary button--small" type="button" onClick={() => void selectRepository(selected)}><RotateCcw size={15} /> 다시 시도</button>}
+					{reconnectRequired ? <a className="button button--secondary button--small" href={provider === "GITHUB" ? "/settings/accounts" : getGitLabReconnectUrl(APP_ROUTES.workspaceNew)}>다시 연결</a> : <button className="button button--secondary button--small" type="button" onClick={() => void selectRepository(selected)}><RotateCcw size={15} /> 다시 시도</button>}
                   </div>
                 ) : null}
 
@@ -349,7 +379,11 @@ export function WorkspaceOnboarding(props: Parameters<typeof WorkspaceConnection
   return <WorkspaceConnectionFlow {...props} />;
 }
 
-function PermissionCheck({ state, accessLevel, defaultBranch, webUrl }: { state: PermissionState; accessLevel: number | null; defaultBranch: string | null; webUrl: string | null }) {
+function PermissionCheck({ state, accessLevel, defaultBranch, webUrl, provider }: { state: PermissionState; accessLevel: number | null; defaultBranch: string | null; webUrl: string | null; provider: ProviderId }) {
+	const providerName = getProviderDescriptor(provider).displayName;
+	const permissionLabel = provider === "GITLAB"
+		? accessLevel == null ? "확인 불가" : accessLevel >= 40 ? "Maintainer" : accessLevel >= 30 ? "Developer" : accessLevel >= 20 ? "Reporter" : "접근 권한 없음"
+		: accessLevel != null && accessLevel >= 40 ? "Admin" : accessLevel != null && accessLevel >= 30 ? "Write" : accessLevel != null && accessLevel >= 20 ? "Read" : "확인 불가";
   if (state === "idle") return null;
   if (state === "checking") {
     return <div className="permission-check" role="status"><LoaderCircle className="spin" /><span><strong>프로젝트 권한을 확인하고 있어요</strong><small>Repository 접근과 쓰기 가능 여부를 확인합니다.</small></span></div>;
@@ -361,9 +395,9 @@ function PermissionCheck({ state, accessLevel, defaultBranch, webUrl }: { state:
         <span>
           <strong>이 프로젝트를 연결할 권한이 없습니다.</strong>
           <small>현재 권한으로는 저장소에 변경사항을 쓸 수 없습니다.</small>
-          <details className="permission-check__details"><summary>권한 세부 정보</summary><p>현재 GitLab 권한 · {getGitLabAccessLabel(accessLevel) ?? "확인 불가"}<br />필요 GitLab 권한 · Developer 이상</p></details>
+		  <details className="permission-check__details"><summary>권한 세부 정보</summary><p>현재 {providerName} 권한 · {permissionLabel}<br />필요 권한 · 쓰기 가능</p></details>
         </span>
-        {webUrl ? <a href={webUrl} target="_blank" rel="noreferrer">GitLab에서 권한 확인 <ExternalLink size={14} /></a> : null}
+		{webUrl ? <a href={webUrl} target="_blank" rel="noreferrer">{providerName}에서 권한 확인 <ExternalLink size={14} /></a> : null}
       </div>
     );
   }
@@ -373,7 +407,7 @@ function PermissionCheck({ state, accessLevel, defaultBranch, webUrl }: { state:
       <span>
         <strong>프로젝트 권한을 확인했어요</strong>
         <small>기본 브랜치 · {defaultBranch ?? "main"} · 쓰기 권한 확인됨</small>
-        {accessLevel == null ? null : <details className="permission-check__details"><summary>권한 세부 정보</summary><p>현재 GitLab 권한 · {getGitLabAccessLabel(accessLevel)}</p></details>}
+		{accessLevel == null ? null : <details className="permission-check__details"><summary>권한 세부 정보</summary><p>현재 {providerName} 권한 · {permissionLabel}</p></details>}
       </span>
     </div>
   );

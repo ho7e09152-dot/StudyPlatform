@@ -251,7 +251,9 @@ export function deleteWorkspaceDocument(workspaceId: string, documentId: string,
 
 export interface CreateWorkspaceInput {
   name: string;
-  gitlabProjectId: number;
+  provider: ProviderId;
+  externalRepositoryId: string;
+  gitlabProjectId?: number;
   gitlabProjectPath: string;
   defaultBranch: string;
   timezone: string;

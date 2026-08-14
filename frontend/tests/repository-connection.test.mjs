@@ -70,13 +70,13 @@ test("App roles keep internal enums and use Korean user-facing labels", () => {
 
 test("Workspace connection state is reset and scoped to the selected repository", async () => {
   const [provider, shell, workspaceProvider] = await Promise.all([
-    readFile(new URL("../lib/api/hooks/useGitLabConnection.tsx", import.meta.url), "utf8"),
+    readFile(new URL("../lib/api/hooks/useRepositoryConnection.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/shell/AppShell.tsx", import.meta.url), "utf8"),
     readFile(new URL("../components/providers/WorkspaceProvider.tsx", import.meta.url), "utf8"),
   ]);
   assert.match(provider, /setState\("loading"\)/);
   assert.match(provider, /setData\(null\)/);
-  assert.match(provider, /workspace\.gitlabProjectId/);
+  assert.match(provider, /repository\.externalRepositoryId/);
   assert.match(shell, /REPOSITORY_ACCESS_REVOKED/);
   assert.match(workspaceProvider, /setLastSyncFailures\(\[\]\)/);
 });

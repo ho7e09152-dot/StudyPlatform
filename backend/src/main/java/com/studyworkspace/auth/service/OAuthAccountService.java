@@ -65,6 +65,15 @@ public class OAuthAccountService {
 		String status
 	) { }
 
+	/** Decrypted credential returned only to trusted backend provider adapters. */
+	public record ProviderCredential(
+		String providerAccountId,
+		String accessToken,
+		String refreshToken,
+		Instant expiresAt,
+		String scope
+	) { }
+
 	public record UpdateProfileRequest(
 		String displayName,
 		String repositoryFileName,
@@ -258,6 +267,45 @@ public class OAuthAccountService {
 			account.displayName(), account.avatarUrl(), account.webUrl(), account.status());
 	}
 
+	@Transactional(readOnly = true)
+	public ProviderCredential requireProviderCredential(String userId, RepositoryProvider provider) {
+		ProviderAccountEntity account = requireProviderAccount(userId, provider);
+		OAuthCredentialEntity credential = credentialRepository.findById(account.id())
+			.orElseThrow(() -> new WorkspaceException(
+				"PROVIDER_REAUTH_REQUIRED", displayName(provider) + " 계정을 다시 승인해 주세요.", 401
+			));
+		return new ProviderCredential(
+			account.id(),
+			tokenCipher.decrypt(credential.accessTokenCiphertext()),
+			credential.refreshTokenCiphertext() == null ? null : tokenCipher.decrypt(credential.refreshTokenCiphertext()),
+			credential.expiresAt(),
+			credential.scope()
+		);
+	}
+
+	@Transactional
+	public ProviderCredential rotateProviderCredential(
+		String userId,
+		RepositoryProvider provider,
+		String accessToken,
+		String refreshToken,
+		Instant expiresAt,
+		String scope
+	) {
+		ProviderAccountEntity account = requireProviderAccount(userId, provider);
+		OAuthCredentialEntity credential = credentialRepository.findById(account.id())
+			.orElseGet(() -> OAuthCredentialEntity.create(account.id(), userId));
+		credential.rotate(
+			tokenCipher.encrypt(accessToken),
+			StringUtils.hasText(refreshToken) ? tokenCipher.encrypt(refreshToken) : null,
+			expiresAt,
+			scope,
+			Instant.now()
+		);
+		credentialRepository.save(credential);
+		return new ProviderCredential(account.id(), accessToken, refreshToken, expiresAt, scope);
+	}
+
 	private ProviderAccountEntity requireProviderAccount(String userId, RepositoryProvider provider) {
 		return providerAccountRepository.findByUserIdAndProvider(userId, provider.name())
 			.orElseThrow(() -> new WorkspaceException("PROVIDER_ACCOUNT_REQUIRED", provider.name() + " 계정 연결이 필요합니다.", 401));
@@ -318,5 +366,9 @@ public class OAuthAccountService {
 		} catch (java.time.DateTimeException exception) {
 			throw new WorkspaceException("INVALID_TIMEZONE", "올바른 시간대를 선택해 주세요.", 400);
 		}
+	}
+
+	private static String displayName(RepositoryProvider provider) {
+		return provider == RepositoryProvider.GITHUB ? "GitHub" : "GitLab";
 	}
 }

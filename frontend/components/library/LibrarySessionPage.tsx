@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { ArrowLeft, ArrowRight, ExternalLink, Users } from "lucide-react";
-import { useGitLabConnection } from "@/lib/api/hooks/useGitLabConnection";
+import { useRepositoryConnection } from "@/lib/api/hooks/useRepositoryConnection";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { StorageDetails } from "@/components/ui/StorageDetails";
@@ -18,7 +18,7 @@ import { APP_ROUTES } from "@/lib/routes";
 
 export function LibrarySessionPage({ date }: { date: string }) {
   const { workspace, currentUserId } = useWorkspace();
-  const connection = useGitLabConnection();
+  const connection = useRepositoryConnection();
   const session = workspace.sessions[date];
   const [selectedMember, setSelectedMember] = useState<StudyMember | null>(null);
   const [pendingMember, setPendingMember] = useState<StudyMember | null>(null);
@@ -54,7 +54,7 @@ export function LibrarySessionPage({ date }: { date: string }) {
         </div>
         <div className="library-session-actions">
           <Link href={APP_ROUTES.scheduleDetail(session.date)} className="button button--secondary">일정 보기</Link>
-          {(workspace.repository?.webUrl ?? connection.data?.project?.webUrl) ? <a href={workspace.repository?.webUrl ?? connection.data?.project?.webUrl ?? "#"} target="_blank" rel="noreferrer" className="button button--ghost">{getStorageDetailsCopy(workspace.repository?.provider ?? "GITLAB").originalLabel} <ExternalLink size={15} /></a> : null}
+          {(workspace.repository?.webUrl ?? connection.data?.webUrl) ? <a href={workspace.repository?.webUrl ?? connection.data?.webUrl ?? "#"} target="_blank" rel="noreferrer" className="button button--ghost">{getStorageDetailsCopy(workspace.repository?.provider ?? "GITLAB").originalLabel} <ExternalLink size={15} /></a> : null}
         </div>
       </header>
 

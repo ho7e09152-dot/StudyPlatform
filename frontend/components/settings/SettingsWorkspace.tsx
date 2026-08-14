@@ -14,7 +14,6 @@ import {
   Eye,
   FileText,
   GitBranch,
-  Gitlab,
   History,
   KeyRound,
   LayoutGrid,
@@ -34,7 +33,7 @@ import { Modal } from "@/components/ui/Modal";
 import { useAuth } from "@/components/providers/AuthProvider";
 import { useAppTheme } from "@/components/providers/AppThemeProvider";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
-import { useGitLabConnection } from "@/lib/api/hooks/useGitLabConnection";
+import { useRepositoryConnection } from "@/lib/api/hooks/useRepositoryConnection";
 import {
   deleteAccount,
 	getGitLabReconnectUrl,
@@ -124,9 +123,9 @@ const SECTION_COPY: Record<SettingsSection, { title: string; description: string
   general: { title: "Workspace 일반", description: "현재 Workspace의 이름과 운영 기준 시간을 관리합니다." },
   "study-rules": { title: "학습 규칙", description: "일정과 제출에 적용되는 현재 운영 정책을 확인합니다." },
   "commit-rules": { title: "커밋 규칙", description: "제출할 때 사용할 기본 커밋 메시지와 안내 문구를 관리합니다." },
-  members: { title: "Workspace 멤버", description: "Study-ing 역할과 GitLab 저장소 접근 상태를 구분해 관리합니다." },
+  members: { title: "Workspace 멤버", description: "Study-ing 역할과 저장소 접근 상태를 구분해 관리합니다." },
   notifications: { title: "Workspace 알림", description: "이 Workspace에서 발생하는 주요 변경 알림을 설정합니다." },
-  repository: { title: "저장소 연결", description: "현재 Workspace가 학습 기록을 저장하는 GitLab 프로젝트를 확인합니다." },
+  repository: { title: "저장소 연결", description: "현재 Workspace가 학습 기록을 저장하는 외부 저장소를 확인합니다." },
   data: { title: "데이터 및 동기화", description: "최근 동기화 상태와 학습 데이터 저장 구조를 관리합니다." },
   profile: { title: "프로필", description: "Study-ing에서 표시되는 이름과 개인 시간대를 관리합니다." },
   accounts: { title: "연결된 계정", description: "로그인과 저장소 접근에 사용하는 Provider 계정을 확인합니다." },
@@ -139,7 +138,7 @@ const SECTION_COPY: Record<SettingsSection, { title: string; description: string
 const NOTIFICATIONS = [
   { key: "scheduleChanges" as const, title: "일정 변경 알림", description: "팀 학습 일정이나 항목이 변경되면 알려줍니다." },
   { key: "submissionMismatch" as const, title: "제출 상태 알림", description: "일정 변경으로 기존 제출을 다시 확인해야 할 때 알려줍니다." },
-  { key: "syncFailures" as const, title: "저장소 동기화 오류", description: "GitLab 동기화가 완료되지 않으면 알려줍니다." },
+  { key: "syncFailures" as const, title: "저장소 동기화 오류", description: "저장소 동기화가 완료되지 않으면 알려줍니다." },
 ];
 
 const ACCENT_OPTIONS: Array<{ value: AccentColor; label: string }> = [
@@ -281,7 +280,9 @@ export function SettingsWorkspace({ section = "general" }: { section?: SettingsS
     deleteCurrentWorkspace,
 		notify,
   } = useWorkspace();
-  const connection = useGitLabConnection();
+  const connection = useRepositoryConnection();
+  const repositoryProvider = workspace.repository?.provider ?? "GITLAB";
+  const repositoryProviderLabel = getProviderDescriptor(repositoryProvider).displayName;
   const currentMember = workspace.members.find((member) => member.id === currentUserId);
   const canManage = canManageWorkspaceSettings(currentMember);
   const isOwner = canDeleteWorkspace(currentMember);
@@ -296,7 +297,7 @@ export function SettingsWorkspace({ section = "general" }: { section?: SettingsS
   requestWorkspaceId.current = workspace.id;
 
   const refreshMembers = useMemo(() => async () => {
-    if (mode === "demo" || !canManage) { setCandidates([]); return; }
+    if (mode === "demo" || !canManage || repositoryProvider !== "GITLAB") { setCandidates([]); return; }
     const workspaceId = workspace.id;
     try {
       const next = await listMemberCandidates(workspaceId);
@@ -304,7 +305,7 @@ export function SettingsWorkspace({ section = "general" }: { section?: SettingsS
     } catch {
       if (requestWorkspaceId.current === workspaceId) setCandidates([]);
     }
-  }, [canManage, mode, workspace.id]);
+  }, [canManage, mode, repositoryProvider, workspace.id]);
 
   useEffect(() => {
     const workspaceId = workspace.id;
@@ -562,14 +563,14 @@ export function SettingsWorkspace({ section = "general" }: { section?: SettingsS
     return (
       <div className="settings-sections">
         <section className="settings-section-block">
-          <div className="settings-section-heading"><div><h3>멤버 목록</h3><p>Study-ing 역할과 GitLab 권한은 서로 다른 권한입니다.</p></div>{manageable ? <button className="button button--secondary button--small" type="button" disabled={busy} onClick={() => { setBusy(true); void syncMembers().then(refresh).catch((e) => setError(getUserFacingError(e, "멤버를 동기화하지 못했습니다."))).finally(() => setBusy(false)); }}><RefreshCcw size={15} /> {busy ? "동기화 중…" : "GitLab 멤버 동기화"}</button> : null}</div>
+          <div className="settings-section-heading"><div><h3>멤버 목록</h3><p>Study-ing 역할과 {repositoryProviderLabel} 저장소 권한은 서로 다른 권한입니다.</p></div>{manageable && repositoryProvider === "GITLAB" ? <button className="button button--secondary button--small" type="button" disabled={busy} onClick={() => { setBusy(true); void syncMembers().then(refresh).catch((e) => setError(getUserFacingError(e, "멤버를 동기화하지 못했습니다."))).finally(() => setBusy(false)); }}><RefreshCcw size={15} /> {busy ? "동기화 중…" : "GitLab 멤버 동기화"}</button> : null}</div>
           <div className="settings-member-rows">
             {workspace.members.length ? workspace.members.map((member) => (
               <article key={member.id}>
                 <Avatar member={member} />
                 <div className="settings-member-identity"><strong>{member.displayName}{member.id === currentUserId ? " (나)" : ""}</strong><small>@{member.username}</small></div>
                 <div className="settings-member-scope"><small>Study-ing 역할</small>{owner ? <select aria-label={`${member.displayName} Study-ing 역할`} value={member.role} disabled={busy} onChange={(event) => { setBusy(true); setError(""); void updateMemberRole(member.id, event.target.value as StudyMember["role"]).catch((e) => setError(getUserFacingError(e, "역할을 변경하지 못했습니다."))).finally(() => setBusy(false)); }}><option value="OWNER">소유자</option><option value="MANAGER">관리자</option><option value="MEMBER">멤버</option></select> : <strong>{APP_ROLE_LABEL[member.role]}</strong>}</div>
-                <div className="settings-member-scope"><small>GitLab 권한</small><span>{GITLAB_ACCESS_LABEL[member.accessLevel] ?? member.accessLevel}</span></div>
+                <div className="settings-member-scope"><small>{repositoryProviderLabel} 권한</small><span>{repositoryProvider === "GITLAB" ? (GITLAB_ACCESS_LABEL[member.accessLevel] ?? member.accessLevel) : member.accessLevel >= 40 ? "관리" : member.accessLevel >= 30 ? "쓰기" : "읽기"}</span></div>
                 <span className={`status-badge ${member.status === "ACTIVE" ? "success" : "danger"}`}>{member.status === "ACTIVE" ? "활성" : "접근 상실"}</span>
               </article>
             )) : <div className="settings-empty"><Users size={22} /><strong>등록된 멤버가 없어요</strong></div>}
@@ -577,7 +578,7 @@ export function SettingsWorkspace({ section = "general" }: { section?: SettingsS
           {error ? <div className="onboarding-error" role="alert">{error}</div> : null}
         </section>
         {manageable && available.length ? <section className="settings-section-block"><h3>GitLab에서 확인된 멤버</h3><p>연결된 프로젝트에서 확인된 사용자만 Workspace에 추가할 수 있습니다.</p><div className="settings-candidate-rows">{available.map((candidate) => <article key={candidate.gitlabUserId}><Avatar member={candidate} /><span><strong>{candidate.displayName}</strong><small>@{candidate.username} · {GITLAB_ACCESS_LABEL[candidate.accessLevel] ?? candidate.accessLevel}</small></span><button type="button" className="button button--secondary button--small" disabled={busy} onClick={() => { setBusy(true); void addMember(Number(candidate.gitlabUserId)).then(refresh).finally(() => setBusy(false)); }}><UserPlus size={14} /> 추가</button></article>)}</div></section> : null}
-        <p className="settings-scope-note">초대 코드와 참여 가능한 Workspace 탐색은 아직 지원하지 않습니다. 현재는 연결된 GitLab 프로젝트에서 확인된 멤버 정보로 관리합니다.</p>
+        {repositoryProvider === "GITHUB" ? <p className="settings-scope-note">GitHub Workspace 참여는 연결된 저장소의 쓰기 권한을 서버에서 확인한 뒤 사용자가 직접 진행합니다.</p> : null}
       </div>
     );
   }
@@ -589,10 +590,13 @@ export function SettingsWorkspace({ section = "general" }: { section?: SettingsS
   }
 
   function RepositorySettings() {
-    const connected = connection.state === "ready" && connection.data?.status === "CONNECTED" && Boolean(connection.data.project);
-    const project = connection.data?.project;
-    const status = connection.state === "loading" ? "확인 중" : connected ? "GitLab 연결 정상" : connection.state === "error" ? "GitLab 연결 오류" : "GitLab 재승인 필요";
-    return <div className="settings-sections"><section className={`repository-status-surface ${connected ? "is-healthy" : "is-attention"}`}><div className="repository-status-icon"><Gitlab size={21} /></div><div><small>현재 Provider</small><h3>GitLab</h3><p>{project?.pathWithNamespace ?? workspace.gitlabProjectPath}</p></div><span className={`status-badge ${connected ? "success" : connection.state === "loading" ? "neutral" : "warning"}`}>{status}</span></section><section className="settings-section-block"><h3>연결 정보</h3><SettingRows><SettingRow label="기본 브랜치" value={project?.defaultBranch ?? workspace.defaultBranch} /></SettingRows><details className="settings-details"><summary>저장소 세부 정보</summary><dl><div><dt>최근 동기화</dt><dd>{workspace.lastSyncedAt ? formatDateTime(workspace.lastSyncedAt, workspace.settings.timezone) : "기록 없음"}</dd></div><div><dt>Project ID</dt><dd>{project?.id ?? workspace.gitlabProjectId}</dd></div><div><dt>학습 데이터 경로</dt><dd>{workspace.repositorySchemaVersion >= 2 ? ".study-workspace/sessions" : workspace.repositoryBasePath || "저장소 루트"}</dd></div><div><dt>연결 계정</dt><dd>{connection.data?.user ? `@${connection.data.user.username}` : "확인 전"}</dd></div></dl></details></section>{!connected && connection.state !== "loading" ? <section className="settings-warning-surface"><AlertTriangle size={18} /><span><strong>GitLab 연결을 다시 확인해주세요</strong><small>연결이 만료되었거나 필요한 권한을 확인할 수 없습니다.</small></span><a className="button button--secondary button--small" href={getGitLabReconnectUrl(APP_ROUTES.settingsSection("repository"))}>다시 연결</a></section> : null}</div>;
+    const connected = connection.state === "ready" && connection.data?.connectionState === "AVAILABLE";
+    const project = connection.data;
+    const status = connection.state === "loading" ? "확인 중" : connected ? `${repositoryProviderLabel} 연결 정상` : connection.state === "error" ? `${repositoryProviderLabel} 연결 오류` : `${repositoryProviderLabel} 재승인 필요`;
+    const reconnectUrl = repositoryProvider === "GITHUB"
+      ? getProviderAccountLinkUrl("GITHUB", APP_ROUTES.settingsSection("repository"))
+      : getGitLabReconnectUrl(APP_ROUTES.settingsSection("repository"));
+    return <div className="settings-sections"><section className={`repository-status-surface ${connected ? "is-healthy" : "is-attention"}`}><div className="repository-status-icon"><ProviderIcon provider={repositoryProvider} size={21} /></div><div><small>현재 Provider</small><h3>{repositoryProviderLabel}</h3><p>{project?.fullName ?? workspace.repository?.fullName ?? workspace.gitlabProjectPath}</p></div><span className={`status-badge ${connected ? "success" : connection.state === "loading" ? "neutral" : "warning"}`}>{status}</span></section><section className="settings-section-block"><h3>연결 정보</h3><SettingRows><SettingRow label="기본 브랜치" value={project?.defaultBranch ?? workspace.defaultBranch} /></SettingRows><details className="settings-details"><summary>저장소 세부 정보</summary><dl><div><dt>최근 동기화</dt><dd>{workspace.lastSyncedAt ? formatDateTime(workspace.lastSyncedAt, workspace.settings.timezone) : "기록 없음"}</dd></div><div><dt>Repository ID</dt><dd>{project?.externalId ?? workspace.repository?.externalRepositoryId ?? workspace.gitlabProjectId}</dd></div><div><dt>학습 데이터 경로</dt><dd>{workspace.repositorySchemaVersion >= 2 ? ".study-workspace/sessions" : workspace.repositoryBasePath || "저장소 루트"}</dd></div><div><dt>권한</dt><dd>{project?.capabilities.canManage ? "관리" : project?.capabilities.canWrite ? "쓰기" : project?.capabilities.canRead ? "읽기" : "확인 전"}</dd></div></dl></details></section>{!connected && connection.state !== "loading" ? <section className="settings-warning-surface"><AlertTriangle size={18} /><span><strong>{repositoryProviderLabel} 연결을 다시 확인해주세요</strong><small>연결이 만료되었거나 필요한 권한을 확인할 수 없습니다.</small></span><a className="button button--secondary button--small" href={reconnectUrl}>다시 연결</a></section> : null}</div>;
   }
 
   function DataSettings({ syncJobs: jobs, canManage: manageable }: { syncJobs: SyncJob[]; canManage: boolean }) {
@@ -600,7 +604,7 @@ export function SettingsWorkspace({ section = "general" }: { section?: SettingsS
       <div className="settings-sections">
         <section className="settings-section-block">
           <div className="settings-section-heading">
-            <div><h3>저장소 동기화</h3><p>GitLab의 일정 파일과 현재 Workspace 데이터를 다시 확인합니다.</p></div>
+            <div><h3>저장소 동기화</h3><p>{repositoryProviderLabel}의 일정 파일과 현재 Workspace 데이터를 다시 확인합니다.</p></div>
             {manageable ? <button type="button" className="button button--primary button--small" disabled={syncing} onClick={() => void syncWorkspace()}><RefreshCcw className={syncing ? "spin" : undefined} size={15} />{syncing ? "동기화 중…" : "지금 동기화"}</button> : null}
           </div>
           {lastSyncFailures.length ? (
@@ -711,7 +715,7 @@ export function SettingsWorkspace({ section = "general" }: { section?: SettingsS
   }
 
   function SecuritySettings({ canManage: manageable, events }: { canManage: boolean; events: AuditEvent[] }) {
-    return <div className="settings-sections"><section className="settings-section-block"><h3>데이터 작성 원칙</h3><div className="security-principle-rows"><article><KeyRound size={18} /><span><strong>사용자 계정으로 기록</strong><small>작업할 때 로그인한 사용자의 GitLab 권한을 다시 확인합니다.</small></span></article><article><LockKeyhole size={18} /><span><strong>허용된 경로만 변경</strong><small>Workspace의 학습 데이터 경로와 본인 제출 범위 안에서만 기록합니다.</small></span></article><article><ShieldCheck size={18} /><span><strong>변경 충돌 방지</strong><small>저장소가 바뀌었으면 덮어쓰지 않고 최신 상태를 다시 확인합니다.</small></span></article></div></section><section className="settings-section-block"><h3>최근 감사 기록</h3><p>Study-ing에서 수행된 주요 Workspace 관리 작업입니다.</p>{!manageable ? <p className="settings-scope-note">감사 기록은 소유자와 관리자만 확인할 수 있습니다.</p> : events.length ? <div className="settings-audit-rows">{events.slice(0, 10).map((event) => <article key={event.id}><span className="settings-audit-icon"><History size={15} /></span><div><strong>{auditLabel(event.eventType)}</strong><small>{formatDateTime(event.createdAt, workspace.settings.timezone)}</small></div></article>)}</div> : <div className="settings-empty"><History size={22} /><strong>표시할 감사 기록이 없어요</strong></div>}</section></div>;
+    return <div className="settings-sections"><section className="settings-section-block"><h3>데이터 작성 원칙</h3><div className="security-principle-rows"><article><KeyRound size={18} /><span><strong>사용자 계정으로 기록</strong><small>작업할 때 로그인한 사용자의 {repositoryProviderLabel} 권한을 다시 확인합니다.</small></span></article><article><LockKeyhole size={18} /><span><strong>허용된 경로만 변경</strong><small>Workspace의 학습 데이터 경로와 본인 제출 범위 안에서만 기록합니다.</small></span></article><article><ShieldCheck size={18} /><span><strong>변경 충돌 방지</strong><small>저장소가 바뀌었으면 덮어쓰지 않고 최신 상태를 다시 확인합니다.</small></span></article></div></section><section className="settings-section-block"><h3>최근 감사 기록</h3><p>Study-ing에서 수행된 주요 Workspace 관리 작업입니다.</p>{!manageable ? <p className="settings-scope-note">감사 기록은 소유자와 관리자만 확인할 수 있습니다.</p> : events.length ? <div className="settings-audit-rows">{events.slice(0, 10).map((event) => <article key={event.id}><span className="settings-audit-icon"><History size={15} /></span><div><strong>{auditLabel(event.eventType)}</strong><small>{formatDateTime(event.createdAt, workspace.settings.timezone)}</small></div></article>)}</div> : <div className="settings-empty"><History size={22} /><strong>표시할 감사 기록이 없어요</strong></div>}</section></div>;
   }
 
   function DangerSettings({ isOwner: owner, onDelete }: { isOwner: boolean; onDelete: () => void }) {

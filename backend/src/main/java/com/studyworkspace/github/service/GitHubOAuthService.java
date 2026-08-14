@@ -8,7 +8,7 @@ import java.security.SecureRandom;
 import java.time.Instant;
 import java.util.Base64;
 
-import com.studyworkspace.github.config.GitHubOAuthProperties;
+import com.studyworkspace.github.config.GitHubAppProperties;
 import com.studyworkspace.github.dto.GitHubOAuthToken;
 import com.studyworkspace.github.dto.GitHubUser;
 import com.studyworkspace.provider.ProviderIdentity;
@@ -27,18 +27,18 @@ import org.springframework.web.reactive.function.client.WebClientRequestExceptio
 import org.springframework.web.util.UriComponentsBuilder;
 import reactor.core.publisher.Mono;
 
-/** GitHub OAuth App adapter limited to authorization-code exchange and identity lookup. */
+/** GitHub App user-authorization adapter limited to code exchange and identity lookup. */
 @Service
 public class GitHubOAuthService {
-	private static final String API_VERSION = "2022-11-28";
+	private static final String API_VERSION = "2026-03-10";
 	private static final String USER_AGENT = "Study-ing";
 
-	private final GitHubOAuthProperties properties;
+	private final GitHubAppProperties properties;
 	private final WebClient authorizationClient;
 	private final WebClient apiClient;
 	private final SecureRandom secureRandom = new SecureRandom();
 
-	public GitHubOAuthService(WebClient.Builder webClientBuilder, GitHubOAuthProperties properties) {
+	public GitHubOAuthService(WebClient.Builder webClientBuilder, GitHubAppProperties properties) {
 		this.properties = properties;
 		HttpClient httpClient = HttpClient.newBuilder()
 			.connectTimeout(properties.requestTimeout())
@@ -51,7 +51,7 @@ public class GitHubOAuthService {
 			.baseUrl(properties.apiBaseUrl()).build();
 	}
 
-	public boolean isConfigured() { return properties.isConfigured(); }
+	public boolean isConfigured() { return properties.userAuthorizationConfigured(); }
 
 	public String createState() { return randomUrlSafe(32); }
 
@@ -76,7 +76,6 @@ public class GitHubOAuthService {
 			.queryParam("code_challenge", codeChallenge)
 			.queryParam("code_challenge_method", "S256")
 			.queryParam("prompt", "select_account");
-		if (!properties.scope().isBlank()) builder.queryParam("scope", properties.scope());
 		return builder.build().encode().toUriString();
 	}
 
@@ -116,6 +115,37 @@ public class GitHubOAuthService {
 		);
 	}
 
+	public ProviderOAuthCredential refreshUserAccessToken(String refreshToken) {
+		requireConfiguration();
+		if (refreshToken == null || refreshToken.isBlank()) {
+			throw new WorkspaceException("GITHUB_REAUTH_REQUIRED", "GitHub 계정을 다시 승인해 주세요.", 401);
+		}
+		LinkedMultiValueMap<String, String> form = new LinkedMultiValueMap<>();
+		form.add("client_id", properties.clientId());
+		form.add("client_secret", properties.clientSecret());
+		form.add("grant_type", "refresh_token");
+		form.add("refresh_token", refreshToken);
+		GitHubOAuthToken token = execute(authorizationClient.post()
+			.uri("/login/oauth/access_token")
+			.header(HttpHeaders.ACCEPT, MediaType.APPLICATION_JSON_VALUE)
+			.header(HttpHeaders.USER_AGENT, USER_AGENT)
+			.body(BodyInserters.fromFormData(form))
+			.retrieve()
+			.onStatus(HttpStatusCode::isError, response -> oauthError(response.statusCode().value()))
+			.bodyToMono(GitHubOAuthToken.class));
+		if (token.accessToken() == null || token.accessToken().isBlank()) {
+			throw new WorkspaceException("GITHUB_REAUTH_REQUIRED", "GitHub 계정을 다시 승인해 주세요.", 401);
+		}
+		Instant expiresAt = token.expiresIn() != null && token.expiresIn() > 0
+			? Instant.now().plusSeconds(token.expiresIn()) : null;
+		return new ProviderOAuthCredential(
+			token.accessToken(),
+			token.refreshToken() == null || token.refreshToken().isBlank() ? refreshToken : token.refreshToken(),
+			expiresAt,
+			token.scope()
+		);
+	}
+
 	private LinkedMultiValueMap<String, String> tokenForm(String code, String codeVerifier) {
 		LinkedMultiValueMap<String, String> form = new LinkedMultiValueMap<>();
 		form.add("client_id", properties.clientId());
@@ -150,7 +180,7 @@ public class GitHubOAuthService {
 	}
 
 	private void requireConfiguration() {
-		if (!properties.isConfigured()) {
+		if (!properties.userAuthorizationConfigured()) {
 			throw new WorkspaceException("GITHUB_LINK_NOT_CONFIGURED", "GitHub 계정 연결이 아직 준비되지 않았습니다.", 503);
 		}
 	}

@@ -29,14 +29,15 @@ cp frontend/.env.example frontend/.env.local
 |---|---|---|
 | Frontend | `NEXT_PUBLIC_API_BASE_URL` | Backend API의 공개 origin. 동일 origin 배포를 권장 |
 | GitLab OAuth | `GITLAB_OAUTH_*` | 로그인, 프로젝트 연결과 Repository 작업 |
-| GitHub OAuth | `GITHUB_OAUTH_*` | Settings의 Connected Account linking만 활성화 |
+| GitHub App user authorization | `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`, `GITHUB_REDIRECT_URI` | Settings의 Connected Account linking |
+| GitHub App authentication | `GITHUB_APP_ID`, `GITHUB_PRIVATE_KEY_PATH` | 향후 installation/repository 인증 foundation |
 | Credential | `OAUTH_TOKEN_ENCRYPTION_KEY` | Provider credential AES-GCM 암호화 |
 | Database | `DATABASE_URL`, `DATABASE_USERNAME`, `DATABASE_PASSWORD` | 설정하지 않으면 로컬 H2 file DB |
 | Browser | `FRONTEND_URL`, `FRONTEND_ORIGINS` | redirect와 CORS 허용 주소 |
 
 데모는 빌드 모드가 아니다. 랜딩 또는 로그인 화면의 `데모 Workspace 둘러보기`가 `/demo`를 거쳐 현재 브라우저 탭의 `sessionStorage`에만 데모 세션을 활성화한다. 일반 보호 경로는 항상 실제 인증 세션과 API를 사용한다.
 
-GitHub 설정은 GitHub 로그인이나 Repository 기능을 활성화하지 않습니다. 정확한 capability 경계는 [Provider capability](architecture/providers/capabilities.md)를 따릅니다.
+GitHub 설정과 기능 플래그는 분리됩니다. 현재 `GITHUB_ACCOUNT_LINKING_ENABLED`만 사용할 수 있으며 GitHub 로그인과 Repository Provider는 아직 capability에 노출되지 않습니다. 자세한 값과 secret mount 방식은 [GitHub App configuration](architecture/providers/github-app-configuration.md)을 따릅니다.
 
 ## Local infrastructure
 

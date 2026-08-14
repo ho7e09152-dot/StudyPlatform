@@ -151,7 +151,7 @@ test("starter preview infrastructure is removed", async () => {
   assert.match(layout, /RootShell/);
   assert.match(rootShell, /WorkspaceProvider/);
   assert.match(rootShell, /AuthProvider/);
-  assert.match(rootShell, /GitLabConnectionProvider/);
+  assert.match(rootShell, /RepositoryConnectionProvider/);
   assert.doesNotMatch(packageJson, /react-loading-skeleton/);
   await assert.rejects(access(new URL("../app/_sites-preview", import.meta.url)));
 });

@@ -43,14 +43,14 @@ OAuth access/refresh token은 서버 DB에서 AES-GCM으로 암호화한다. 브
 - GitHub user ID, username, optional display name, avatar URL, profile URL
 - OAuth access token, optional refresh token/expiry metadata, granted scope
 
-GitHub 연결은 이미 로그인한 사용자가 Settings에서 명시적으로 요청할 때만 수행한다. 현재 OAuth scope를 요청하지 않고 공개 identity만 확인하며, email과 repository data는 요청하거나 저장하지 않는다.
+GitHub 연결은 이미 로그인한 사용자가 Settings에서 명시적으로 요청할 때만 GitHub App user authorization으로 수행한다. email은 요청하거나 저장하지 않는다. GitHub 저장소 기능이 활성화된 경우 사용자가 설치 대상으로 선택한 저장소의 metadata, permission, 파일, commit과 comment를 Workspace 기능 제공 범위에서 처리한다.
 
 ### 2.3 Workspace와 학습 활동
 
-- Workspace membership, Study-ing role, GitLab repository permission 상태
+- Workspace membership, Study-ing role, GitLab/GitHub repository permission 상태
 - 연결 project ID/path, branch, repository storage metadata
 - 학습 일정, 제출 본문·reflection, team document, 공지와 메시지
-- GitLab commit ID/message와 review/comment 연계정보
+- GitLab/GitHub commit ID/message와 review/comment 연계정보
 - notification 내용과 read time
 - sync job과 audit event의 유형·대상·오류정보·시각
 
@@ -111,13 +111,13 @@ Study-ing은 GitLab repository를 학습 일정·제출 원본과 변경 이력�
 - commit, commit author information와 Git history
 - review/comment
 
-Study-ing은 탈퇴나 Workspace 삭제 과정에서 이 GitLab 원본을 자동 삭제하지 않는다. 사용자는 해당 GitLab project의 권한과 정책에 따라 직접 처리해야 한다.
+Study-ing은 탈퇴나 Workspace 삭제 과정에서 GitLab 또는 GitHub 원본을 자동 삭제하지 않는다. 사용자는 해당 저장소의 권한과 Provider 정책에 따라 직접 처리해야 한다.
 
 ## 6. 외부 서비스, 처리위탁과 제3자 제공
 
-현재 로그인 및 Workspace 저장소 Provider는 GitLab이다. 사용자가 Settings에서 명시적으로 연결한 경우 GitHub는 Connected Account Provider로도 처리된다. 이 단계에서는 GitHub repository 기능을 제공하지 않는다.
+현재 로그인 Provider는 GitLab이다. 사용자가 Settings에서 명시적으로 연결하고 GitHub App을 대상 저장소에 설치한 경우 GitHub도 Workspace 저장소 Provider로 사용할 수 있다. GitHub 신규 로그인/가입은 제공하지 않는다.
 
-GitHub 계정을 연결하면 GitHub user ID, username, optional display name, avatar/profile URL과 encrypted OAuth credential을 처리한다. 현재 별도 OAuth scope와 email은 요청하거나 저장하지 않는다.
+GitHub 계정을 연결하면 GitHub user ID, username, optional display name, avatar/profile URL과 encrypted GitHub App user access credential을 처리한다. 현재 email은 요청하거나 저장하지 않는다. GitHub Workspace를 사용하면 설치된 저장소 metadata/permission과 사용자가 요청한 repository file/commit/comment를 처리한다.
 
 ### GitLab → Study-ing
 
@@ -134,7 +134,7 @@ GitHub 계정을 연결하면 GitHub user ID, username, optional display name, a
 | 외부 서비스 | 목적 | 전달·처리 데이터 | 상태 |
 |---|---|---|---|
 | `{{GITLAB_INSTANCE_TYPE_OR_OPERATOR}}` | OAuth, project 접근, repository read/write/review | 위 GitLab data flow | 운영자·법적 분류 확인 필요 |
-| GitHub.com | 사용자가 요청한 GitHub Connected Account 연결·재승인 | GitHub user ID, username, display/profile metadata, OAuth credential | 법적 분류와 국외 처리 여부 검토 필요; repository 기능은 현재 미지원 |
+| GitHub.com | Connected Account 연결·재승인과 사용자가 선택한 Workspace 저장소 read/write | GitHub identity/credential, 설치된 repository metadata/permission, 요청된 file/commit/comment | 법적 분류와 국외 처리 여부 검토 필요 |
 | `{{PRODUCTION_HOSTING_PROVIDER}}` | app hosting | request와 service data | LAUNCH BLOCKER |
 | `{{PRODUCTION_DB_PROVIDER}}` | DB/session/backup(해당 시) | Section 2 데이터 | LAUNCH BLOCKER |
 

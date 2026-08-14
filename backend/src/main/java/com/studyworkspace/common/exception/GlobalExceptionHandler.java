@@ -26,6 +26,12 @@ public class GlobalExceptionHandler {
 			.body(ApiErrorResponse.of(exception.code(), exception.getMessage()));
 	}
 
+	@ExceptionHandler(RepositoryProviderException.class)
+	public ResponseEntity<ApiErrorResponse> handleRepositoryProvider(RepositoryProviderException exception) {
+		return ResponseEntity.status(exception.upstreamStatus())
+			.body(ApiErrorResponse.of(exception.code(), exception.getMessage()));
+	}
+
 	@ExceptionHandler(WorkspaceException.class)
 	public ResponseEntity<ApiErrorResponse> handleWorkspace(WorkspaceException exception) {
 		return ResponseEntity.status(exception.status())

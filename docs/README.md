@@ -46,6 +46,8 @@ docs/
 | [Repository Provider](architecture/providers/repository.md) | 정규화된 Repository 연결과 credential 해석 |
 | [Provider capability](architecture/providers/capabilities.md) | 실제 노출 가능한 Provider 기능의 source of truth |
 | [GitHub account linking](architecture/providers/github-account-linking.md) | 현재 구현된 GitHub 연결 범위와 보안 경계 |
+| [GitHub App configuration](architecture/providers/github-app-configuration.md) | user authorization, App JWT, PEM과 capability 설정 |
+| [GitHub Repository Adapter](architecture/providers/github-repository-adapter.md) | App 설치, 저장소 권한, read/write와 rollout 경계 |
 | [Multi-provider migration](architecture/providers/migration.md) | V11 migration과 운영 검증 |
 
 ## 개발 계약

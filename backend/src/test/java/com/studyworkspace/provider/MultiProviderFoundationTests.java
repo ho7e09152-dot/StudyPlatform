@@ -2,6 +2,8 @@ package com.studyworkspace.provider;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 import java.time.Instant;
 
@@ -9,7 +11,8 @@ import com.studyworkspace.auth.dto.GitLabOAuthSession;
 import com.studyworkspace.auth.service.OAuthAccountService;
 import com.studyworkspace.gitlab.dto.GitLabUser;
 import com.studyworkspace.workspace.domain.RepositoryProvider;
-import com.studyworkspace.github.config.GitHubOAuthProperties;
+import com.studyworkspace.github.config.GitHubAppProperties;
+import com.studyworkspace.github.config.GitHubAppConfigurationValidator;
 import java.time.Duration;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
@@ -67,13 +70,39 @@ class MultiProviderFoundationTests {
 
 	@Test
 	void configuredGitHubLinkingDoesNotEnableGitHubLoginOrRepositories() {
-		ProviderCapabilities configured = new ProviderCapabilities(new GitHubOAuthProperties(
-			"client", "secret", "http://localhost/callback", "read:user", "https://github.com",
+		ProviderCapabilities configured = new ProviderCapabilities(new GitHubAppProperties(
+			"", "study-ing", "client", "secret", "http://localhost/callback", "",
+			new GitHubAppProperties.Features(true, false, false), "https://github.com",
 			"https://api.github.com", Duration.ofSeconds(10), Duration.ofMinutes(10)
 		));
 		assertThat(configured.accountLinkProviders()).containsExactly(RepositoryProvider.GITLAB, RepositoryProvider.GITHUB);
 		assertThat(configured.authProviders()).containsExactly(RepositoryProvider.GITLAB);
 		assertThat(configured.repositoryProviders()).containsExactly(RepositoryProvider.GITLAB);
+	}
+
+	@Test
+	void credentialsAloneDoNotEnableGitHubAccountLinking() {
+		ProviderCapabilities disabled = new ProviderCapabilities(new GitHubAppProperties(
+			"", "study-ing", "client", "secret", "http://localhost/callback", "",
+			new GitHubAppProperties.Features(false, false, false), "https://github.com",
+			"https://api.github.com", Duration.ofSeconds(10), Duration.ofMinutes(10)
+		));
+		assertThat(disabled.accountLinkProviders()).containsExactly(RepositoryProvider.GITLAB);
+	}
+
+	@Test
+	void repositoryCapabilityRequiresBothTheFeatureAndValidatedAppAuthentication() {
+		GitHubAppConfigurationValidator validator = mock(GitHubAppConfigurationValidator.class);
+		when(validator.repositoryAuthenticationReady()).thenReturn(true);
+		ProviderCapabilities configured = new ProviderCapabilities(new GitHubAppProperties(
+			"123456", "study-ing", "client", "secret", "http://localhost/callback", "/run/secrets/key.pem",
+			new GitHubAppProperties.Features(true, false, true), "https://github.com",
+			"https://api.github.com", Duration.ofSeconds(10), Duration.ofMinutes(10)
+		), validator);
+
+		assertThat(configured.repositoryProviders())
+			.containsExactly(RepositoryProvider.GITLAB, RepositoryProvider.GITHUB);
+		assertThat(configured.authProviders()).containsExactly(RepositoryProvider.GITLAB);
 	}
 
 	private static GitLabOAuthSession oauth(long externalId, String accessToken, String displayName) {

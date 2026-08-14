@@ -23,7 +23,7 @@ import { Avatar } from "@/components/ui/Avatar";
 import { Toast } from "@/components/ui/Toast";
 import { PageTransition } from "@/components/ui/PageTransition";
 import { WorkspaceSwitcher } from "@/components/shell/WorkspaceSwitcher";
-import { useGitLabConnection } from "@/lib/api/hooks/useGitLabConnection";
+import { useRepositoryConnection } from "@/lib/api/hooks/useRepositoryConnection";
 import { APP_ROUTES } from "@/lib/routes";
 import { getWorkspaceRepositoryConnection, REPOSITORY_PROVIDER_LABEL } from "@/lib/domain/repository";
 import type { StudyMember } from "@/lib/domain/types";
@@ -58,19 +58,21 @@ function ThemedAppShell({ children }: { children: ReactNode }) {
     toast,
     dismissToast,
   } = useWorkspace();
-  const connection = useGitLabConnection();
+  const connection = useRepositoryConnection();
   const repositoryConnection = getWorkspaceRepositoryConnection(workspace);
   const providerLabel = REPOSITORY_PROVIDER_LABEL[repositoryConnection.provider];
   const [drawerOpen, setDrawerOpen] = useState(false);
   const currentMember = workspace.members.find(
     (member) => member.id === currentUserId,
   )!;
-  const gitLabConnected =
+  const repositoryConnected =
     connection.state === "ready" &&
-    connection.data?.status === "CONNECTED";
+    connection.data?.connectionState === "AVAILABLE";
   const repositoryAccessRevoked = [
     "GITLAB_PROJECT_ACCESS_DENIED",
     "GITLAB_PROJECT_NOT_FOUND",
+    "GITHUB_REPOSITORY_ACCESS_DENIED",
+    "GITHUB_REPOSITORY_NOT_FOUND",
     "REPOSITORY_ACCESS_REVOKED",
   ].includes(connection.errorCode ?? "");
   const repositoryStatusLabel =
@@ -80,16 +82,16 @@ function ThemedAppShell({ children }: { children: ReactNode }) {
         ? `${providerLabel} 접근 권한 필요`
         : connection.state === "error"
           ? `${providerLabel} 연결 확인 필요`
-        : gitLabConnected
+        : repositoryConnected
           ? `${providerLabel} 연결됨`
           : `${providerLabel} 설정 필요`;
   const repositoryStatusDetail = repositoryAccessRevoked
-    ? "현재 Workspace의 GitLab 프로젝트 접근 권한을 확인해주세요."
-    : gitLabConnected
-    ? repositoryConnection.repositoryPath ?? connection.data?.project?.pathWithNamespace
+    ? `현재 Workspace의 ${providerLabel} 저장소 접근 권한을 확인해주세요.`
+    : repositoryConnected
+    ? repositoryConnection.repositoryPath ?? connection.data?.fullName
     : connection.state === "loading"
       ? "연결 상태를 확인하고 있습니다."
-      : "GitLab 연결 상태를 다시 확인해주세요.";
+      : `${providerLabel} 연결 상태를 다시 확인해주세요.`;
 
   return (
     <div className="app-frame" data-theme={themeMode.toLowerCase()} data-accent={accentColor.toLowerCase()}>
@@ -128,11 +130,11 @@ function ThemedAppShell({ children }: { children: ReactNode }) {
         </nav>
 
         <div className="sidebar-foot">
-          <div className={`sync-card ${gitLabConnected ? "sync-card--healthy" : "sync-card--attention"}`}>
+          <div className={`sync-card ${repositoryConnected ? "sync-card--healthy" : "sync-card--attention"}`}>
             <div>
               <span
                 className={`status-dot ${
-                  gitLabConnected
+                  repositoryConnected
                     ? ""
                     : connection.state === "error"
                       ? "status-dot--danger"
@@ -141,7 +143,7 @@ function ThemedAppShell({ children }: { children: ReactNode }) {
               />
               {repositoryStatusLabel}
             </div>
-            {!gitLabConnected ? (
+            {!repositoryConnected ? (
               <>
                 <small title={repositoryStatusDetail}>{repositoryStatusDetail}</small>
                 <button
@@ -199,7 +201,7 @@ function ThemedAppShell({ children }: { children: ReactNode }) {
           {repositoryAccessRevoked && !pathname.startsWith("/workspaces") && pathname !== "/settings/accounts" ? (
             <div className="page-stack library-route-state" role="alert">
               <AlertTriangle size={24} aria-hidden="true" />
-              <strong>GitLab 프로젝트 접근 권한을 확인해주세요.</strong>
+              <strong>{providerLabel} 저장소 접근 권한을 확인해주세요.</strong>
               <p>현재 Workspace의 저장소에 접근할 수 없어 학습 내용을 표시하지 않습니다.</p>
               <div className="inline-actions">
                 <button type="button" className="button button--secondary" onClick={connection.reload}>다시 확인</button>

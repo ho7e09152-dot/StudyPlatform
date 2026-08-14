@@ -6,11 +6,9 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import com.studyworkspace.gitlab.dto.GitLabBatchCommitResponse;
-import com.studyworkspace.gitlab.dto.GitLabCommitAction;
-import com.studyworkspace.gitlab.dto.GitLabFileContent;
-import com.studyworkspace.gitlab.dto.GitLabTreeItem;
 import com.studyworkspace.gitlab.service.GitLabOAuthProjectService;
+import com.studyworkspace.gitlab.service.GitLabRepositoryDataAdapter;
+import com.studyworkspace.workspace.port.RepositoryDataPort;
 import com.studyworkspace.workspace.domain.WorkspaceException;
 import com.studyworkspace.workspace.domain.WorkspaceModels.WorkspaceState;
 import com.studyworkspace.workspace.dto.RepositorySchemaMigrationPreview;
@@ -18,22 +16,26 @@ import com.studyworkspace.workspace.dto.RepositorySchemaMigrationPreview.Blocker
 import com.studyworkspace.workspace.dto.RepositorySchemaMigrationPreview.FileMove;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
+import org.springframework.beans.factory.annotation.Autowired;
 
 @Service
 public class RepositorySchemaMigrationService {
 	private static final int MAX_COMMIT_ACTIONS = 100;
 
-	private final GitLabOAuthProjectService gitLab;
+	private final RepositoryDataService repositories;
+
+	@Autowired
+	public RepositorySchemaMigrationService(RepositoryDataService repositories) {
+		this.repositories = repositories;
+	}
 
 	public RepositorySchemaMigrationService(GitLabOAuthProjectService gitLab) {
-		this.gitLab = gitLab;
+		this(new RepositoryDataService(List.of(new GitLabRepositoryDataAdapter(gitLab))));
 	}
 
 	public RepositorySchemaMigrationPreview preview(String accessToken, WorkspaceState workspace) {
-		List<GitLabTreeItem> tree = gitLab.getAllRepositoryTree(
-			accessToken, workspace.gitlabProjectId(), workspace.defaultBranch()
-		);
-		return preview(accessToken, workspace, tree);
+		RepositoryDataPort repository = repositories.require(workspace.repository());
+		return preview(repository, accessToken, workspace, repository.listTree(accessToken, workspace.repository()));
 	}
 
 	public MigrationCommit migrate(
@@ -42,10 +44,9 @@ public class RepositorySchemaMigrationService {
 		String expectedTreeFingerprint,
 		String authorName
 	) {
-		List<GitLabTreeItem> tree = gitLab.getAllRepositoryTree(
-			accessToken, workspace.gitlabProjectId(), workspace.defaultBranch()
-		);
-		RepositorySchemaMigrationPreview preview = preview(accessToken, workspace, tree);
+		RepositoryDataPort repository = repositories.require(workspace.repository());
+		List<RepositoryDataPort.TreeEntry> tree = repository.listTree(accessToken, workspace.repository());
+		RepositorySchemaMigrationPreview preview = preview(repository, accessToken, workspace, tree);
 		if (!StringUtils.hasText(expectedTreeFingerprint)
 			|| !expectedTreeFingerprint.equals(preview.treeFingerprint())) {
 			throw new WorkspaceException("REPOSITORY_CHANGED", "마이그레이션 확인 이후 저장소가 변경되었습니다. 다시 확인해 주세요.", 409);
@@ -57,38 +58,39 @@ public class RepositorySchemaMigrationService {
 			throw new WorkspaceException("REPOSITORY_MIGRATION_BLOCKED", message, 409);
 		}
 
-		List<GitLabCommitAction> actions = new ArrayList<>();
-		preview.moves().forEach(move -> actions.add(GitLabCommitAction.move(move.sourcePath(), move.targetPath())));
+		List<RepositoryDataPort.CommitAction> actions = new ArrayList<>();
+		preview.moves().forEach(move -> actions.add(RepositoryDataPort.CommitAction.move(move.sourcePath(), move.targetPath())));
 		String configContent = RepositoryInitializationService.configContent(
 			workspace.id(), WorkspaceRepositoryLayout.CURRENT_SCHEMA_VERSION
 		);
 		if (WorkspaceRepositoryLayout.MANAGED_BASE_PATH.equals(workspace.repositoryBasePath())) {
-			actions.add(GitLabCommitAction.update(WorkspaceRepositoryLayout.CONFIG_PATH, configContent, null));
+			actions.add(RepositoryDataPort.CommitAction.update(WorkspaceRepositoryLayout.CONFIG_PATH, configContent, null));
 		} else {
-			actions.add(GitLabCommitAction.create(WorkspaceRepositoryLayout.CONFIG_PATH, configContent));
+			actions.add(RepositoryDataPort.CommitAction.create(WorkspaceRepositoryLayout.CONFIG_PATH, configContent));
 		}
 
-		GitLabBatchCommitResponse commit = gitLab.createCommit(
+		String commitId = repository.createCommit(
 			accessToken,
-			workspace.gitlabProjectId(),
+			workspace.repository(),
 			workspace.defaultBranch(),
 			"study: migrate repository layout to schema v2",
 			actions,
 			authorName
 		);
-		if (commit == null || !StringUtils.hasText(commit.id())) {
-			throw new WorkspaceException("REPOSITORY_MIGRATION_COMMIT_MISSING", "GitLab 마이그레이션 커밋 SHA를 확인하지 못했습니다.", 502);
+		if (!StringUtils.hasText(commitId)) {
+			throw new WorkspaceException("REPOSITORY_MIGRATION_COMMIT_MISSING", "저장소 마이그레이션 커밋 SHA를 확인하지 못했습니다.", 502);
 		}
-		return new MigrationCommit(commit.id(), preview.totalMoves());
+		return new MigrationCommit(commitId, preview.totalMoves());
 	}
 
 	private RepositorySchemaMigrationPreview preview(
+		RepositoryDataPort repository,
 		String accessToken,
 		WorkspaceState workspace,
-		List<GitLabTreeItem> tree
+		List<RepositoryDataPort.TreeEntry> tree
 	) {
 		int currentVersion = WorkspaceRepositoryLayout.schemaVersion(workspace.repositorySchemaVersion());
-		List<GitLabTreeItem> files = tree.stream().filter(item -> "blob".equals(item.type())).toList();
+		List<RepositoryDataPort.TreeEntry> files = tree.stream().filter(item -> "blob".equals(item.type())).toList();
 		List<Blocker> blockers = new ArrayList<>();
 		List<FileMove> moves = new ArrayList<>();
 		Set<String> repositoryPaths = new HashSet<>();
@@ -115,7 +117,7 @@ public class RepositorySchemaMigrationService {
 
 		int sessionFiles = 0;
 		int submissionFiles = 0;
-		for (GitLabTreeItem item : files) {
+		for (RepositoryDataPort.TreeEntry item : files) {
 			String relative = WorkspaceRepositoryPath.relative(workspace.repositoryBasePath(), item.path());
 			var session = WorkspaceRepositoryLayout.matchSession(relative, WorkspaceRepositoryLayout.LEGACY_SCHEMA_VERSION).orElse(null);
 			if (session != null) {
@@ -189,8 +191,9 @@ public class RepositorySchemaMigrationService {
 			return;
 		}
 		try {
-			GitLabFileContent config = gitLab.getRepositoryFile(
-				accessToken, workspace.gitlabProjectId(), WorkspaceRepositoryLayout.CONFIG_PATH, workspace.defaultBranch()
+			RepositoryDataPort repository = repositories.require(workspace.repository());
+			RepositoryDataPort.RepositoryFile config = repository.getFile(
+				accessToken, workspace.repository(), WorkspaceRepositoryLayout.CONFIG_PATH, workspace.defaultBranch()
 			);
 			String expected = RepositoryInitializationService.configContent(
 				workspace.id(), WorkspaceRepositoryLayout.LEGACY_SCHEMA_VERSION

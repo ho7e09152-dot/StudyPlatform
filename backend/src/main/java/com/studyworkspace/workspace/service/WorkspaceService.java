@@ -143,28 +143,35 @@ public class WorkspaceService {
 	}
 
 	public synchronized WorkspaceState create(CreateWorkspaceRequest request, GitLabUser user, int repositoryAccessLevel) {
-		return create(request, user, null, repositoryAccessLevel);
+		return create(request, user, null, repositoryAccessLevel, gitLabIdentity(request, repositoryAccessLevel));
 	}
 
 	public synchronized WorkspaceState create(CreateWorkspaceRequest request, StudyIngPrincipal user, int repositoryAccessLevel) {
-		return create(request, user, user.userId(), repositoryAccessLevel);
+		return create(request, user, user.userId(), repositoryAccessLevel, gitLabIdentity(request, repositoryAccessLevel));
 	}
 
-	private WorkspaceState create(CreateWorkspaceRequest request, GitLabUser user, String studyIngUserId, int repositoryAccessLevel) {
+	public synchronized WorkspaceState create(CreateWorkspaceRequest request, StudyIngPrincipal user,
+		int repositoryAccessLevel, RepositoryIdentity repository) {
+		return create(request, user, user.userId(), repositoryAccessLevel, repository);
+	}
+
+	private WorkspaceState create(CreateWorkspaceRequest request, GitLabUser user, String studyIngUserId,
+		int repositoryAccessLevel, RepositoryIdentity repository) {
 		refreshAllFromDatabase();
-		if (request == null || !StringUtils.hasText(request.name()) || request.gitlabProjectId() <= 0 || !StringUtils.hasText(request.gitlabProjectPath())) {
-			throw error("INVALID_REQUEST", "Workspace 이름과 GitLab 프로젝트 정보가 필요합니다.", 400);
+		if (request == null || !StringUtils.hasText(request.name()) || repository == null
+			|| !StringUtils.hasText(repository.externalRepositoryId()) || !StringUtils.hasText(repository.fullName())) {
+			throw error("INVALID_REQUEST", "Workspace 이름과 저장소 정보가 필요합니다.", 400);
 		}
 		if (user == null || user.id() <= 0 || !StringUtils.hasText(user.username())) {
 			throw error("AUTH_REQUIRED", "GitLab 로그인이 필요합니다.", 401);
 		}
 		if (workspaces.values().stream().anyMatch(workspace -> workspace.repository() != null
-				&& "GITLAB".equals(workspace.repository().provider())
-				&& Long.toString(request.gitlabProjectId()).equals(workspace.repository().externalRepositoryId()))
+				&& repository.provider().equals(workspace.repository().provider())
+				&& repository.externalRepositoryId().equals(workspace.repository().externalRepositoryId()))
 			|| repositoryConnectionRepository != null && repositoryConnectionRepository
-				.existsByProviderAndExternalRepositoryId("GITLAB", Long.toString(request.gitlabProjectId()))
-			|| stateRepository != null && stateRepository.existsByGitLabProjectId(request.gitlabProjectId())) {
-			throw error("WORKSPACE_PROJECT_ALREADY_CONNECTED", "이미 연결되었거나 복원 가능한 GitLab 프로젝트입니다. 삭제 목록을 확인해 주세요.", 409);
+				.existsByProviderAndExternalRepositoryId(repository.provider(), repository.externalRepositoryId())
+			|| "GITLAB".equals(repository.provider()) && stateRepository != null && stateRepository.existsByGitLabProjectId(request.gitlabProjectId())) {
+			throw error("WORKSPACE_PROJECT_ALREADY_CONNECTED", "이미 연결되었거나 복원 가능한 저장소입니다. 삭제 목록을 확인해 주세요.", 409);
 		}
 		String id = "workspace-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
 		String displayName = StringUtils.hasText(user.name()) ? user.name().trim() : user.username();
@@ -174,9 +181,10 @@ public class WorkspaceService {
 			"#6d52b5", safeMemberFileName(request.ownerRepositoryFileName(), user.username()), "OWNER", "ACTIVE", repositoryAccessLevel,
 			studyIngUserId
 		);
+		long legacyGitLabProjectId = "GITLAB".equals(repository.provider()) ? Long.parseLong(repository.externalRepositoryId()) : 0;
+		String branch = StringUtils.hasText(repository.defaultBranch()) ? repository.defaultBranch().trim() : "main";
 		WorkspaceState workspace = new WorkspaceState(
-			id, request.name().trim(), request.gitlabProjectId(), request.gitlabProjectPath().trim(),
-			StringUtils.hasText(request.defaultBranch()) ? request.defaultBranch().trim() : "main",
+			id, request.name().trim(), legacyGitLabProjectId, repository.fullName(), branch,
 			WorkspaceRepositoryPath.normalizeBasePath(request.repositoryBasePath()),
 			WorkspaceRepositoryLayout.schemaVersion(request.repositorySchemaVersion()),
 			StringUtils.hasText(request.importMode()) ? request.importMode() : "EMPTY", "ACTIVE", now(),
@@ -186,14 +194,18 @@ public class WorkspaceService {
 				true,
 				new Notifications(true, true, true)
 			),
-			new RepositoryIdentity("GITLAB", Long.toString(request.gitlabProjectId()), request.gitlabProjectPath().trim(),
-				request.repositoryWebUrl(), request.repositoryVisibility(),
-				StringUtils.hasText(request.defaultBranch()) ? request.defaultBranch().trim() : "main",
-				true, repositoryAccessLevel >= 30, repositoryAccessLevel >= 40, Integer.toString(repositoryAccessLevel))
+			repository
 		);
 		store(workspace);
 		persist();
 		return workspace;
+	}
+
+	private static RepositoryIdentity gitLabIdentity(CreateWorkspaceRequest request, int repositoryAccessLevel) {
+		if (request == null) return null;
+		return new RepositoryIdentity("GITLAB", Long.toString(request.gitlabProjectId()), request.gitlabProjectPath(),
+			request.repositoryWebUrl(), request.repositoryVisibility(), request.defaultBranch(), true,
+			repositoryAccessLevel >= 30, repositoryAccessLevel >= 40, Integer.toString(repositoryAccessLevel));
 	}
 
 	public synchronized WorkspaceState joinMember(String workspaceId, StudyMember candidate) {

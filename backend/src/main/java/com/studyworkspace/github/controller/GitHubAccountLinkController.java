@@ -7,7 +7,7 @@ import java.time.Instant;
 import com.studyworkspace.auth.security.AuthSessionAttributes;
 import com.studyworkspace.auth.security.StudyIngPrincipal;
 import com.studyworkspace.auth.service.ProviderAccountLinkingService;
-import com.studyworkspace.github.config.GitHubOAuthProperties;
+import com.studyworkspace.github.config.GitHubAppProperties;
 import com.studyworkspace.github.service.GitHubOAuthService;
 import com.studyworkspace.provider.ProviderCapabilities;
 import com.studyworkspace.workspace.domain.RepositoryProvider;
@@ -31,14 +31,14 @@ public class GitHubAccountLinkController {
 
 	private final String frontendUrl;
 	private final GitHubOAuthService githubOAuth;
-	private final GitHubOAuthProperties properties;
+	private final GitHubAppProperties properties;
 	private final ProviderCapabilities capabilities;
 	private final ProviderAccountLinkingService linkingService;
 
 	public GitHubAccountLinkController(
 		@Value("${app.frontend-url:http://localhost:3000}") String frontendUrl,
 		GitHubOAuthService githubOAuth,
-		GitHubOAuthProperties properties,
+		GitHubAppProperties properties,
 		ProviderCapabilities capabilities,
 		ProviderAccountLinkingService linkingService
 	) {

@@ -1,7 +1,9 @@
 import { apiGet } from "@/lib/api/client/http";
 import type { Repository } from "@/lib/domain/repository";
+import type { ProviderId } from "@/lib/providers/provider-descriptors";
+import type { RepositoryImportAnalysis } from "@/lib/api/types/gitlab";
 
-interface RepositorySummaryDto {
+export interface RepositorySummaryDto {
   provider: Repository["provider"];
   externalId: string;
   name: string;
@@ -14,8 +16,8 @@ interface RepositorySummaryDto {
   connectionState: string;
 }
 
-export async function listRepositories(search = "", signal?: AbortSignal): Promise<Repository[]> {
-  const params = new URLSearchParams({ perPage: "50" });
+export async function listRepositories(search = "", signal?: AbortSignal, provider: ProviderId = "GITLAB"): Promise<Repository[]> {
+  const params = new URLSearchParams({ perPage: "50", provider });
   if (search.trim()) params.set("search", search.trim());
   const repositories = await apiGet<RepositorySummaryDto[]>(`/api/v1/repositories?${params.toString()}`, signal);
   return repositories.map((repository) => ({
@@ -27,7 +29,23 @@ export async function listRepositories(search = "", signal?: AbortSignal): Promi
     defaultBranch: repository.defaultBranch,
     webUrl: repository.webUrl,
     visibility: repository.visibility,
-    accessLevel: repository.providerPermission == null ? null : Number(repository.providerPermission),
+    accessLevel: repository.provider === "GITLAB" && repository.providerPermission != null
+      ? Number(repository.providerPermission)
+      : repository.capabilities.canManage ? 40 : repository.capabilities.canWrite ? 30 : repository.capabilities.canRead ? 20 : 0,
     capabilities: repository.capabilities,
   }));
+}
+
+export function getRepository(provider: ProviderId, externalId: string, signal?: AbortSignal) {
+  return apiGet<RepositorySummaryDto>(
+    `/api/v1/repositories/${provider}/${encodeURIComponent(externalId)}`,
+    signal,
+  );
+}
+
+export function analyzeRepository(provider: ProviderId, externalId: string, signal?: AbortSignal) {
+  return apiGet<RepositoryImportAnalysis>(
+    `/api/v1/repositories/${provider}/${encodeURIComponent(externalId)}/import-analysis`,
+    signal,
+  );
 }

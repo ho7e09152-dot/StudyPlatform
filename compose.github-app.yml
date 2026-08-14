@@ -1,0 +1,7 @@
+services:
+  backend:
+    volumes:
+      - type: bind
+        source: ${GITHUB_PRIVATE_KEY_HOST_PATH:?Set GITHUB_PRIVATE_KEY_HOST_PATH to the host PEM path}
+        target: /run/secrets/study-ing-github-app.pem
+        read_only: true

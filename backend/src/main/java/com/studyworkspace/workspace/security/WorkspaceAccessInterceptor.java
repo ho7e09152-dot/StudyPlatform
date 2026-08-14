@@ -52,11 +52,11 @@ public class WorkspaceAccessInterceptor implements HandlerInterceptor {
 		String accessToken = user instanceof StudyIngPrincipal principal
 			? credentialResolver.resolve(principal, workspaceAccessService.workspace(workspaceId(matcher)), request).accessToken()
 			: tokenProvider.requireValidSession(request).accessToken();
-		repositoryAccessVerifier.requireRepositoryAccess(
-			matcher.group(1),
-			user.id(),
-			accessToken
-		);
+		if (user instanceof StudyIngPrincipal principal) {
+			repositoryAccessVerifier.requireRepositoryAccess(matcher.group(1), principal.userId(), accessToken);
+		} else {
+			repositoryAccessVerifier.requireRepositoryAccess(matcher.group(1), user.id(), accessToken);
+		}
 		return true;
 	}
 

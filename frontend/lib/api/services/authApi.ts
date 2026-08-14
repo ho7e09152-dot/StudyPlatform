@@ -1,4 +1,4 @@
-import { apiGet, apiRequest } from "@/lib/api/client/http";
+import { apiGet, apiRequest, resetCsrfToken } from "@/lib/api/client/http";
 import type { ProviderId } from "@/lib/providers/provider-descriptors";
 
 export interface StudyIngUser {
@@ -63,8 +63,10 @@ export function getProviderCapabilities(signal?: AbortSignal) {
   return apiGet<ProviderCapabilities>("/api/v1/capabilities", signal);
 }
 
-export function completeGitLabLogin() {
-  return apiRequest<{ returnUrl: string }>("/api/v1/auth/gitlab/complete", { method: "POST" });
+export async function completeGitLabLogin() {
+	const result = await apiRequest<{ returnUrl: string }>("/api/v1/auth/gitlab/complete", { method: "POST" });
+	resetCsrfToken();
+	return result;
 }
 
 export function updateAccountProfile(input: {
@@ -91,12 +93,14 @@ export function updateAccountPreferences(input: {
   });
 }
 
-export function logout() {
-  return apiRequest<void>("/api/v1/auth/logout", { method: "POST" });
+export async function logout() {
+	await apiRequest<void>("/api/v1/auth/logout", { method: "POST" });
+	resetCsrfToken();
 }
 
-export function deleteAccount() {
-  return apiRequest<void>("/api/v1/auth/account", { method: "DELETE" });
+export async function deleteAccount() {
+	await apiRequest<void>("/api/v1/auth/account", { method: "DELETE" });
+	resetCsrfToken();
 }
 
 export function getGitLabReconnectUrl(returnUrl = "/settings") {

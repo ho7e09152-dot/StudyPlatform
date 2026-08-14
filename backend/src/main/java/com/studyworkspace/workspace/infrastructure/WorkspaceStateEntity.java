@@ -22,8 +22,8 @@ public class WorkspaceStateEntity {
 	@Column(nullable = false, length = 120)
 	private String name;
 
-	@Column(name = "gitlab_project_id", nullable = false, unique = true)
-	private long gitLabProjectId;
+	@Column(name = "gitlab_project_id", unique = true)
+	private Long gitLabProjectId;
 
 	@Column(name = "gitlab_project_path", nullable = false, length = 1024)
 	private String gitLabProjectPath;
@@ -77,7 +77,8 @@ public class WorkspaceStateEntity {
 			Instant now = Instant.now();
 			entity.id = state.id();
 			entity.name = state.name();
-			entity.gitLabProjectId = state.gitlabProjectId();
+			entity.gitLabProjectId = state.repository() != null && !"GITLAB".equals(state.repository().provider())
+				? null : state.gitlabProjectId();
 			entity.gitLabProjectPath = state.gitlabProjectPath();
 			entity.defaultBranch = state.defaultBranch();
 			entity.repositoryBasePath = state.repositoryBasePath() == null ? "" : state.repositoryBasePath();
@@ -103,7 +104,7 @@ public class WorkspaceStateEntity {
 	public WorkspaceState toState(ObjectMapper objectMapper) {
 		try {
 			WorkspaceState state = objectMapper.readValue(stateJson, WorkspaceState.class);
-			if (state.repository() != null || gitLabProjectId <= 0) return state;
+			if (state.repository() != null || gitLabProjectId == null || gitLabProjectId <= 0) return state;
 			return new WorkspaceState(
 				state.id(), state.name(), state.gitlabProjectId(), state.gitlabProjectPath(), state.defaultBranch(),
 				state.repositoryBasePath(), state.repositorySchemaVersion(), state.importMode(), state.status(),

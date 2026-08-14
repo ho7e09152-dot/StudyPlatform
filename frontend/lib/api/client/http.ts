@@ -36,6 +36,10 @@ interface CsrfResponse {
 
 let csrfTokenPromise: Promise<CsrfResponse> | null = null;
 
+export function resetCsrfToken() {
+	csrfTokenPromise = null;
+}
+
 async function getCsrfToken(): Promise<CsrfResponse> {
 	csrfTokenPromise ??= fetch(`${API_BASE_URL}/api/v1/auth/csrf`, {
 		method: "GET",
@@ -44,6 +48,9 @@ async function getCsrfToken(): Promise<CsrfResponse> {
 	}).then(async (response) => {
 		if (!response.ok) throw new ApiError("CSRF_TOKEN_FAILED", "보안 토큰을 준비하지 못했습니다.", response.status);
 		return response.json() as Promise<CsrfResponse>;
+	}).catch((error) => {
+		resetCsrfToken();
+		throw error;
 	});
 	return csrfTokenPromise;
 }
@@ -51,6 +58,14 @@ async function getCsrfToken(): Promise<CsrfResponse> {
 export async function apiRequest<T>(
 	path: string,
 	options: ApiRequestOptions = {},
+): Promise<T> {
+	return apiRequestAttempt<T>(path, options, true);
+}
+
+async function apiRequestAttempt<T>(
+	path: string,
+	options: ApiRequestOptions,
+	allowCsrfRetry: boolean,
 ): Promise<T> {
 	const method = options.method ?? "GET";
 	const csrf = method === "GET" ? null : await getCsrfToken();
@@ -68,6 +83,15 @@ export async function apiRequest<T>(
 
   if (!response.ok) {
     const body = (await response.json().catch(() => null)) as ApiErrorBody | null;
+		if (
+			method !== "GET" &&
+			allowCsrfRetry &&
+			response.status === 403 &&
+			body?.code === "ACCESS_DENIED"
+		) {
+			resetCsrfToken();
+			return apiRequestAttempt<T>(path, options, false);
+		}
     if (
       response.status === 401 &&
       typeof window !== "undefined" &&
