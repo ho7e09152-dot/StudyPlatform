@@ -27,6 +27,7 @@ import { useRepositoryConnection } from "@/lib/api/hooks/useRepositoryConnection
 import { APP_ROUTES } from "@/lib/routes";
 import { getWorkspaceRepositoryConnection, REPOSITORY_PROVIDER_LABEL } from "@/lib/domain/repository";
 import type { StudyMember } from "@/lib/domain/types";
+import { getPageTransitionPath } from "@/lib/motion/pageTransition";
 import { useExitTransition } from "@/lib/motion/useExitTransition";
 
 const navigation = [
@@ -47,6 +48,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 function ThemedAppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const pageTransitionPath = getPageTransitionPath(pathname);
   const scheduleEditorRoute = pathname === APP_ROUTES.scheduleNew
     || /^\/schedule\/[^/]+\/edit$/.test(pathname);
   const { themeMode, accentColor } = useAppTheme();
@@ -197,7 +199,7 @@ function ThemedAppShell({ children }: { children: ReactNode }) {
       ) : null}
 
       <main className={`app-main${scheduleEditorRoute ? " app-main--schedule-editor" : ""}`}>
-        <PageTransition transitionKey={`${workspace.id}:${pathname}`}>
+        <PageTransition transitionKey={`${workspace.id}:${pageTransitionPath}`}>
           {repositoryAccessRevoked && !pathname.startsWith("/workspaces") && pathname !== "/settings/accounts" ? (
             <div className="page-stack library-route-state" role="alert">
               <AlertTriangle size={24} aria-hidden="true" />

@@ -611,6 +611,16 @@ test.describe("Workspace release smoke", () => {
     const routeAnimation = await page.locator(".motion-page").evaluate((element) => getComputedStyle(element).animationName);
     expect(routeAnimation).toContain("motion-page-enter");
 
+    await openWorkspacePage(page, "/settings/general");
+    await page.locator(".motion-page").evaluate((element) => {
+      element.setAttribute("data-settings-motion-instance", "stable");
+    });
+    await page.getByRole("link", { name: "학습 규칙", exact: true }).click();
+    await expect(page).toHaveURL(/\/settings\/study-rules$/);
+    await expect(page.locator(".motion-page")).toHaveAttribute("data-settings-motion-instance", "stable");
+    const settingsContentAnimation = await page.locator(".settings-content").evaluate((element) => getComputedStyle(element).animationName);
+    expect(settingsContentAnimation).toContain("motion-content-enter");
+
     await openWorkspacePage(page, "/today");
     await page.getByRole("button", { name: /계속 학습하기/ }).click();
     const modalLayer = page.locator(".modal-layer");
