@@ -1265,6 +1265,16 @@
   color: var(--ds-color-text-primary);
 }
 
+.oauth-checking-page.oauth-checking-page--demo {
+  --ds-color-canvas: #fff;
+  --ds-color-text-primary: #17171a;
+  --ds-color-text-secondary: #62626c;
+  --ds-color-primary: #7c5cff;
+  background: #fff;
+  color: var(--ds-color-text-primary);
+  color-scheme: light;
+}
+
 .oauth-checking-surface {
   display: grid;
   width: min(100%, 320px);

@@ -58,7 +58,7 @@ export function AppThemeProvider({ children }: { children: ReactNode }) {
       }
       if (mode !== "demo") return;
       const preferences = readDemoPreferences();
-      if (preferences?.themeMode) setThemeModeState(preferences.themeMode);
+      setThemeModeState("LIGHT");
       if (preferences?.accentColor) setAccentColorState(preferences.accentColor);
     });
     return () => window.cancelAnimationFrame(frame);
