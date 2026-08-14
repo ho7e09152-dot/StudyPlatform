@@ -1,5 +1,7 @@
 package com.studyworkspace.auth.service;
 
+import static com.studyworkspace.auth.support.OAuthTestAccounts.completeGitLabRegistration;
+
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -72,7 +74,7 @@ class ProviderAccountLinkingServiceTests {
 	}
 
 	private String createUser(long gitLabUserId) {
-		return accounts.upsert(new GitLabOAuthSession(
+		return completeGitLabRegistration(accounts, new GitLabOAuthSession(
 			new GitLabUser(gitLabUserId, "gitlab-" + gitLabUserId, "User", null, null),
 			"gitlab-access", "gitlab-refresh", Instant.now().plusSeconds(3600), "api"
 		)).userId();

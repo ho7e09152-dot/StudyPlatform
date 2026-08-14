@@ -71,6 +71,16 @@ public class AuthController {
 	public ResponseEntity<Map<String, Object>> me(HttpServletRequest request) {
 		StudyIngPrincipal user = getPrincipal(request);
 		if (user == null) {
+			OAuthAccountService.PendingRegistration pending = getPendingRegistration(request);
+			if (pending != null) {
+				return ResponseEntity.ok(Map.of(
+					"authenticated", true,
+					"mode", "oauth",
+					"identityProvider", pending.provider().name(),
+					"accountCreated", false,
+					"user", pendingProfileResponse(pending)
+				));
+			}
 			return ResponseEntity.ok(Map.of("authenticated", false));
 		}
 		return ResponseEntity.ok(Map.of(
@@ -87,13 +97,24 @@ public class AuthController {
 		HttpServletRequest request
 	) {
 		StudyIngPrincipal current = getPrincipal(request);
-		if (current == null) throw new WorkspaceException("AUTH_REQUIRED", "Study-ing 로그인이 필요합니다.", 401);
-		OAuthAccountService.AccountProfile profile = accountService.updateProfileByUserId(
-			current.userId(), current.providerAccountId(), profileRequest
-		);
 		HttpSession session = request.getSession(false);
-		if (session != null) session.setAttribute(AuthSessionAttributes.STUDY_ING_USER,
-			accountService.requirePrincipalByProviderAccountId(current.userId(), current.providerAccountId()));
+		OAuthAccountService.AccountProfile profile;
+		if (current == null) {
+			OAuthAccountService.PendingRegistration pending = getPendingRegistration(request);
+			if (pending == null || session == null) {
+				throw new WorkspaceException("AUTH_REQUIRED", "Study-ing 로그인이 필요합니다.", 401);
+			}
+			OAuthAccountService.CompletedRegistration completed = accountService.completeRegistration(pending, profileRequest);
+			current = completed.principal();
+			profile = completed.profile();
+			session.removeAttribute(AuthSessionAttributes.PENDING_REGISTRATION);
+			session.setAttribute(AuthSessionAttributes.STUDY_ING_USER, current);
+			accountSessionService.register(session, current.userId());
+		} else {
+			profile = accountService.updateProfileByUserId(current.userId(), current.providerAccountId(), profileRequest);
+			if (session != null) session.setAttribute(AuthSessionAttributes.STUDY_ING_USER,
+				accountService.requirePrincipalByProviderAccountId(current.userId(), current.providerAccountId()));
+		}
 		workspaceService.updateUserProfile(profile.id(), profile.name(), profile.repositoryFileName());
 		return profileResponse(profile);
 	}
@@ -118,6 +139,7 @@ public class AuthController {
 		String state = oauthService.createState();
 		HttpSession session = request.getSession(true);
 		clearPendingOAuth(session);
+		session.removeAttribute(AuthSessionAttributes.PENDING_REGISTRATION);
 		session.setAttribute(AuthSessionAttributes.OAUTH_STATE, state);
 		session.setAttribute(AuthSessionAttributes.OAUTH_STATE_CREATED_AT, Instant.now());
 		session.setAttribute(AuthSessionAttributes.OAUTH_RETURN_URL, safeReturnUrl(returnUrl));
@@ -171,12 +193,18 @@ public class AuthController {
 		}
 
 		GitLabOAuthSession oauth = oauthService.exchangeAndLoadUser(code);
-		StudyIngPrincipal principal = accountService.upsert(oauth);
-		if (principal == null) principal = legacyPrincipal(oauth.user());
+		OAuthAccountService.LoginResult result = accountService.resolveGitLabLogin(oauth);
 		request.changeSessionId();
-		session.setAttribute(AuthSessionAttributes.STUDY_ING_USER, principal);
-		if (principal.userId().startsWith("legacy:")) accountSessionService.register(session, principal.gitLabUserId());
-		else accountSessionService.register(session, principal.userId());
+		if (result.requiresRegistration()) {
+			session.removeAttribute(AuthSessionAttributes.STUDY_ING_USER);
+			accountSessionService.clear(session);
+			session.setAttribute(AuthSessionAttributes.PENDING_REGISTRATION, result.pendingRegistration());
+		} else {
+			StudyIngPrincipal principal = result.principal();
+			session.removeAttribute(AuthSessionAttributes.PENDING_REGISTRATION);
+			session.setAttribute(AuthSessionAttributes.STUDY_ING_USER, principal);
+			accountSessionService.register(session, principal.userId());
+		}
 		return Map.of("returnUrl", returnUrl);
 	}
 
@@ -229,6 +257,13 @@ public class AuthController {
 		} catch (RuntimeException ignored) {
 			return legacyPrincipal(gitLabUser);
 		}
+	}
+
+	private OAuthAccountService.PendingRegistration getPendingRegistration(HttpServletRequest request) {
+		HttpSession session = request.getSession(false);
+		if (session == null) return null;
+		Object stored = session.getAttribute(AuthSessionAttributes.PENDING_REGISTRATION);
+		return stored instanceof OAuthAccountService.PendingRegistration pending ? pending : null;
 	}
 
 	private static StudyIngPrincipal legacyPrincipal(GitLabUser user) {
@@ -287,6 +322,29 @@ public class AuthController {
 		response.put("requiresReconsent", profile.requiresReconsent());
 		response.put("themeMode", profile.themeMode());
 		response.put("accentColor", profile.accentColor());
+		return response;
+	}
+
+	private Map<String, Object> pendingProfileResponse(OAuthAccountService.PendingRegistration pending) {
+		Map<String, Object> response = new LinkedHashMap<>();
+		response.put("id", null);
+		response.put("legacyGitLabUserId", pending.provider() == com.studyworkspace.workspace.domain.RepositoryProvider.GITLAB
+			? Long.parseLong(pending.externalUserId()) : null);
+		response.put("username", pending.username());
+		response.put("name", pending.displayName());
+		response.put("avatarUrl", pending.avatarUrl());
+		response.put("webUrl", pending.webUrl());
+		response.put("profileCompleted", false);
+		response.put("repositoryFileName", null);
+		response.put("timezone", "Asia/Seoul");
+		response.put("termsVersion", null);
+		response.put("termsAgreedAt", null);
+		response.put("privacyVersion", null);
+		response.put("privacyAgreedAt", null);
+		response.put("minimumAgeConfirmedAt", null);
+		response.put("requiresReconsent", true);
+		response.put("themeMode", "LIGHT");
+		response.put("accentColor", "PURPLE");
 		return response;
 	}
 }

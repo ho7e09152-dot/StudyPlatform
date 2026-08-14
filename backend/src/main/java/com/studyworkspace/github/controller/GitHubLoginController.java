@@ -53,6 +53,7 @@ public class GitHubLoginController {
 		String verifier = githubOAuth.createCodeVerifier();
 		HttpSession session = request.getSession(true);
 		clearLoginState(session);
+		session.removeAttribute(AuthSessionAttributes.PENDING_REGISTRATION);
 		session.setAttribute(AuthSessionAttributes.GITHUB_LINK_STATE, state);
 		session.setAttribute(AuthSessionAttributes.GITHUB_LINK_STATE_CREATED_AT, Instant.now());
 		session.setAttribute(AuthSessionAttributes.GITHUB_LINK_ACTION, LOGIN_ACTION);
@@ -74,10 +75,18 @@ public class GitHubLoginController {
 			|| createdAt.plus(properties.stateTtl()).isBefore(Instant.now())) throw invalidState();
 
 		var proof = githubOAuth.exchangeAndLoadIdentity(code, verifier);
-		StudyIngPrincipal principal = accounts.authenticate(proof.identity(), proof.credential());
+		OAuthAccountService.LoginResult result = accounts.resolveProviderLogin(proof.identity(), proof.credential());
 		request.changeSessionId();
-		session.setAttribute(AuthSessionAttributes.STUDY_ING_USER, principal);
-		sessions.register(session, principal.userId());
+		if (result.requiresRegistration()) {
+			session.removeAttribute(AuthSessionAttributes.STUDY_ING_USER);
+			sessions.clear(session);
+			session.setAttribute(AuthSessionAttributes.PENDING_REGISTRATION, result.pendingRegistration());
+		} else {
+			StudyIngPrincipal principal = result.principal();
+			session.removeAttribute(AuthSessionAttributes.PENDING_REGISTRATION);
+			session.setAttribute(AuthSessionAttributes.STUDY_ING_USER, principal);
+			sessions.register(session, principal.userId());
+		}
 		return Map.of("returnUrl", returnUrl);
 	}
 

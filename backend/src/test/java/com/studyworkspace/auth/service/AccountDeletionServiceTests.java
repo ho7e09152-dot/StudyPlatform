@@ -1,5 +1,6 @@
 package com.studyworkspace.auth.service;
 
+import static com.studyworkspace.auth.support.OAuthTestAccounts.completeGitLabRegistration;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import java.time.Instant;
@@ -47,7 +48,7 @@ class AccountDeletionServiceTests {
 	void removesPersonalDataAndCredentialsWhileAnonymizingSharedAttribution() {
 		long gitLabUserId = 7654321L;
 		Instant now = Instant.parse("2026-08-13T00:00:00Z");
-		accountService.upsert(new GitLabOAuthSession(
+		completeGitLabRegistration(accountService, new GitLabOAuthSession(
 			new GitLabUser(gitLabUserId, "delete-me", "삭제 전 이름", "https://example/avatar", "https://example/user"),
 			"access-secret", "refresh-secret", now.plusSeconds(3600), "api"
 		));

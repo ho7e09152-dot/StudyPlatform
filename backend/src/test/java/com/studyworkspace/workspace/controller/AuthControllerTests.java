@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 import java.time.Duration;
@@ -36,6 +37,7 @@ class AuthControllerTests {
 	private OAuthAccountService accountService;
 	private AccountDeletionService accountDeletionService;
 	private AccountSessionService accountSessionService;
+	private WorkspaceService workspaceService;
 	private AuthController controller;
 
 	@BeforeEach
@@ -44,13 +46,14 @@ class AuthControllerTests {
 		accountService = mock(OAuthAccountService.class);
 		accountDeletionService = mock(AccountDeletionService.class);
 		accountSessionService = mock(AccountSessionService.class);
+		workspaceService = mock(WorkspaceService.class);
 		controller = new AuthController(
 			"http://localhost:3000",
 			oauthService,
 			new GitLabOAuthProperties("client", "secret", "http://localhost:8080/api/v1/auth/gitlab/callback", "api", Duration.ofMinutes(10)),
 			accountService,
 			mock(GitLabOAuthTokenProvider.class),
-			mock(WorkspaceService.class),
+			workspaceService,
 			accountDeletionService,
 			accountSessionService
 		);
@@ -64,7 +67,7 @@ class AuthControllerTests {
 		GitLabOAuthSession oauth = new GitLabOAuthSession(user, "access", "refresh", Instant.now().plusSeconds(3600), "api");
 		when(oauthService.exchangeAndLoadUser("authorization-code")).thenReturn(oauth);
 		StudyIngPrincipal principal = principal(user);
-		when(accountService.upsert(oauth)).thenReturn(principal);
+		when(accountService.resolveGitLabLogin(oauth)).thenReturn(OAuthAccountService.LoginResult.authenticated(principal));
 
 		var callback = controller.callback("authorization-code", "expected-state", null, request);
 
@@ -80,8 +83,55 @@ class AuthControllerTests {
 		assertThat(session.getAttribute(AuthSessionAttributes.GITLAB_USER)).isNull();
 		assertThat(session.getAttribute(AuthSessionAttributes.OAUTH_PENDING_CODE)).isNull();
 		verify(oauthService).exchangeAndLoadUser("authorization-code");
-		verify(accountService).upsert(oauth);
+		verify(accountService).resolveGitLabLogin(oauth);
 		verify(accountSessionService).register(session, "study-user-id");
+	}
+
+	@Test
+	void firstLoginKeepsOnlyEncryptedPendingRegistrationUntilProfileConsent() {
+		MockHttpServletRequest request = oauthRequest("expected-state", "/today");
+		MockHttpSession session = (MockHttpSession) request.getSession(false);
+		GitLabUser user = new GitLabUser(18, "new-user", "New User", null, null);
+		GitLabOAuthSession oauth = new GitLabOAuthSession(user, "access", "refresh", Instant.now().plusSeconds(3600), "api");
+		OAuthAccountService.PendingRegistration pending = pending(RepositoryProvider.GITLAB, "18", "new-user");
+		when(oauthService.exchangeAndLoadUser("authorization-code")).thenReturn(oauth);
+		when(accountService.resolveGitLabLogin(oauth)).thenReturn(OAuthAccountService.LoginResult.pending(pending));
+		controller.callback("authorization-code", "expected-state", null, request);
+
+		controller.complete(request);
+
+		assertThat(session.getAttribute(AuthSessionAttributes.STUDY_ING_USER)).isNull();
+		assertThat(session.getAttribute(AuthSessionAttributes.PENDING_REGISTRATION)).isEqualTo(pending);
+		assertThat(controller.me(request).getBody()).containsEntry("authenticated", true).containsEntry("accountCreated", false);
+		verify(accountSessionService).clear(session);
+		verify(accountSessionService, never()).register(session, "study-user-id");
+	}
+
+	@Test
+	void profileConsentAtomicallyPromotesPendingRegistrationToAuthenticatedAccount() {
+		MockHttpServletRequest request = new MockHttpServletRequest();
+		MockHttpSession session = (MockHttpSession) request.getSession(true);
+		OAuthAccountService.PendingRegistration pending = pending(RepositoryProvider.GITLAB, "18", "new-user");
+		session.setAttribute(AuthSessionAttributes.PENDING_REGISTRATION, pending);
+		var input = new OAuthAccountService.UpdateProfileRequest("완료 사용자", "completed-user", "Asia/Seoul", true, true, true);
+		StudyIngPrincipal principal = new StudyIngPrincipal(
+			"created-user-id", "created-provider-id", RepositoryProvider.GITLAB, "18", "new-user", "완료 사용자", null, null
+		);
+		Instant agreedAt = Instant.now();
+		var profile = new OAuthAccountService.AccountProfile(
+			18, "new-user", "완료 사용자", null, null, true, "completed-user.md", "Asia/Seoul",
+			"2026-08-13", agreedAt, "2026-08-13", agreedAt, agreedAt, false, "LIGHT", "PURPLE", "created-user-id"
+		);
+		when(accountService.completeRegistration(pending, input))
+			.thenReturn(new OAuthAccountService.CompletedRegistration(principal, profile));
+
+		Map<String, Object> response = controller.updateProfile(input, request);
+
+		assertThat(response).containsEntry("id", "created-user-id").containsEntry("profileCompleted", true);
+		assertThat(session.getAttribute(AuthSessionAttributes.PENDING_REGISTRATION)).isNull();
+		assertThat(session.getAttribute(AuthSessionAttributes.STUDY_ING_USER)).isEqualTo(principal);
+		verify(accountSessionService).register(session, "created-user-id");
+		verify(workspaceService).updateUserProfile(18, "완료 사용자", "completed-user.md");
 	}
 
 	@Test
@@ -101,7 +151,7 @@ class AuthControllerTests {
 		GitLabUser user = new GitLabUser(17, "study-user", "Study User", null, "https://gitlab.example/study-user");
 		GitLabOAuthSession oauth = new GitLabOAuthSession(user, "access", "refresh", Instant.now().plusSeconds(3600), "api");
 		when(oauthService.exchangeAndLoadUser("authorization-code")).thenReturn(oauth);
-		when(accountService.upsert(oauth)).thenReturn(principal(user));
+		when(accountService.resolveGitLabLogin(oauth)).thenReturn(OAuthAccountService.LoginResult.authenticated(principal(user)));
 		controller.callback("authorization-code", "expected-state", null, request);
 		controller.complete(request);
 
@@ -133,6 +183,13 @@ class AuthControllerTests {
 	private static StudyIngPrincipal principal(GitLabUser user) {
 		return new StudyIngPrincipal("study-user-id", "provider-account-id", RepositoryProvider.GITLAB,
 			Long.toString(user.id()), user.username(), user.name(), user.avatarUrl(), user.webUrl());
+	}
+
+	private static OAuthAccountService.PendingRegistration pending(RepositoryProvider provider, String externalId, String username) {
+		return new OAuthAccountService.PendingRegistration(
+			provider, externalId, username, "Pending User", null, null,
+			"encrypted-access", "encrypted-refresh", Instant.now().plusSeconds(3600), "api", Instant.now()
+		);
 	}
 
 	private static MockHttpServletRequest oauthRequest(String state, String returnUrl) {
