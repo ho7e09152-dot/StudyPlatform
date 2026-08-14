@@ -358,6 +358,42 @@ test.describe("Workspace release smoke", () => {
 		expect(errors).toEqual([]);
 	});
 
+	test("프로필 미완료 사용자는 Login에서 다른 Provider를 선택할 수 있다", async ({ page }) => {
+		const errors = captureUnexpectedErrors(page);
+		await page.route("**/api/v1/auth/me", (route) => route.fulfill({
+			status: 200,
+			contentType: "application/json",
+			body: JSON.stringify({
+				authenticated: true,
+				identityProvider: "GITLAB",
+				user: {
+					id: "new-user",
+					username: "new-user",
+					name: "New User",
+					profileCompleted: false,
+				},
+			}),
+		}));
+		await page.route("**/api/v1/capabilities", (route) => route.fulfill({
+			status: 200,
+			contentType: "application/json",
+			body: JSON.stringify({
+				authProviders: ["GITLAB", "GITHUB"],
+				accountLinkProviders: ["GITLAB", "GITHUB"],
+				repositoryProviders: ["GITLAB", "GITHUB"],
+				features: { workspaceDiscovery: true },
+			}),
+		}));
+
+		await page.goto("/login?returnUrl=%2Ftoday");
+		await page.waitForTimeout(300);
+
+		await expect(page).toHaveURL(/\/login\?returnUrl=%2Ftoday$/);
+		await expect(page.getByRole("link", { name: /GitHub로 계속하기/ })).toBeVisible();
+		await expect(page.getByRole("link", { name: /GitLab로 계속하기/ })).toBeVisible();
+		expect(errors).toEqual([]);
+	});
+
 	test("모바일 연결된 계정 Row는 가로 overflow 없이 stack된다", async ({ page }) => {
 		const errors = captureUnexpectedErrors(page);
 		await page.setViewportSize({ width: 390, height: 844 });

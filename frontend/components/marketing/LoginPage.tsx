@@ -29,10 +29,7 @@ export function LoginPage({ initialAuthProviders = ["GITLAB"] }: { initialAuthPr
     void getAuthSession(controller.signal)
       .then((session) => {
         if (!session.authenticated || !session.user) return;
-        if (!session.user.profileCompleted) {
-          window.location.replace(`/onboarding/profile?returnTo=${encodeURIComponent(returnUrl)}`);
-          return;
-        }
+        if (!session.user.profileCompleted) return;
         window.location.replace(returnUrl);
       })
       .catch(() => {
