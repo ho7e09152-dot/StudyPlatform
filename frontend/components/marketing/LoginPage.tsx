@@ -4,14 +4,14 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { ArrowLeft, BookOpenCheck, FolderGit2, MessageSquareText, ShieldCheck } from "lucide-react";
+import { ArrowLeft, BookOpenCheck, FolderGit2, MessageSquareText } from "lucide-react";
 import { AuthNotice } from "@/components/auth/AuthNotice";
 import { AuthProviderButton } from "@/components/auth/AuthProviderButton";
 import { getAuthSession, getProviderCapabilities, getProviderLoginUrl } from "@/lib/api/services/authApi";
 import { getLoginNoticeState } from "@/lib/auth/loginState";
 import { safeAppReturnUrl } from "@/lib/auth/redirects";
 import { clearDemoSession, getDemoEntryUrl } from "@/lib/demo/session";
-import { getProviderDescriptor, type ProviderId } from "@/lib/providers/provider-descriptors";
+import { getProviderDescriptor, orderLoginProviders, type ProviderId } from "@/lib/providers/provider-descriptors";
 
 export function LoginPage() {
   const searchParams = useSearchParams();
@@ -81,21 +81,18 @@ export function LoginPage() {
 
         <section className="auth-entry-panel" aria-labelledby="login-title">
           <header className="auth-entry-panel__header">
-            <span className="auth-entry-provider-mark" aria-hidden="true"><ShieldCheck size={22} /></span>
-            <div>
-              <h2 id="login-title">Study-ing 시작하기</h2>
-              <p>연결할 Provider 계정으로 안전하게 로그인합니다.</p>
-            </div>
+            <h2 id="login-title">Study-ing 시작하기</h2>
+            <p>사용할 계정으로 Study-ing을 시작하세요.</p>
           </header>
 
           {notice ? <AuthNotice notice={notice} /> : null}
 
           <div className="auth-provider-list" aria-label="로그인 Provider 선택">
-            {authProviders.map((provider) => {
+            {orderLoginProviders(authProviders).map((provider) => {
               const descriptor = getProviderDescriptor(provider);
               return (
                 <AuthProviderButton key={provider} provider={provider} href={getProviderLoginUrl(provider, returnUrl)}>
-                  {notice && requestedProvider === provider ? notice.actionLabel : descriptor.authLabel}
+                  {descriptor.authLabel}
                 </AuthProviderButton>
               );
             })}
@@ -107,19 +104,10 @@ export function LoginPage() {
             <span>데모 Workspace 둘러보기</span>
           </Link>
 
-          <div className="auth-entry-security-note">
-            <ShieldCheck size={18} aria-hidden="true" />
-            <div>
-              <strong>안전한 OAuth 로그인</strong>
-              <p>OAuth 토큰은 서버에서 암호화해 관리하고, 브라우저에는 HttpOnly 세션 쿠키만 사용합니다.</p>
-            </div>
-          </div>
-
           <footer className="auth-entry-footer">
             <Link href={`/terms?returnTo=${policyReturnQuery}`}>이용약관</Link>
             <span aria-hidden="true">·</span>
             <Link href={`/privacy?returnTo=${policyReturnQuery}`}>개인정보 처리 안내</Link>
-            <p>개인 액세스 토큰을 직접 입력할 필요가 없습니다.</p>
           </footer>
         </section>
       </div>

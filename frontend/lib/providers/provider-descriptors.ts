@@ -32,4 +32,13 @@ export function getProviderDescriptor(provider: ProviderId) {
   return DESCRIPTORS[provider];
 }
 
+const LOGIN_PROVIDER_PRIORITY: Record<ProviderId, number> = {
+  GITHUB: 0,
+  GITLAB: 1,
+};
+
+export function orderLoginProviders(providers: ProviderId[]) {
+  return [...providers].sort((left, right) => LOGIN_PROVIDER_PRIORITY[left] - LOGIN_PROVIDER_PRIORITY[right]);
+}
+
 export const CURRENT_PROVIDER: ProviderId = "GITLAB";

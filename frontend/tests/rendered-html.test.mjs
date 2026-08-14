@@ -86,6 +86,8 @@ test("login page renders real OAuth and an explicitly isolated demo entry", asyn
   assert.match(html, /GitLab로 계속하기/);
   assert.doesNotMatch(html, /GitHub로 계속하기|GitHub 계정/);
   assert.match(html, /데모 Workspace 둘러보기/);
+  assert.match(html, /사용할 계정으로 Study-ing을 시작하세요/);
+  assert.doesNotMatch(html, /안전한 OAuth 로그인|개인 액세스 토큰을 직접 입력할 필요가 없습니다/);
   assert.match(html, /\/demo\?returnTo=%2Ftoday/);
   assert.match(html, /\/api\/v1\/auth\/gitlab\/login/);
   assert.doesNotMatch(html, /CONNECTED WORKFLOW|login-background__orb|GitLab learning hub/);

@@ -299,6 +299,9 @@ test.describe("Workspace release smoke", () => {
 			}),
 		}));
 		await openWorkspacePage(page, "/login");
+		const onlyProvider = page.locator(".auth-provider-button");
+		await expect(onlyProvider).toHaveCount(1);
+		await expect(onlyProvider).toHaveAttribute("data-provider", "gitlab");
 		await expect(page.getByRole("link", { name: /GitLab로 계속하기/ })).toBeVisible();
 		await expect(page.getByRole("link", { name: /GitHub/ })).toHaveCount(0);
 		expect(errors).toEqual([]);
@@ -323,10 +326,19 @@ test.describe("Workspace release smoke", () => {
 		}));
 
 		await page.goto("/login?returnUrl=%2Flibrary");
+		const providerButtons = page.locator(".auth-provider-button");
+		await expect(providerButtons).toHaveCount(2);
+		await expect(providerButtons.nth(0)).toHaveAttribute("data-provider", "github");
+		await expect(providerButtons.nth(1)).toHaveAttribute("data-provider", "gitlab");
 		await expect(page.getByRole("link", { name: /GitLab로 계속하기/ })).toBeVisible();
 		const github = page.getByRole("link", { name: /GitHub로 계속하기/ });
 		await expect(github).toBeVisible();
 		await expect(github).toHaveAttribute("href", /\/api\/v1\/auth\/github\/login\?returnUrl=%2Flibrary/);
+		await expect(page.locator(".auth-entry-provider-mark")).toHaveCount(0);
+		await expect(page.getByText("안전한 OAuth 로그인")).toHaveCount(0);
+		await expect(page.getByText("개인 액세스 토큰을 직접 입력할 필요가 없습니다.")).toHaveCount(0);
+		const githubBackground = await github.evaluate((element) => getComputedStyle(element).backgroundColor);
+		expect(githubBackground).not.toBe("rgb(102, 83, 199)");
 		expect(errors).toEqual([]);
 	});
 

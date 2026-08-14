@@ -1112,21 +1112,7 @@
 }
 
 .auth-entry-panel__header {
-  display: flex;
-  align-items: center;
-  gap: var(--ds-space-3);
-}
-
-.auth-entry-provider-mark {
-  display: grid;
-  width: 44px;
-  height: 44px;
-  flex: 0 0 44px;
-  place-items: center;
-  border: 1px solid var(--ds-color-border);
-  border-radius: var(--ds-radius-sm);
-  background: var(--ds-color-surface-secondary);
-  color: var(--ds-color-text-secondary);
+  display: block;
 }
 
 .auth-entry-panel__header h2 {
@@ -1187,12 +1173,28 @@
   grid-template-columns: auto 1fr auto;
   gap: var(--ds-space-3);
   padding: 0 var(--ds-space-4);
-  background: var(--ds-color-primary);
-  color: #fff;
+  border: 1px solid var(--ds-color-border);
+  background: var(--ds-color-surface);
+  color: var(--ds-color-text-primary);
 }
 
-.auth-provider-button:hover { background: var(--ds-color-primary-hover); }
-.auth-provider-button > span { display: inline-flex; }
+.auth-provider-button:hover { border-color: var(--ds-color-border-strong); }
+.auth-provider-button__icon {
+  display: inline-grid;
+  width: 24px;
+  height: 24px;
+  place-items: center;
+}
+.auth-provider-button[data-provider="github"] .auth-provider-button__icon { color: #24292f; }
+.auth-provider-button[data-provider="github"]:hover {
+  background: color-mix(in srgb, #24292f 5%, var(--ds-color-surface));
+}
+.auth-provider-button[data-provider="gitlab"] .auth-provider-button__icon { color: #e24329; }
+.auth-provider-button[data-provider="gitlab"]:hover {
+  border-color: color-mix(in srgb, #e24329 30%, var(--ds-color-border));
+  background: color-mix(in srgb, #fc6d26 6%, var(--ds-color-surface));
+}
+.auth-provider-button__arrow { color: var(--ds-color-text-tertiary); }
 .auth-provider-button strong { font-weight: 750; text-align: center; }
 .auth-provider-list { display: grid; gap: var(--ds-space-3); }
 
@@ -1225,20 +1227,6 @@
 .auth-entry-demo:hover { border-color: var(--ds-color-border-strong); background: var(--ds-color-surface-secondary); }
 .auth-entry-demo svg { color: var(--ds-color-text-tertiary); }
 
-.auth-entry-security-note {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: start;
-  gap: var(--ds-space-3);
-  padding-top: var(--ds-space-4);
-  border-top: 1px solid var(--ds-color-border);
-  color: var(--ds-color-text-secondary);
-}
-.auth-entry-security-note > svg { margin-top: 2px; color: var(--ds-color-success); }
-.auth-entry-security-note > div { display: grid; gap: 2px; }
-.auth-entry-security-note strong { color: var(--ds-color-text-primary); font-size: var(--ds-font-body-small); }
-.auth-entry-security-note p { margin: 0; font-size: var(--ds-font-metadata); line-height: 1.55; }
-
 .auth-entry-footer {
   display: flex;
   flex-wrap: wrap;
@@ -1249,7 +1237,6 @@
   text-align: center;
 }
 .auth-entry-footer a { color: var(--ds-color-text-secondary); font-weight: 650; text-decoration: underline; text-underline-offset: 3px; }
-.auth-entry-footer p { flex-basis: 100%; margin: var(--ds-space-1) 0 0; line-height: 1.5; }
 
 .auth-entry-page :is(a, button):focus-visible,
 .oauth-checking-page :is(a, button):focus-visible {
@@ -1318,6 +1305,27 @@
 @keyframes oauth-spinner { to { transform: rotate(360deg); } }
 
 @media (prefers-color-scheme: dark) {
+  .auth-entry-page {
+    --ds-color-canvas: #121214;
+    --ds-color-surface: #1d1d21;
+    --ds-color-surface-secondary: #17171a;
+    --ds-color-surface-muted: #222226;
+    --ds-color-text-primary: #f5f5f7;
+    --ds-color-text-secondary: #b8b8c0;
+    --ds-color-text-tertiary: #8e8e98;
+    --ds-color-border: #303036;
+    --ds-color-border-strong: #44444c;
+    --ds-color-primary: #8b6bff;
+  }
+  .auth-provider-button[data-provider="github"] .auth-provider-button__icon { color: #f5f5f7; }
+  .auth-provider-button[data-provider="github"]:hover {
+    background: color-mix(in srgb, #fff 6%, var(--ds-color-surface));
+  }
+  .auth-provider-button[data-provider="gitlab"] .auth-provider-button__icon { color: #fc6d26; }
+  .auth-provider-button[data-provider="gitlab"]:hover {
+    border-color: color-mix(in srgb, #fc6d26 32%, var(--ds-color-border));
+    background: color-mix(in srgb, #fc6d26 8%, var(--ds-color-surface));
+  }
   .oauth-checking-page {
     --ds-color-canvas: #121214;
     --ds-color-text-primary: #f5f5f7;
@@ -1362,10 +1370,8 @@
     margin-top: var(--ds-space-8);
   }
 
-  .auth-entry-provider-mark { width: 40px; height: 40px; flex-basis: 40px; }
   .auth-entry-panel__header h2 { font-size: 21px; }
   .auth-provider-button { min-height: 50px; }
-  .auth-entry-security-note { padding-top: var(--ds-space-3); }
 
   .oauth-checking-page { padding: var(--ds-space-4); }
   .oauth-checking-surface {
@@ -1376,8 +1382,6 @@
 @media (max-height: 720px) and (max-width: 760px) {
   .auth-entry-context__copy { margin-top: var(--ds-space-4); }
   .auth-entry-panel { margin-top: var(--ds-space-6); }
-  .auth-entry-security-note p,
-  .auth-entry-footer p { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

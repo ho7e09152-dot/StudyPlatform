@@ -4,6 +4,7 @@ import { readFile } from "node:fs/promises";
 import { getLoginNoticeState } from "../lib/auth/loginState.ts";
 import { safeAppReturnUrl } from "../lib/auth/redirects.ts";
 import { getDemoEntryUrl } from "../lib/demo/session.ts";
+import { orderLoginProviders } from "../lib/providers/provider-descriptors.ts";
 
 test("safe return paths allow internal deep links and reject open redirects", () => {
   assert.equal(safeAppReturnUrl("/library/sessions/2026-07-23?member=12"), "/library/sessions/2026-07-23?member=12");
@@ -37,10 +38,15 @@ test("login and callback UI are capability-driven and provider-aware", async () 
   const login = await readFile(new URL("../components/marketing/LoginPage.tsx", import.meta.url), "utf8");
   const callback = await readFile(new URL("../components/auth/OAuthCallbackPage.tsx", import.meta.url), "utf8");
   assert.match(login, /getProviderCapabilities/);
-  assert.match(login, /authProviders\.map/);
+  assert.match(login, /orderLoginProviders\(authProviders\)\.map/);
   assert.match(login, /getProviderLoginUrl/);
   assert.match(callback, /completeGitHubLogin/);
   assert.match(callback, /provider=\$\{provider\}/);
+});
+
+test("login provider order prefers GitHub without inventing unavailable capabilities", () => {
+  assert.deepEqual(orderLoginProviders(["GITLAB", "GITHUB"]), ["GITHUB", "GITLAB"]);
+  assert.deepEqual(orderLoginProviders(["GITLAB"]), ["GITLAB"]);
 });
 
 test("profile onboarding requires age, Terms, and Privacy independently", async () => {
