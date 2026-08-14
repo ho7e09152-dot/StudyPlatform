@@ -71,6 +71,7 @@ Use a read-only host secret mount:
 
 ```bash
 GITHUB_PRIVATE_KEY_HOST_PATH=/absolute/host/path/github-app.pem \
+GITHUB_PRIVATE_KEY_UID=$(id -u) GITHUB_PRIVATE_KEY_GID=$(id -g) \
 docker compose -f compose.sandbox.yml -f compose.github-app.yml up -d
 ```
 
@@ -80,7 +81,7 @@ Container environment:
 GITHUB_PRIVATE_KEY_PATH=/run/secrets/study-ing-github-app.pem
 ```
 
-The base Compose files do not require this optional override, so GitHub-disabled deployments do not fail because a PEM is absent.
+Keep the host file at `0600`. The override runs the backend as the configured host owner UID/GID so the non-root process can read the read-only bind without broadening file permissions. The base Compose files do not require this optional override, so GitHub-disabled deployments do not fail because a PEM is absent.
 
 ## GitHub App registration
 

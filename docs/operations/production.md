@@ -58,11 +58,12 @@ When App/installation authentication is enabled, mount the PEM with the optional
 
 ```bash
 GITHUB_PRIVATE_KEY_HOST_PATH=/absolute/host/path/github-app.pem \
+GITHUB_PRIVATE_KEY_UID=$(id -u) GITHUB_PRIVATE_KEY_GID=$(id -g) \
 docker compose --env-file .env.sandbox \
   -f compose.sandbox.yml -f compose.github-app.yml up -d --build
 ```
 
-Set `GITHUB_PRIVATE_KEY_PATH=/run/secrets/study-ing-github-app.pem` inside `backend/.env`. Account linking alone does not require the PEM mount while `GITHUB_REPOSITORY_ENABLED=false`. Enabling the repository flag also requires the GitHub App Setup URL and Contents read/write permission described in the [GitHub repository adapter](../architecture/providers/github-repository-adapter.md).
+Set `GITHUB_PRIVATE_KEY_PATH=/run/secrets/study-ing-github-app.pem` inside `backend/.env`. Keep the host PEM at mode `0600`; the optional override runs the non-root backend process as the supplied host owner UID/GID so the read-only bind remains readable without making the key world-readable. Account linking alone does not require the PEM mount while `GITHUB_REPOSITORY_ENABLED=false`. Enabling the repository flag also requires the GitHub App Setup URL and Contents read/write permission described in the [GitHub repository adapter](../architecture/providers/github-repository-adapter.md).
 
 The default Nginx Proxy Manager upstream is `study-platform-gateway:8080`. Confirm the actual public host, TLS and outer proxy logging policy in the launch checklist.
 
