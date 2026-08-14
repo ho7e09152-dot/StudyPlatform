@@ -1,8 +1,13 @@
 import Image from "next/image";
 import { LoaderCircle } from "lucide-react";
 
-export function AppLoadingScreen({ phase }: { phase: "auth" | "workspace" }) {
+export function AppLoadingScreen({ phase }: { phase: "auth" | "workspace" | "demo" }) {
   const workspacePhase = phase === "workspace";
+  const statusMessage = phase === "demo"
+    ? "데모 페이지를 준비하고 있어요"
+    : workspacePhase
+      ? "Workspace로 이동하고 있어요"
+      : "로그인하고 있어요";
 
   return (
     <main className="oauth-checking-page" role="status" aria-live="polite" aria-busy="true">
@@ -22,7 +27,7 @@ export function AppLoadingScreen({ phase }: { phase: "auth" | "workspace" }) {
         <LoaderCircle className="oauth-checking-spinner" size={22} aria-hidden="true" />
 
         <div className="oauth-checking-copy">
-          <strong>{workspacePhase ? "Workspace로 이동하고 있어요" : "로그인하고 있어요"}</strong>
+          <strong>{statusMessage}</strong>
           <p>잠시만 기다려주세요.</p>
         </div>
       </section>

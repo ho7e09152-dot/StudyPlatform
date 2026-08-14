@@ -97,8 +97,12 @@ test("demo entry is a dedicated transient route", async () => {
   const response = await render("/demo?returnTo=%2Fschedule");
   assert.equal(response.status, 200);
   const html = await response.text();
-  assert.match(html, /데모 Workspace를 준비하고 있어요/);
+  assert.match(html, /Study-ing/);
+  assert.match(html, /데모 페이지를 준비하고 있어요/);
+  assert.match(html, /잠시만 기다려주세요/);
+  assert.match(html, /oauth-checking-page/);
   assert.match(html, /aria-live="polite"/);
+  assert.doesNotMatch(html, /auth-transition/);
 });
 
 test("login states use concise shared user-facing notices", async () => {
