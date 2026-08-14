@@ -69,7 +69,7 @@ export function ProfileSettingsDialog({ onClose }: { onClose: () => void }) {
         <section className="profile-settings-section" aria-labelledby="profile-info-title">
           <div className="profile-settings-section__heading">
             <span><UserRound size={17} /></span>
-            <div><h3 id="profile-info-title">기본 정보</h3><p>GitLab 아이디와 별개로 서비스에 표시됩니다.</p></div>
+            <div><h3 id="profile-info-title">기본 정보</h3><p>연결한 Provider 아이디와 별개로 서비스에 표시됩니다.</p></div>
           </div>
           <div className="profile-settings-fields">
             <label>
@@ -77,7 +77,7 @@ export function ProfileSettingsDialog({ onClose }: { onClose: () => void }) {
               <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} minLength={2} maxLength={40} required />
             </label>
             <label>
-              <span>GitLab 기록 이름</span>
+              <span>학습 기록 이름</span>
               <div className="profile-settings-file-input">
                 <input value={repositoryFileName} onChange={(event) => setRepositoryFileName(event.target.value)} maxLength={80} required />
                 <span>.md</span>

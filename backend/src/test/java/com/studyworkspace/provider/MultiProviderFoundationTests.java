@@ -91,6 +91,19 @@ class MultiProviderFoundationTests {
 	}
 
 	@Test
+	void loginCapabilityIsIndependentFromLinkingAndRepositoryCapabilities() {
+		ProviderCapabilities configured = new ProviderCapabilities(new GitHubAppProperties(
+			"", "study-ing", "client", "secret", "http://localhost/callback", "",
+			new GitHubAppProperties.Features(false, true, false), "https://github.com",
+			"https://api.github.com", Duration.ofSeconds(10), Duration.ofMinutes(10)
+		));
+
+		assertThat(configured.authProviders()).containsExactly(RepositoryProvider.GITLAB, RepositoryProvider.GITHUB);
+		assertThat(configured.accountLinkProviders()).containsExactly(RepositoryProvider.GITLAB);
+		assertThat(configured.repositoryProviders()).containsExactly(RepositoryProvider.GITLAB);
+	}
+
+	@Test
 	void repositoryCapabilityRequiresBothTheFeatureAndValidatedAppAuthentication() {
 		GitHubAppConfigurationValidator validator = mock(GitHubAppConfigurationValidator.class);
 		when(validator.repositoryAuthenticationReady()).thenReturn(true);

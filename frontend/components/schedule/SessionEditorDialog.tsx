@@ -218,15 +218,15 @@ export function SessionEditorPage({
         code === "SESSION_REVISION_CONFLICT"
           ? "다른 사용자가 일정을 먼저 수정했습니다. 최신 내용을 다시 확인해 주세요."
           : code === "SESSION_ALREADY_EXISTS"
-            ? "같은 날짜의 session.yml이 이미 있습니다. GitLab 저장소를 동기화한 뒤 다시 시도해 주세요."
+            ? "같은 날짜의 session.yml이 이미 있습니다. 저장소를 동기화한 뒤 다시 시도해 주세요."
           : code === "SESSION_FILE_MISSING"
-            ? "GitLab에서 일정 파일을 찾지 못했습니다. 동기화 후 다시 시도해 주세요."
+            ? "저장소에서 일정 파일을 찾지 못했습니다. 동기화 후 다시 시도해 주세요."
           : code === "CHANGE_REASON_REQUIRED"
             ? "기존 제출이 있는 일정은 변경 사유가 필요합니다."
             : code === "GITLAB_PROJECT_ACCESS_DENIED"
-              ? "현재 GitLab 계정에 이 브랜치로 커밋할 권한이 없습니다."
+              ? "현재 Provider 계정에 이 브랜치로 커밋할 권한이 없습니다."
               : code === "GITLAB_RATE_LIMITED"
-                ? "GitLab 요청 제한에 도달했습니다. 잠시 후 다시 시도해 주세요."
+                ? "저장소 Provider 요청 제한에 도달했습니다. 잠시 후 다시 시도해 주세요."
                 : getUserFacingError(saveError, "일정을 저장하지 못했습니다."),
       );
     } finally {

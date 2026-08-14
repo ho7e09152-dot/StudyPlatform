@@ -13,7 +13,7 @@ Updated: 2026-08-14
 6. Repository selection lists only repositories returned by `/user/installations/{id}/repositories`.
 7. Workspace creation, discovery and join use `(GITHUB, externalRepositoryId)` and require normalized write capability.
 
-GitHub login remains disabled. A user reaches this flow through an existing Study-ing session and a linked GitHub ProviderAccount.
+GitHub login is independently capability-gated. Repository operations require the current Study-ing user to have a linked GitHub ProviderAccount regardless of which Provider established the current Study-ing session.
 
 ## Token boundary
 
@@ -45,7 +45,7 @@ GitHub 401 is reauthorization, a confirmed 403/404 is access denied/not found, 4
 
 ## Remaining limitations
 
-- GitHub login/signup is not implemented.
+- GitHub login/signup is implemented separately and does not change repository capability rules.
 - GitHub organization member administration/sync is not implemented; self-service Discovery/Join is supported.
 - Webhook-driven installation/token revocation is not implemented; access is revalidated on login, Workspace access TTL expiry, switch and write actions.
 - A real GitHub organization/repository two-user staging pass remains required after the GitHub App registration permissions and Setup URL are saved.

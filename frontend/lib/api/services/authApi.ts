@@ -3,7 +3,7 @@ import type { ProviderId } from "@/lib/providers/provider-descriptors";
 
 export interface StudyIngUser {
   id: string;
-  legacyGitLabUserId: number;
+  legacyGitLabUserId: number | null;
   username: string;
   name: string;
   avatarUrl: string | null;
@@ -26,7 +26,7 @@ export type AccentColor = "PURPLE" | "BLUE" | "TEAL" | "ORANGE" | "ROSE";
 
 export interface AuthSession {
   authenticated: boolean;
-  mode?: "gitlab-oauth";
+  mode?: "oauth" | "gitlab-oauth";
   identityProvider?: ProviderId;
   user?: StudyIngUser;
 }
@@ -69,6 +69,18 @@ export async function completeGitLabLogin() {
 	return result;
 }
 
+export async function completeGitHubLogin() {
+	const result = await apiRequest<{ returnUrl: string }>("/api/v1/auth/github/complete", { method: "POST" });
+	resetCsrfToken();
+	return result;
+}
+
+export function getProviderLoginUrl(provider: ProviderId, returnUrl = "/today") {
+  const base = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080").replace(/\/+$/, "");
+  const path = provider === "GITHUB" ? "/api/v1/auth/github/login" : "/api/v1/auth/gitlab/login";
+  return `${base}${path}?returnUrl=${encodeURIComponent(returnUrl)}`;
+}
+
 export function updateAccountProfile(input: {
   displayName: string;
   repositoryFileName: string;
@@ -104,8 +116,7 @@ export async function deleteAccount() {
 }
 
 export function getGitLabReconnectUrl(returnUrl = "/settings") {
-  const base = (process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080").replace(/\/+$/, "");
-  return `${base}/api/v1/auth/gitlab/login?returnUrl=${encodeURIComponent(returnUrl)}`;
+  return getProviderLoginUrl("GITLAB", returnUrl);
 }
 
 export function getProviderAccountLinkUrl(provider: ProviderId, returnUrl = "/settings/accounts") {

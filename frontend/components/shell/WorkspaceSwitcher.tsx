@@ -79,7 +79,7 @@ export function WorkspaceSwitcher({
             >
               <span>
                 <strong>{candidate.name}</strong>
-                <small>{candidate.gitlabProjectPath}</small>
+                <small>{candidate.repository?.fullName ?? candidate.gitlabProjectPath}</small>
               </span>
               {candidate.id === workspace.id ? <Check size={17} aria-hidden="true" /> : null}
             </button>
@@ -102,7 +102,7 @@ export function WorkspaceSwitcher({
             <Plus size={16} aria-hidden="true" />
             <span>
               <strong>새 Workspace 연결</strong>
-              <small>다른 GitLab 프로젝트 선택</small>
+              <small>다른 저장소 선택</small>
             </span>
           </Link>
         </div>

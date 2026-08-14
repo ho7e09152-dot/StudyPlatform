@@ -4,6 +4,7 @@ import static com.studyworkspace.policy.LegalDocumentPolicy.PRIVACY_VERSION;
 import static com.studyworkspace.policy.LegalDocumentPolicy.TERMS_VERSION;
 
 import java.time.Instant;
+import java.util.Comparator;
 import java.util.Optional;
 
 import com.studyworkspace.auth.dto.GitLabOAuthSession;
@@ -15,7 +16,10 @@ import com.studyworkspace.auth.persistence.UserAccountEntity;
 import com.studyworkspace.auth.persistence.UserAccountRepository;
 import com.studyworkspace.auth.security.TokenCipher;
 import com.studyworkspace.auth.security.StudyIngPrincipal;
+import com.studyworkspace.provider.ProviderIdentity;
+import com.studyworkspace.provider.ProviderOAuthCredential;
 import com.studyworkspace.workspace.domain.RepositoryProvider;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -149,7 +153,17 @@ public class OAuthAccountService {
 	public AccountProfile requireProfileByUserId(String userId) {
 		UserAccountEntity user = userRepository.findById(userId)
 			.orElseThrow(() -> new WorkspaceException("ACCOUNT_NOT_FOUND", "사용자 계정을 찾을 수 없습니다.", 404));
-		ProviderAccountEntity account = requireProviderAccount(userId, RepositoryProvider.GITLAB);
+		ProviderAccountEntity account = preferredProviderAccount(userId);
+		return profile(user, account);
+	}
+
+	@Transactional(readOnly = true)
+	public AccountProfile requireProfileByProviderAccountId(String userId, String providerAccountId) {
+		UserAccountEntity user = userRepository.findById(userId)
+			.orElseThrow(() -> new WorkspaceException("ACCOUNT_NOT_FOUND", "사용자 계정을 찾을 수 없습니다.", 404));
+		ProviderAccountEntity account = providerAccountRepository.findById(providerAccountId)
+			.filter(candidate -> candidate.userId().equals(userId))
+			.orElseGet(() -> preferredProviderAccount(userId));
 		return profile(user, account);
 	}
 
@@ -163,6 +177,11 @@ public class OAuthAccountService {
 
 	@Transactional
 	public AccountProfile updateProfileByUserId(String userId, UpdateProfileRequest request) {
+		return updateProfileByUserId(userId, null, request);
+	}
+
+	@Transactional
+	public AccountProfile updateProfileByUserId(String userId, String providerAccountId, UpdateProfileRequest request) {
 		if (request == null) throw new WorkspaceException("INVALID_PROFILE", "프로필 정보가 필요합니다.", 400);
 		String displayName = normalizeDisplayName(request.displayName());
 		String repositoryFileName = normalizeRepositoryFileName(request.repositoryFileName(), displayName);
@@ -183,7 +202,10 @@ public class OAuthAccountService {
 			user.agreeToPolicies(TERMS_VERSION, PRIVACY_VERSION, now);
 		}
 		user.completeProfile(displayName, repositoryFileName, timezone, now);
-		return profile(userRepository.save(user), requireProviderAccount(userId, RepositoryProvider.GITLAB));
+		ProviderAccountEntity account = providerAccountId == null ? preferredProviderAccount(userId)
+			: providerAccountRepository.findById(providerAccountId)
+				.filter(candidate -> candidate.userId().equals(userId)).orElseGet(() -> preferredProviderAccount(userId));
+		return profile(userRepository.save(user), account);
 	}
 
 	@Transactional
@@ -196,6 +218,11 @@ public class OAuthAccountService {
 
 	@Transactional
 	public AccountProfile updatePreferencesByUserId(String userId, UpdatePreferencesRequest request) {
+		return updatePreferencesByUserId(userId, null, request);
+	}
+
+	@Transactional
+	public AccountProfile updatePreferencesByUserId(String userId, String providerAccountId, UpdatePreferencesRequest request) {
 		if (request == null) {
 			throw new WorkspaceException("INVALID_PREFERENCES", "테마 설정이 필요합니다.", 400);
 		}
@@ -204,7 +231,51 @@ public class OAuthAccountService {
 		UserAccountEntity user = userRepository.findById(userId)
 			.orElseThrow(() -> new WorkspaceException("ACCOUNT_NOT_FOUND", "사용자 계정을 찾을 수 없습니다.", 404));
 		user.updatePreferences(themeMode, accentColor, Instant.now());
-		return profile(userRepository.save(user), requireProviderAccount(userId, RepositoryProvider.GITLAB));
+		ProviderAccountEntity account = providerAccountId == null ? preferredProviderAccount(userId)
+			: providerAccountRepository.findById(providerAccountId)
+				.filter(candidate -> candidate.userId().equals(userId)).orElseGet(() -> preferredProviderAccount(userId));
+		return profile(userRepository.save(user), account);
+	}
+
+	/** Resolves a verified provider identity to one stable Study-ing account without email/username merging. */
+	@Transactional
+	public StudyIngPrincipal authenticate(ProviderIdentity identity, ProviderOAuthCredential oauthCredential) {
+		if (identity == null || identity.provider() == null || !StringUtils.hasText(identity.externalUserId())
+			|| oauthCredential == null || !StringUtils.hasText(oauthCredential.accessToken())) {
+			throw new WorkspaceException("PROVIDER_AUTH_INVALID", "Provider 로그인 정보를 확인할 수 없습니다.", 400);
+		}
+		Instant now = Instant.now();
+		ProviderAccountEntity account = providerAccountRepository
+			.findByProviderAndExternalUserId(identity.provider().name(), identity.externalUserId()).orElse(null);
+		UserAccountEntity user;
+		if (account == null) {
+			user = userRepository.save(UserAccountEntity.createFromProvider(
+				identity.username(), identity.displayName(), now
+			));
+			account = ProviderAccountEntity.create(user.id(), identity.provider(), identity.externalUserId(),
+				identity.username(), identity.displayName(), identity.avatarUrl(), identity.webUrl(), now);
+			try {
+				account = providerAccountRepository.saveAndFlush(account);
+			} catch (DataIntegrityViolationException exception) {
+				throw new WorkspaceException("PROVIDER_AUTH_CONFLICT", "이미 연결된 Provider 계정입니다. 다시 로그인해 주세요.", 409);
+			}
+		} else {
+			user = userRepository.findById(account.userId())
+				.orElseThrow(() -> new WorkspaceException("ACCOUNT_NOT_FOUND", "사용자 계정을 찾을 수 없습니다.", 404));
+			account.updateIdentity(identity.provider(), identity.externalUserId(), identity.username(),
+				identity.displayName(), identity.avatarUrl(), identity.webUrl(), now);
+			account = providerAccountRepository.save(account);
+		}
+
+		String providerAccountId = account.id();
+		String authenticatedUserId = user.id();
+		OAuthCredentialEntity credential = credentialRepository.findById(providerAccountId)
+			.orElseGet(() -> OAuthCredentialEntity.create(providerAccountId, authenticatedUserId));
+		credential.rotate(tokenCipher.encrypt(oauthCredential.accessToken()),
+			StringUtils.hasText(oauthCredential.refreshToken()) ? tokenCipher.encrypt(oauthCredential.refreshToken()) : null,
+			oauthCredential.expiresAt(), oauthCredential.scope(), now);
+		credentialRepository.save(credential);
+		return principal(user, account);
 	}
 
 	@Transactional
@@ -250,6 +321,22 @@ public class OAuthAccountService {
 		UserAccountEntity user = userRepository.findById(account.userId())
 			.orElseThrow(() -> new WorkspaceException("ACCOUNT_NOT_FOUND", "사용자 계정을 찾을 수 없습니다.", 404));
 		return principal(user, account);
+	}
+
+	@Transactional(readOnly = true)
+	public StudyIngPrincipal requirePrincipalByProviderAccountId(String userId, String providerAccountId) {
+		ProviderAccountEntity account = providerAccountRepository.findById(providerAccountId)
+			.filter(candidate -> candidate.userId().equals(userId))
+			.orElseThrow(() -> new WorkspaceException("ACCOUNT_NOT_FOUND", "연결 계정을 찾을 수 없습니다.", 404));
+		UserAccountEntity user = userRepository.findById(userId)
+			.orElseThrow(() -> new WorkspaceException("ACCOUNT_NOT_FOUND", "사용자 계정을 찾을 수 없습니다.", 404));
+		return principal(user, account);
+	}
+
+	@Transactional(readOnly = true)
+	public Optional<String> findProviderExternalUserId(String userId, RepositoryProvider provider) {
+		return providerAccountRepository.findByUserIdAndProvider(userId, provider.name())
+			.map(ProviderAccountEntity::externalUserId);
 	}
 
 	@Transactional(readOnly = true)
@@ -311,17 +398,29 @@ public class OAuthAccountService {
 			.orElseThrow(() -> new WorkspaceException("PROVIDER_ACCOUNT_REQUIRED", provider.name() + " 계정 연결이 필요합니다.", 401));
 	}
 
-	private static StudyIngPrincipal principal(UserAccountEntity user, ProviderAccountEntity account) {
-		return new StudyIngPrincipal(user.id(), account.id(), account.provider(), account.externalUserId(), account.username(),
+	private ProviderAccountEntity preferredProviderAccount(String userId) {
+		return providerAccountRepository.findAllByUserIdOrderByProvider(userId).stream()
+			.min(Comparator.comparingInt(account -> account.provider() == RepositoryProvider.GITLAB ? 0 : 1))
+			.orElseThrow(() -> new WorkspaceException("PROVIDER_ACCOUNT_REQUIRED", "연결된 Provider 계정이 필요합니다.", 401));
+	}
+
+	private StudyIngPrincipal principal(UserAccountEntity user, ProviderAccountEntity account) {
+		long membershipUserId = providerAccountRepository.findByUserIdAndProvider(user.id(), RepositoryProvider.GITLAB.name())
+			.map(ProviderAccountEntity::externalUserId).map(Long::parseLong)
+			.orElseGet(() -> Long.parseLong(account.externalUserId()));
+		return new StudyIngPrincipal(user.id(), account.id(), account.provider(), account.externalUserId(), membershipUserId, account.username(),
 			user.displayName(), account.avatarUrl(), account.webUrl());
 	}
 
-	private static AccountProfile profile(UserAccountEntity user, ProviderAccountEntity account) {
+	private AccountProfile profile(UserAccountEntity user, ProviderAccountEntity account) {
 		boolean requiresReconsent = !TERMS_VERSION.equals(user.termsVersion())
 			|| !PRIVACY_VERSION.equals(user.privacyVersion())
 			|| user.minimumAgeConfirmedAt() == null;
+		long membershipUserId = providerAccountRepository.findByUserIdAndProvider(user.id(), RepositoryProvider.GITLAB.name())
+			.map(ProviderAccountEntity::externalUserId).map(Long::parseLong)
+			.orElseGet(() -> Long.parseLong(account.externalUserId()));
 		return new AccountProfile(
-			Long.parseLong(account.externalUserId()), account.username(), user.displayName(), account.avatarUrl(), account.webUrl(),
+			membershipUserId, account.username(), user.displayName(), account.avatarUrl(), account.webUrl(),
 			user.profileCompleted(), user.repositoryFileName(), user.timezone(), user.termsVersion(), user.termsAgreedAt(),
 			user.privacyVersion(), user.privacyAgreedAt(), user.minimumAgeConfirmedAt(), requiresReconsent,
 			user.themeMode(), user.accentColor(), user.id()

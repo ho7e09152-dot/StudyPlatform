@@ -33,7 +33,8 @@ test("server-renders the public landing page", async () => {
   assert.match(html, /study-ing-icon\.png/);
   assert.doesNotMatch(html, /ssafy_icon|>STUDY</);
   assert.match(html, /스터디의 계획부터 기록까지/);
-  assert.match(html, /GitLab로 시작하기/);
+  assert.match(html, /Study-ing 시작하기/);
+  assert.match(html, /GitLab·GitHub OAuth/);
   assert.match(html, /데모 둘러보기/);
   assert.match(html, /\/demo\?returnTo=%2Ftoday/);
   assert.match(html, /Workspace 연결/);

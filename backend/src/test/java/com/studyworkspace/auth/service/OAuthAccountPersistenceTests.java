@@ -8,6 +8,9 @@ import java.time.Instant;
 import com.studyworkspace.auth.dto.GitLabOAuthSession;
 import com.studyworkspace.auth.security.TokenCipher;
 import com.studyworkspace.gitlab.dto.GitLabUser;
+import com.studyworkspace.provider.ProviderIdentity;
+import com.studyworkspace.provider.ProviderOAuthCredential;
+import com.studyworkspace.workspace.domain.RepositoryProvider;
 import jakarta.persistence.EntityManager;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,6 +27,9 @@ class OAuthAccountPersistenceTests {
 
 	@Autowired
 	private TokenCipher tokenCipher;
+
+	@Autowired
+	private ProviderAccountLinkingService linkingService;
 
 	@Autowired
 	private JdbcClient jdbcClient;
@@ -158,5 +164,52 @@ class OAuthAccountPersistenceTests {
 		assertThatThrownBy(() -> accountService.updatePreferences(gitLabUserId,
 			new OAuthAccountService.UpdatePreferencesRequest("MIDNIGHT", "TEAL")))
 			.hasMessageContaining("지원하지 않는 테마");
+	}
+
+	@Test
+	void githubLoginCreatesOneStableUserAndRotatesOnlyItsEncryptedCredential() {
+		ProviderIdentity identity = new ProviderIdentity(
+			RepositoryProvider.GITHUB, "424242", "octostudy", "Octo Study", "https://avatars.example/42", "https://github.com/octostudy"
+		);
+		var first = accountService.authenticate(identity,
+			new ProviderOAuthCredential("github-token-1", "github-refresh-1", Instant.now().plusSeconds(3600), ""));
+		var second = accountService.authenticate(identity,
+			new ProviderOAuthCredential("github-token-2", "github-refresh-2", Instant.now().plusSeconds(7200), ""));
+		entityManager.flush();
+
+		assertThat(second.userId()).isEqualTo(first.userId());
+		assertThat(second.providerAccountId()).isEqualTo(first.providerAccountId());
+		assertThat(second.provider()).isEqualTo(RepositoryProvider.GITHUB);
+		assertThat(second.id()).isEqualTo(424242L);
+		assertThat(jdbcClient.sql("SELECT COUNT(*) FROM provider_accounts WHERE provider = 'GITHUB' AND external_user_id = '424242'")
+			.query(Long.class).single()).isEqualTo(1);
+		var credential = accountService.requireProviderCredential(first.userId(), RepositoryProvider.GITHUB);
+		assertThat(credential.accessToken()).isEqualTo("github-token-2");
+		assertThat(jdbcClient.sql("SELECT access_token_ciphertext FROM oauth_credentials WHERE provider_account_id = :id")
+			.param("id", first.providerAccountId()).query(String.class).single()).doesNotContain("github-token-2");
+		assertThat(accountService.requireProfileByProviderAccountId(first.userId(), first.providerAccountId()).username())
+			.isEqualTo("octostudy");
+	}
+
+	@Test
+	void githubLoginForAnExplicitlyLinkedIdentityReusesTheGitLabStudyIngAccount() {
+		long gitLabUserId = 737373L;
+		var gitLabPrincipal = accountService.upsert(new GitLabOAuthSession(
+			new GitLabUser(gitLabUserId, "linked-gitlab", "Linked User", null, null),
+			"gitlab-token", "gitlab-refresh", Instant.now().plusSeconds(3600), "api"
+		));
+		ProviderIdentity github = new ProviderIdentity(
+			RepositoryProvider.GITHUB, "838383", "linked-github", "Linked User", null, "https://github.com/linked-github"
+		);
+		linkingService.link(gitLabPrincipal.userId(), github,
+			new ProviderOAuthCredential("github-token", "github-refresh", Instant.now().plusSeconds(3600), ""));
+
+		var githubPrincipal = accountService.authenticate(github,
+			new ProviderOAuthCredential("github-token-2", "github-refresh-2", Instant.now().plusSeconds(7200), ""));
+
+		assertThat(githubPrincipal.userId()).isEqualTo(gitLabPrincipal.userId());
+		assertThat(githubPrincipal.provider()).isEqualTo(RepositoryProvider.GITHUB);
+		assertThat(githubPrincipal.id()).isEqualTo(gitLabUserId);
+		assertThat(accountService.listProviderAccounts(gitLabPrincipal.userId())).hasSize(2);
 	}
 }

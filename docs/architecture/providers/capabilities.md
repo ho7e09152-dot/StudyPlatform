@@ -25,6 +25,8 @@ Only when `GITHUB_ACCOUNT_LINKING_ENABLED=true` and `GITHUB_CLIENT_ID`, `GITHUB_
 - App ID and mounted private key pass startup validation
 - the GitHub repository adapter is present
 
-`authProviders` remains `GITLAB`; GitHub login/signup is not implemented. This means GitHub can appear in Settings and Workspace Connect without appearing on Login.
+`authProviders` adds `GITHUB` only when `GITHUB_LOGIN_ENABLED=true` and GitHub user-authorization configuration is complete. Login reads this capability before rendering buttons; a frontend deployed before the backend is ready therefore keeps GitHub hidden.
+
+The three GitHub flags are independent: GitHub may be available for login, Settings account linking, and repository-backed Workspaces in any safely configured combination.
 
 Enum membership does not imply support. Each capability changes only after its corresponding backend path is configured and tested.

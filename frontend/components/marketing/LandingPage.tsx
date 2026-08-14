@@ -10,7 +10,6 @@ import {
   CalendarDays,
   FileCheck2,
   FolderGit2,
-  Gitlab,
   Menu,
   MessageSquareText,
   Search,
@@ -28,7 +27,7 @@ const coreValues = [
   {
     icon: MessageSquareText,
     title: "제출과 리뷰를 한곳에서",
-    description: "GitLab을 직접 오가지 않고 학습 결과를 제출하고 팀 리뷰를 확인합니다.",
+    description: "저장소를 직접 오가지 않고 학습 결과를 제출하고 팀 리뷰를 확인합니다.",
   },
   {
     icon: Search,
@@ -38,7 +37,7 @@ const coreValues = [
 ] as const;
 
 const workflow = [
-  { number: "01", title: "Workspace 연결", description: "GitLab 프로젝트를 Study-ing Workspace에 연결합니다." },
+  { number: "01", title: "Workspace 연결", description: "GitLab 또는 GitHub 저장소를 Study-ing Workspace에 연결합니다." },
   { number: "02", title: "학습 일정 만들기", description: "팀이 함께 공부할 항목과 마감을 정합니다." },
   { number: "03", title: "학습하고 제출하기", description: "Today에서 학습을 진행하고 결과를 제출합니다." },
   { number: "04", title: "다시 찾고 돌아보기", description: "Library에서 내용을 찾고 Records에서 학습 흐름을 확인합니다." },
@@ -155,11 +154,11 @@ export function LandingPage() {
               <p>오늘 할 일을 확인하고, 학습을 제출하고, 팀과 리뷰한 내용을 다시 찾아보세요.</p>
               <div className="public-hero__actions">
                 <Link className="button button--primary public-primary-cta" href="/login">
-                  <Gitlab size={18} aria-hidden="true" /> GitLab로 시작하기 <ArrowRight size={17} aria-hidden="true" />
+                  <FolderGit2 size={18} aria-hidden="true" /> Study-ing 시작하기 <ArrowRight size={17} aria-hidden="true" />
                 </Link>
                 <Link className="button public-secondary-cta" href={getDemoEntryUrl()}>데모 둘러보기</Link>
               </div>
-              <p className="public-hero__helper"><ShieldCheck size={15} aria-hidden="true" /> GitLab OAuth로 연결하며 개인 액세스 토큰을 직접 입력할 필요가 없습니다.</p>
+              <p className="public-hero__helper"><ShieldCheck size={15} aria-hidden="true" /> GitLab·GitHub OAuth로 연결하며 개인 액세스 토큰을 직접 입력할 필요가 없습니다.</p>
             </div>
 
             <div className="public-hero-preview">
@@ -193,7 +192,7 @@ export function LandingPage() {
                 <span>작동 방식</span>
                 <h2 id="how-it-works-title">연결하고, 공부하고,<br />다시 꺼내보는 네 단계.</h2>
               </div>
-              <p>GitLab 프로젝트를 연결한 뒤 실제 학습 과정은 Study-ing 안에서 자연스럽게 이어집니다.</p>
+              <p>사용할 저장소를 연결한 뒤 실제 학습 과정은 Study-ing 안에서 자연스럽게 이어집니다.</p>
             </div>
             <ol className="public-workflow__list">
               {workflow.map((item) => (
@@ -260,10 +259,10 @@ export function LandingPage() {
             <div className="public-trust__copy">
               <span>Data &amp; Trust</span>
               <h2 id="trust-title">학습 기록은 내가 연결한 저장소에.</h2>
-              <p>학습 일정과 제출 기록의 원본은 연결한 GitLab 프로젝트에 남습니다. 기존 저장소 파일은 그대로 유지합니다.</p>
+              <p>학습 일정과 제출 기록의 원본은 연결한 GitLab 또는 GitHub 저장소에 남습니다. 기존 저장소 파일은 그대로 유지합니다.</p>
             </div>
             <ul>
-              <li><FolderGit2 size={18} aria-hidden="true" /><div><strong>원본이 남는 학습 기록</strong><span>일정과 제출 파일은 연결한 GitLab 프로젝트에서 계속 확인할 수 있습니다.</span></div></li>
+              <li><FolderGit2 size={18} aria-hidden="true" /><div><strong>원본이 남는 학습 기록</strong><span>일정과 제출 파일은 연결한 저장소에서 계속 확인할 수 있습니다.</span></div></li>
               <li><ShieldCheck size={18} aria-hidden="true" /><div><strong>브라우저에 OAuth 토큰을 저장하지 않음</strong><span>토큰은 서버 DB에서 암호화해 관리하고 브라우저에는 HttpOnly 세션 쿠키만 사용합니다.</span></div></li>
               <li><FileCheck2 size={18} aria-hidden="true" /><div><strong>기존 파일은 그대로 유지</strong><span>Study-ing이 사용하는 학습 데이터 외 저장소 콘텐츠를 임의로 바꾸지 않습니다.</span></div></li>
             </ul>
@@ -275,10 +274,10 @@ export function LandingPage() {
             <div>
               <span>다음 학습부터 더 선명하게</span>
               <h2 id="final-cta-title">스터디 관리보다 공부에 더 집중하세요.</h2>
-              <p>GitLab 프로젝트를 연결하면 오늘의 학습부터 기록까지 한 흐름으로 시작할 수 있습니다.</p>
+              <p>GitLab 또는 GitHub 저장소를 연결하면 오늘의 학습부터 기록까지 한 흐름으로 시작할 수 있습니다.</p>
             </div>
             <div>
-              <Link className="button button--primary public-primary-cta" href="/login">GitLab로 시작하기 <ArrowRight size={17} aria-hidden="true" /></Link>
+              <Link className="button button--primary public-primary-cta" href="/login">Study-ing 시작하기 <ArrowRight size={17} aria-hidden="true" /></Link>
               <Link className="button public-secondary-cta" href={getDemoEntryUrl()}>데모 둘러보기</Link>
             </div>
           </div>

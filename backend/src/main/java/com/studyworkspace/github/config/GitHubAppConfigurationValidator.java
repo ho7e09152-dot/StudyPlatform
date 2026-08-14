@@ -27,8 +27,8 @@ public class GitHubAppConfigurationValidator {
 		if (properties.features().accountLinking() && !properties.userAuthorizationConfigured()) {
 			log.warn("GitHub account linking is enabled but its user-authorization configuration is incomplete; capability remains disabled.");
 		}
-		if (properties.features().login()) {
-			log.warn("GitHub login is enabled in configuration but the login flow is not implemented; auth capability remains disabled.");
+		if (properties.features().login() && !properties.userAuthorizationConfigured()) {
+			log.warn("GitHub login is enabled but its user-authorization configuration is incomplete; auth capability remains disabled.");
 		}
 		if (properties.features().repository()) {
 			if (!properties.appAuthenticationConfigured()) {
@@ -41,7 +41,8 @@ public class GitHubAppConfigurationValidator {
 		}
 
 		log.info("GitHub account linking: {}", properties.accountLinkingReady() ? "enabled" : "disabled");
-		log.info("GitHub login: disabled");
+		log.info("GitHub login: {}",
+			properties.features().login() && properties.userAuthorizationConfigured() ? "enabled" : "disabled");
 		log.info("GitHub repository provider: {}", repositoryAuthenticationReady ? "enabled" : "disabled");
 	}
 

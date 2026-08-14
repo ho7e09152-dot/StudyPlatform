@@ -19,6 +19,11 @@ public final class AuthSessionAttributes {
 	public static final String GITHUB_LINK_USER_ID = "githubLinkUserId";
 	public static final String GITHUB_LINK_ACTION = "githubLinkAction";
 	public static final String GITHUB_LINK_CODE_VERIFIER = "githubLinkCodeVerifier";
+	public static final String GITHUB_LOGIN_RETURN_URL = "githubLoginReturnUrl";
+	public static final String GITHUB_LOGIN_PENDING_CODE = "githubLoginPendingCode";
+	public static final String GITHUB_LOGIN_PENDING_VERIFIER = "githubLoginPendingVerifier";
+	public static final String GITHUB_LOGIN_PENDING_RETURN_URL = "githubLoginPendingReturnUrl";
+	public static final String GITHUB_LOGIN_PENDING_CREATED_AT = "githubLoginPendingCreatedAt";
 
 	private AuthSessionAttributes() {
 	}

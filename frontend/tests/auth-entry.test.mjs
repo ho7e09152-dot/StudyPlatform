@@ -29,6 +29,18 @@ test("OAuth errors keep cancellation separate from authentication failure", () =
   assert.equal(getLoginNoticeState("session_expired")?.actionLabel, "GitLab로 다시 로그인");
   assert.equal(getLoginNoticeState("reconnect_required")?.actionLabel, "GitLab 다시 연결");
   assert.equal(getLoginNoticeState("oauth_failed")?.tone, "danger");
+  assert.equal(getLoginNoticeState("access_denied", "GITHUB")?.title, "GitHub 로그인이 취소되었습니다.");
+  assert.equal(getLoginNoticeState("session_expired", "GITHUB")?.actionLabel, "GitHub로 다시 로그인");
+});
+
+test("login and callback UI are capability-driven and provider-aware", async () => {
+  const login = await readFile(new URL("../components/marketing/LoginPage.tsx", import.meta.url), "utf8");
+  const callback = await readFile(new URL("../components/auth/OAuthCallbackPage.tsx", import.meta.url), "utf8");
+  assert.match(login, /getProviderCapabilities/);
+  assert.match(login, /authProviders\.map/);
+  assert.match(login, /getProviderLoginUrl/);
+  assert.match(callback, /completeGitHubLogin/);
+  assert.match(callback, /provider=\$\{provider\}/);
 });
 
 test("profile onboarding requires age, Terms, and Privacy independently", async () => {

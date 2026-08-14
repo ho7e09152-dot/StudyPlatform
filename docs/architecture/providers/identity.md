@@ -1,7 +1,7 @@
 # Provider Identity Model
 
-Status: implemented foundation; GitLab login plus capability-gated GitHub account linking
-Updated: 2026-08-13
+Status: implemented; capability-gated GitLab and GitHub login plus explicit account linking
+Updated: 2026-08-14
 
 ## Invariants
 
@@ -14,13 +14,13 @@ Updated: 2026-08-13
 
 ## Current login resolution
 
-1. GitLab OAuth returns a verified GitLab identity.
-2. The backend finds `provider_accounts(provider=GITLAB, external_user_id=...)`.
+1. GitLab OAuth or GitHub App user authorization returns a verified Provider identity.
+2. The backend finds `provider_accounts(provider, external_user_id)`.
 3. It loads the linked `user_accounts` row.
 4. It rotates only that Provider Account's encrypted credential.
 5. It stores a stable Study-ing principal in the session.
 
-A new GitLab identity creates one Study-ing user, one GITLAB Provider Account, and one credential in a transaction. Repeated login resolves the same rows.
+A new identity creates one Study-ing user, one matching Provider Account, and one credential in a transaction. Repeated login resolves the same rows. A verified GitHub identity already linked from Settings resolves the existing Study-ing user; email and username are never used to merge accounts.
 
 ## Credential security
 
@@ -36,10 +36,9 @@ AES-GCM encryption, log redaction, HttpOnly session cookies, OAuth state validat
 | `AuthSessionAttributes.GITLAB_USER` | DEPRECATED | Only accepted to upgrade an old session. New sessions write `STUDY_ING_USER`. |
 | `StudyMember.gitlabUserId` | STILL REQUIRED | GitLab repository filenames, existing JSON, and member sync use it. New members also carry stable `userId`. |
 
-## Non-goals in the current GitHub account-linking phase
+## Remaining non-goals
 
-- GitHub login or signup
-- GitHub repository, Workspace, Discovery, Submission, Review, or Sync support
 - Provider disconnect UI
 - Multiple accounts for the same Provider
 - Automatic identity merge
+- Migration of the compatibility `StudyMember.gitlabUserId` field to a provider-neutral external member id

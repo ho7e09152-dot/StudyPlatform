@@ -183,6 +183,24 @@ class GitHubAccountLinkControllerTests {
 		);
 	}
 
+	@Test
+	void loginCallbackDoesNotRequireExistingStudyIngAuthenticationAndStagesCodeForFrontendCompletion() {
+		MockHttpServletRequest request = callbackRequest("expected", null, Instant.now());
+		MockHttpSession session = (MockHttpSession) request.getSession(false);
+		session.setAttribute(AuthSessionAttributes.GITHUB_LINK_ACTION, "LOGIN");
+		session.setAttribute(AuthSessionAttributes.GITHUB_LOGIN_RETURN_URL, "/records");
+
+		var response = controller.callback("code", "expected", null, null, request);
+
+		assertThat(response.getHeaders().getLocation()).hasToString(
+			"http://localhost:3000/auth/callback?provider=GITHUB"
+		);
+		assertThat(session.getAttribute(AuthSessionAttributes.GITHUB_LOGIN_PENDING_CODE)).isEqualTo("code");
+		assertThat(session.getAttribute(AuthSessionAttributes.GITHUB_LOGIN_PENDING_VERIFIER)).isEqualTo("verifier");
+		assertThat(session.getAttribute(AuthSessionAttributes.GITHUB_LOGIN_PENDING_RETURN_URL)).isEqualTo("/records");
+		verifyNoInteractions(githubOAuth, linkingService);
+	}
+
 	private static MockHttpServletRequest callbackRequest(String state, String userId, Instant createdAt) {
 		MockHttpServletRequest request = new MockHttpServletRequest();
 		MockHttpSession session = (MockHttpSession) request.getSession(true);

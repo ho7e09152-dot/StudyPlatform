@@ -66,7 +66,7 @@ class SecurityBoundaryTests {
 		mockMvc.perform(get("/api/v1/workspaces"))
 			.andExpect(status().isUnauthorized())
 			.andExpect(content().contentType("application/json;charset=UTF-8"))
-			.andExpect(content().string(org.hamcrest.Matchers.containsString("GitLab 로그인이 필요합니다.")))
+			.andExpect(content().string(org.hamcrest.Matchers.containsString("Study-ing 로그인이 필요합니다.")))
 			.andExpect(header().exists("X-Request-ID"))
 			.andExpect(header().string("X-Content-Type-Options", "nosniff"))
 			.andExpect(header().string("X-Frame-Options", "DENY"))

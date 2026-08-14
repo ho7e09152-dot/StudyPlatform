@@ -28,6 +28,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/v1/provider-accounts/github")
 public class GitHubAccountLinkController {
 	private static final String LINK_ACTION = "LINK";
+	private static final String LOGIN_ACTION = "LOGIN";
 
 	private final String frontendUrl;
 	private final GitHubOAuthService githubOAuth;
@@ -78,22 +79,36 @@ public class GitHubAccountLinkController {
 		@AuthenticationPrincipal StudyIngPrincipal principal,
 		HttpServletRequest request
 	) {
-		requireAuthenticated(principal);
 		HttpSession session = request.getSession(false);
-		if (session == null) throw invalidState();
+		if (session == null) return loginRedirect("session_expired");
 
 		String expectedState = (String) session.getAttribute(AuthSessionAttributes.GITHUB_LINK_STATE);
 		Instant createdAt = (Instant) session.getAttribute(AuthSessionAttributes.GITHUB_LINK_STATE_CREATED_AT);
 		String expectedUserId = (String) session.getAttribute(AuthSessionAttributes.GITHUB_LINK_USER_ID);
 		String action = (String) session.getAttribute(AuthSessionAttributes.GITHUB_LINK_ACTION);
 		String verifier = (String) session.getAttribute(AuthSessionAttributes.GITHUB_LINK_CODE_VERIFIER);
+		String returnUrl = safeReturnUrl((String) session.getAttribute(AuthSessionAttributes.GITHUB_LOGIN_RETURN_URL));
 		clearLinkState(session);
 
-		if (!stateMatches(expectedState, state)
+		boolean invalidState = !stateMatches(expectedState, state)
 			|| createdAt == null || createdAt.plus(properties.stateTtl()).isBefore(Instant.now())
-			|| !principal.userId().equals(expectedUserId)
-			|| !LINK_ACTION.equals(action)
-			|| verifier == null || verifier.isBlank()) {
+			|| verifier == null || verifier.isBlank();
+		if (invalidState) {
+			return LOGIN_ACTION.equals(action) ? loginRedirect("session_expired") : settingsRedirect("github_expired");
+		}
+
+		if (LOGIN_ACTION.equals(action)) {
+			if (error != null) return loginRedirect("access_denied".equals(error) ? "access_denied" : "oauth_failed");
+			if (code == null || code.isBlank()) return loginRedirect("oauth_failed");
+			session.setAttribute(AuthSessionAttributes.GITHUB_LOGIN_PENDING_CODE, code);
+			session.setAttribute(AuthSessionAttributes.GITHUB_LOGIN_PENDING_VERIFIER, verifier);
+			session.setAttribute(AuthSessionAttributes.GITHUB_LOGIN_PENDING_RETURN_URL, returnUrl);
+			session.setAttribute(AuthSessionAttributes.GITHUB_LOGIN_PENDING_CREATED_AT, Instant.now());
+			return redirect(frontendUrl + "/auth/callback?provider=GITHUB");
+		}
+
+		requireAuthenticated(principal);
+		if (!LINK_ACTION.equals(action) || !principal.userId().equals(expectedUserId)) {
 			return settingsRedirect("github_expired");
 		}
 		if (error != null) {
@@ -139,10 +154,21 @@ public class GitHubAccountLinkController {
 		session.removeAttribute(AuthSessionAttributes.GITHUB_LINK_USER_ID);
 		session.removeAttribute(AuthSessionAttributes.GITHUB_LINK_ACTION);
 		session.removeAttribute(AuthSessionAttributes.GITHUB_LINK_CODE_VERIFIER);
+		session.removeAttribute(AuthSessionAttributes.GITHUB_LOGIN_RETURN_URL);
 	}
 
 	private ResponseEntity<Void> settingsRedirect(String result) {
 		return redirect(frontendUrl + "/settings/accounts?providerLink=" + result);
+	}
+
+	private ResponseEntity<Void> loginRedirect(String error) {
+		return redirect(frontendUrl + "/login?provider=GITHUB&oauthError=" + error);
+	}
+
+	private static String safeReturnUrl(String value) {
+		if (value == null || !value.startsWith("/") || value.startsWith("//") || value.contains("\\")
+			|| value.contains("\r") || value.contains("\n")) return "/today";
+		return value;
 	}
 
 	private static ResponseEntity<Void> redirect(String location) {

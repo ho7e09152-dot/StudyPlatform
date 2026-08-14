@@ -1194,6 +1194,7 @@
 .auth-provider-button:hover { background: var(--ds-color-primary-hover); }
 .auth-provider-button > span { display: inline-flex; }
 .auth-provider-button strong { font-weight: 750; text-align: center; }
+.auth-provider-list { display: grid; gap: var(--ds-space-3); }
 
 .auth-entry-divider {
   display: flex;

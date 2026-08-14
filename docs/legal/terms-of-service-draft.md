@@ -15,7 +15,7 @@ operator: "이호철"
 
 ## 2. 서비스 내용
 
-Study-ing은 GitLab project를 Workspace에 연결하여 다음 기능을 제공한다.
+Study-ing은 GitLab project 또는 GitHub repository를 Workspace에 연결하여 다음 기능을 제공한다.
 
 - 학습 일정 관리
 - 제출과 팀 review
@@ -23,7 +23,7 @@ Study-ing은 GitLab project를 Workspace에 연결하여 다음 기능을 제공
 - Records와 Activity
 - Workspace member와 설정 관리
 
-현재 로그인과 Workspace 저장소 기능은 GitLab만 지원한다. 로그인한 이용자는 GitHub 계정을 Connected Account로 명시적으로 연결할 수 있지만 GitHub Repository/Workspace 기능과 Study-ing Managed Storage는 제공하지 않는다.
+현재 GitLab과 GitHub 로그인 및 Workspace 저장소 기능을 지원한다. Study-ing Managed Storage는 제공하지 않는다.
 
 ## 3. 무료 서비스
 
@@ -33,18 +33,18 @@ Study-ing은 현재 무료이며 결제, 유료 구독, 광고 기능을 제공�
 
 1. Study-ing은 현재 만 14세 이상 사용자를 대상으로 한다.
 2. 만 14세 미만 사용자를 위한 법정대리인 동의 flow는 제공하지 않는다.
-3. 이용자는 자신의 GitLab account로 OAuth 인증하고 Study-ing profile을 설정한다.
+3. 이용자는 자신의 GitLab 또는 GitHub account로 OAuth 인증하고 Study-ing profile을 설정한다.
 4. 이용자는 자신의 계정과 인증수단을 안전하게 관리하고 타인의 계정을 무단으로 사용해서는 안 된다.
 5. GitLab 연결 재승인은 기존 credential을 교체하며 Workspace repository 자체를 변경하지 않는다.
 6. GitHub Connected Account 연결은 현재 Study-ing 계정에 외부 identity를 추가하는 기능이며, email·username 일치를 이유로 다른 Study-ing 계정과 자동 병합하지 않는다.
 
-## 5. Workspace와 GitLab project
+## 5. Workspace와 외부 저장소
 
-1. Workspace는 이용자가 접근 권한을 가진 GitLab project와 연결된다.
+1. Workspace는 이용자가 접근 권한을 가진 GitLab project 또는 GitHub repository와 연결된다.
 2. Repository membership과 Study-ing Workspace membership은 별개다. 참여 가능한 이용자가 명시적으로 참여하면 기본 Study-ing 역할은 멤버다.
-3. 이용자는 권한 있는 project만 연결하고 이용 중에도 필요한 GitLab permission을 유지해야 한다.
-4. GitLab permission이 철회되면 private Workspace content 접근이나 제출·동기화 기능이 제한될 수 있다.
-5. Workspace 역할과 GitLab repository permission은 서로 다른 권한이다.
+3. 이용자는 권한 있는 저장소만 연결하고 이용 중에도 필요한 Provider permission을 유지해야 한다.
+4. 저장소 permission이 철회되면 private Workspace content 접근이나 제출·동기화 기능이 제한될 수 있다.
+5. Workspace 역할과 외부 repository permission은 서로 다른 권한이다.
 
 ## 6. 사용자 콘텐츠와 권리
 
@@ -82,9 +82,9 @@ Study-ing은 현재 무료이며 결제, 유료 구독, 광고 기능을 제공�
 3. 7일이 지나면 Workspace configuration, connection metadata, settings, notification/sync data, team content와 derived/cache data를 Study-ing DB에서 정리한다.
 4. Audit event는 별도의 180일 정책을 따른다.
 
-## 10. GitLab에 남는 데이터
+## 10. 연결한 저장소에 남는 데이터
 
-Study-ing account 또는 Workspace 삭제는 GitLab repository 삭제와 다르다. 다음은 GitLab에 남을 수 있다.
+Study-ing account 또는 Workspace 삭제는 GitLab/GitHub repository 삭제와 다르다. 다음은 연결한 저장소에 남을 수 있다.
 
 - schedule, submission과 repository에 작성된 team document files
 - commit, author information와 Git history
@@ -94,7 +94,7 @@ Study-ing은 위 데이터를 account/workspace 삭제 과정에서 자동 삭�
 
 ## 11. 외부 서비스 의존성
 
-Study-ing은 GitLab OAuth와 API에 의존한다. GitLab 장애, API rate limit, project 권한 변경, network failure 또는 GitLab 서비스 정책 변경으로 일부 기능이 제한될 수 있다. Study-ing은 GitLab 서비스 자체의 가용성을 보증하지 않는다.
+Study-ing은 GitLab·GitHub 인증과 API에 의존한다. Provider 장애, API rate limit, 저장소 권한 변경, network failure 또는 Provider 정책 변경으로 일부 기능이 제한될 수 있다. Study-ing은 외부 Provider 자체의 가용성을 보증하지 않는다.
 
 ## 12. 서비스 변경·일시 중단·종료
 

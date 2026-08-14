@@ -248,7 +248,7 @@ export function SessionDetailDialog({
           <header>
             <div>
               <span className="session-detail__review-icon"><MessageCircle size={17} /></span>
-              <div><h3 id="session-team-review-title">팀 제출 리뷰</h3><p>멤버의 제출을 확인하고 GitLab 커밋에 댓글을 남길 수 있습니다.</p></div>
+              <div><h3 id="session-team-review-title">팀 제출 리뷰</h3><p>멤버의 제출을 확인하고 저장소 커밋에 댓글을 남길 수 있습니다.</p></div>
             </div>
           </header>
           <div className="session-detail__review-members">

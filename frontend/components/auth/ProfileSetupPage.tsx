@@ -2,15 +2,19 @@
 
 import Link from "next/link";
 import { useState, type FormEvent } from "react";
-import { Check, ChevronDown, FileText, Gitlab, LoaderCircle, UserRound } from "lucide-react";
-import type { AuthenticatedGitLabUser } from "@/lib/api/services/authApi";
+import { Check, ChevronDown, FileText, LoaderCircle, UserRound } from "lucide-react";
+import type { StudyIngUser } from "@/lib/api/services/authApi";
 import { getUserFacingError } from "@/lib/api/errors";
+import { ProviderIcon } from "@/components/providers/ProviderIcon";
+import { getProviderDescriptor, type ProviderId } from "@/lib/providers/provider-descriptors";
 
 export function ProfileSetupPage({
   user,
+  identityProvider,
   onSubmit,
 }: {
-  user: AuthenticatedGitLabUser;
+  user: StudyIngUser;
+  identityProvider: ProviderId;
   onSubmit: (input: {
     displayName: string;
     repositoryFileName: string;
@@ -20,6 +24,7 @@ export function ProfileSetupPage({
     confirmMinimumAge: boolean;
   }) => Promise<void>;
 }) {
+  const provider = getProviderDescriptor(identityProvider);
   const [displayName, setDisplayName] = useState(user.name || user.username);
   const [repositoryFileName, setRepositoryFileName] = useState(
     user.repositoryFileName?.replace(/\.md$/i, "") || user.name || user.username,
@@ -49,7 +54,7 @@ export function ProfileSetupPage({
   return (
     <main className="profile-setup-page">
       <section className="profile-setup-card" aria-labelledby="profile-setup-title">
-        <div className="profile-setup-eyebrow"><Gitlab size={16} /> GitLab 계정 연결 완료</div>
+        <div className="profile-setup-eyebrow"><ProviderIcon provider={identityProvider} size={16} /> {provider.displayName} 계정 연결 완료</div>
         <header>
           <span><UserRound size={25} /></span>
           <div>

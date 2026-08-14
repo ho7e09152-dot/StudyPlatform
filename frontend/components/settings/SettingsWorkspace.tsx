@@ -358,14 +358,14 @@ export function SettingsWorkspace({ section = "general" }: { section?: SettingsS
         <Modal
           title={confirmation === "workspace" ? "Workspace를 삭제할까요?" : "Study-ing 계정을 탈퇴할까요?"}
           description={confirmation === "workspace"
-            ? "Study-ing에서 Workspace가 삭제 상태로 전환됩니다. GitLab 저장소 원본은 삭제되지 않습니다."
+            ? `Study-ing에서 Workspace가 삭제 상태로 전환됩니다. ${repositoryProviderLabel} 저장소 원본은 삭제되지 않습니다.`
             : "Study-ing 계정과 OAuth 연결 정보가 삭제됩니다."}
           onClose={() => { if (!deleting) { setActionError(""); setConfirmation(null); } }}
         >
           <div className="destructive-confirmation">
             <p>{confirmation === "workspace"
               ? `“${workspace.name}”은 7일 동안 Workspace Hub에서 복원할 수 있습니다.`
-              : "Workspace의 공동 기록과 일부 운영 기록, GitLab 저장소의 학습 파일과 commit은 남을 수 있습니다. 활성 Workspace의 소유자라면 먼저 해당 Workspace를 삭제하거나 소유권을 정리해야 합니다."}</p>
+              : "Workspace의 공동 기록과 일부 운영 기록, 연결한 저장소의 학습 파일과 commit은 남을 수 있습니다. 활성 Workspace의 소유자라면 먼저 해당 Workspace를 삭제하거나 소유권을 정리해야 합니다."}</p>
             {actionError ? <div className="onboarding-error" role="alert">{actionError}</div> : null}
             <div className="modal-actions">
               <button type="button" className="button button--ghost" disabled={deleting} onClick={() => setConfirmation(null)}>취소</button>
@@ -711,7 +711,7 @@ export function SettingsWorkspace({ section = "general" }: { section?: SettingsS
   }
 
   function AccountSettings({ onDelete }: { onDelete: () => void }) {
-    return <div className="settings-sections"><section className="settings-section-block"><h3>약관 및 개인정보</h3><SettingRows><SettingRow label="이용약관"><Link className="settings-text-link" href="/terms?returnTo=/settings/account">보기 <ChevronRight size={14} /></Link></SettingRow><SettingRow label="개인정보 처리 안내"><Link className="settings-text-link" href="/privacy?returnTo=/settings/account">보기 <ChevronRight size={14} /></Link></SettingRow></SettingRows></section><section className="personal-danger-section"><div><h3>Study-ing 계정 탈퇴</h3><p>Study-ing 계정과 OAuth 연결 정보가 삭제되고, Workspace 멤버 정보는 탈퇴한 사용자로 바뀝니다. Workspace의 공동 기록과 일부 운영 기록, GitLab에 이미 저장된 파일은 남을 수 있습니다.</p></div><button type="button" className="button button--danger" onClick={onDelete}>계정 탈퇴</button></section></div>;
+    return <div className="settings-sections"><section className="settings-section-block"><h3>약관 및 개인정보</h3><SettingRows><SettingRow label="이용약관"><Link className="settings-text-link" href="/terms?returnTo=/settings/account">보기 <ChevronRight size={14} /></Link></SettingRow><SettingRow label="개인정보 처리 안내"><Link className="settings-text-link" href="/privacy?returnTo=/settings/account">보기 <ChevronRight size={14} /></Link></SettingRow></SettingRows></section><section className="personal-danger-section"><div><h3>Study-ing 계정 탈퇴</h3><p>Study-ing 계정과 OAuth 연결 정보가 삭제되고, Workspace 멤버 정보는 탈퇴한 사용자로 바뀝니다. Workspace의 공동 기록과 일부 운영 기록, 연결한 저장소에 이미 저장된 파일은 남을 수 있습니다.</p></div><button type="button" className="button button--danger" onClick={onDelete}>계정 탈퇴</button></section></div>;
   }
 
   function SecuritySettings({ canManage: manageable, events }: { canManage: boolean; events: AuditEvent[] }) {
@@ -719,6 +719,6 @@ export function SettingsWorkspace({ section = "general" }: { section?: SettingsS
   }
 
   function DangerSettings({ isOwner: owner, onDelete }: { isOwner: boolean; onDelete: () => void }) {
-    return <section className="workspace-danger-section"><div><h3>Workspace 삭제</h3><p>Study-ing에서 현재 Workspace 연결을 삭제 상태로 전환합니다. GitLab 프로젝트와 원본 학습 파일은 삭제되지 않으며, 7일 동안 Workspace Hub에서 복원할 수 있습니다.</p></div>{owner ? <button type="button" className="button button--danger" onClick={onDelete}>Workspace 삭제</button> : <p className="settings-scope-note">Workspace 삭제는 소유자만 할 수 있습니다.</p>}</section>;
+    return <section className="workspace-danger-section"><div><h3>Workspace 삭제</h3><p>Study-ing에서 현재 Workspace 연결을 삭제 상태로 전환합니다. {repositoryProviderLabel} 저장소와 원본 학습 파일은 삭제되지 않으며, 7일 동안 Workspace Hub에서 복원할 수 있습니다.</p></div>{owner ? <button type="button" className="button button--danger" onClick={onDelete}>Workspace 삭제</button> : <p className="settings-scope-note">Workspace 삭제는 소유자만 할 수 있습니다.</p>}</section>;
   }
 }

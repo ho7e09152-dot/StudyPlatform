@@ -14,15 +14,22 @@ public final class StudyIngPrincipal extends GitLabUser {
 	private final String providerAccountId;
 	private final RepositoryProvider provider;
 	private final String externalUserId;
+	private final long membershipUserId;
 
 	public StudyIngPrincipal(String userId, String providerAccountId, RepositoryProvider provider,
 		String externalUserId, String username, String displayName, String avatarUrl, String webUrl) {
-		super(provider == RepositoryProvider.GITLAB ? Long.parseLong(externalUserId) : 0L,
+		this(userId, providerAccountId, provider, externalUserId, Long.parseLong(externalUserId),
 			username, displayName, avatarUrl, webUrl);
+	}
+
+	public StudyIngPrincipal(String userId, String providerAccountId, RepositoryProvider provider,
+		String externalUserId, long membershipUserId, String username, String displayName, String avatarUrl, String webUrl) {
+		super(membershipUserId, username, displayName, avatarUrl, webUrl);
 		this.userId = userId;
 		this.providerAccountId = providerAccountId;
 		this.provider = provider;
 		this.externalUserId = externalUserId;
+		this.membershipUserId = membershipUserId;
 	}
 
 	public String userId() { return userId; }
@@ -32,10 +39,7 @@ public final class StudyIngPrincipal extends GitLabUser {
 	public String displayName() { return name(); }
 
 	public long gitLabUserId() {
-		if (provider != RepositoryProvider.GITLAB) {
-			throw new IllegalStateException("The active identity is not GitLab.");
-		}
-		return Long.parseLong(externalUserId);
+		return membershipUserId;
 	}
 
 	/** Transitional adapter for GitLab-only workspace services. */

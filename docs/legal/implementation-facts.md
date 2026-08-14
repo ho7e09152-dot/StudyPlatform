@@ -21,7 +21,7 @@
 
 | 상태 | 사실 |
 |---|---|
-| CONFIRMED | 현재 로그인 Provider는 GitLab OAuth 하나다. 로그인 scope 기본값은 `api`다. GitHub는 기존 인증 사용자의 Connected Account linking만 지원하며 신규 로그인은 지원하지 않는다. |
+| CONFIRMED | 현재 로그인 Provider는 GitLab OAuth와 capability-gated GitHub App user authorization이다. GitLab scope 기본값은 `api`다. GitHub email은 요청·저장하지 않으며 verified `(provider, externalUserId)`만 로그인 identity로 사용한다. |
 | CONFIRMED | Study-ing 사용자 계정(`user_accounts`), 외부 `provider_accounts`, Provider별 `oauth_credentials`는 별도 row다. |
 | CONFIRMED | Workspace는 현재 GitLab project ID에 1:1로 연결되며 `gitlab_project_id`에 unique constraint가 있다. |
 | CONFIRMED | Study-ing 역할 `OWNER`/`MANAGER`/`MEMBER`와 GitLab access level은 별도 필드다. |

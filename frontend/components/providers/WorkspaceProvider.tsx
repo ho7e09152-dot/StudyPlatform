@@ -143,6 +143,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     [currentWorkspaceId, workspaces],
   );
   const workspace = selectedWorkspace ?? initialWorkspaces[0];
+  const repositoryProviderName = workspace.repository?.provider === "GITHUB" ? "GitHub" : "GitLab";
   const currentUserId = demoMode
     ? "member-a"
     : selectedWorkspace?.members.find(
@@ -247,7 +248,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           );
         } else {
           notify(
-            "GitLab 일정 동기화 완료",
+            `${repositoryProviderName} 일정 동기화 완료`,
             `일정 ${result.importedSessions}개 · 제출 ${result.importedSubmissions}개를 반영했습니다.`,
           );
         }
@@ -265,17 +266,17 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         {
           path: workspace.gitlabProjectPath,
           code: "SYNC_FAILED",
-          message: getUserFacingError(error, "GitLab 일정을 불러오지 못했습니다."),
+          message: getUserFacingError(error, `${repositoryProviderName} 일정을 불러오지 못했습니다.`),
         },
       ]);
       notify(
-        "GitLab 일정 동기화 실패",
-        getUserFacingError(error, "GitLab 일정을 불러오지 못했습니다."),
+        `${repositoryProviderName} 일정 동기화 실패`,
+        getUserFacingError(error, `${repositoryProviderName} 일정을 불러오지 못했습니다.`),
       );
     } finally {
       if (workspaceScopeVersion.current === scopeVersion) setSyncing(false);
     }
-  }, [backendConnected, notify, replaceWorkspace, syncing, updateCurrentWorkspace, workspace.gitlabProjectPath, workspace.id]);
+  }, [backendConnected, notify, replaceWorkspace, repositoryProviderName, syncing, updateCurrentWorkspace, workspace.gitlabProjectPath, workspace.id]);
 
   const syncMembers = useCallback(async () => {
     if (!backendConnected) {
@@ -284,8 +285,8 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     }
     const updated = await syncWorkspaceMembers(workspace.id);
     replaceWorkspace(updated);
-    notify("GitLab 멤버 동기화 완료", `${updated.members.length}명의 상태와 권한을 확인했습니다.`);
-  }, [backendConnected, notify, replaceWorkspace, workspace.id]);
+    notify(`${repositoryProviderName} 멤버 동기화 완료`, `${updated.members.length}명의 상태와 권한을 확인했습니다.`);
+  }, [backendConnected, notify, replaceWorkspace, repositoryProviderName, workspace.id]);
 
   const addMember = useCallback(async (gitlabUserId: number) => {
     if (!backendConnected) {
@@ -580,11 +581,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     );
     setWorkspaces(remaining);
     setCurrentWorkspaceId(remaining[0]?.id ?? "");
-    notify("Workspace를 소프트 삭제했습니다", "GitLab 파일은 변경하지 않았습니다.");
-  }, [backendConnected, notify, workspace.id, workspaces]);
+    notify("Workspace를 소프트 삭제했습니다", `${repositoryProviderName} 파일은 변경하지 않았습니다.`);
+  }, [backendConnected, notify, repositoryProviderName, workspace.id, workspaces]);
 
   const migrateRepositoryLayout = useCallback(async (treeFingerprint: string) => {
-    if (!backendConnected) throw new Error("실제 GitLab 연결에서만 저장 구조를 변경할 수 있습니다.");
+    if (!backendConnected) throw new Error("실제 저장소 연결에서만 저장 구조를 변경할 수 있습니다.");
     const result = await migrateRepositorySchema(workspace.id, treeFingerprint);
     replaceWorkspace(result.workspace);
     setLastSyncFailures(result.failures);

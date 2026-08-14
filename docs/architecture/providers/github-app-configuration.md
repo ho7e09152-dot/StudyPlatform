@@ -42,11 +42,11 @@ User access tokens and installation access tokens are separate credential types.
 
 | Variable | Required when | Purpose |
 |---|---|---|
-| `GITHUB_CLIENT_ID` | account linking | GitHub App user authorization and code exchange |
-| `GITHUB_CLIENT_SECRET` | account linking | server-only user authorization code exchange |
-| `GITHUB_REDIRECT_URI` | account linking | exact registered user authorization callback |
+| `GITHUB_CLIENT_ID` | account linking, login or repository user actions | GitHub App user authorization and code exchange |
+| `GITHUB_CLIENT_SECRET` | account linking, login or repository user actions | server-only user authorization code exchange |
+| `GITHUB_REDIRECT_URI` | account linking or login | exact registered user authorization callback shared by server-side `LINK`/`LOGIN` state actions |
 | `GITHUB_ACCOUNT_LINKING_ENABLED` | optional flag | expose GitHub only in Settings Connected Accounts when user config is complete |
-| `GITHUB_LOGIN_ENABLED` | future | reserved; setting it does not expose GitHub Login before implementation |
+| `GITHUB_LOGIN_ENABLED` | optional flag | expose GitHub on Login only when user authorization config is complete |
 | `GITHUB_REPOSITORY_ENABLED` | repository operations | expose GitHub repository discovery/connect/write only when user authorization and App authentication are valid |
 | `GITHUB_APP_ID` | repository/App auth | JWT issuer |
 | `GITHUB_PRIVATE_KEY_PATH` | repository/App auth | container-local PEM path |
@@ -58,7 +58,7 @@ User access tokens and installation access tokens are separate credential types.
 
 - All GitHub flags false and no GitHub credentials: backend starts normally.
 - Account linking true with incomplete Client ID/Secret/redirect: backend starts with a warning and omits GitHub from `accountLinkProviders`.
-- Login true: backend warns that the flow is not implemented and keeps `authProviders=[GITLAB]`.
+- Login true with complete user-authorization config: `authProviders=[GITLAB,GITHUB]`; the Login page renders the GitHub button from this capability.
 - Repository false: App ID and PEM are optional and the key is not read.
 - Repository true: App ID and a readable, valid RSA PEM are required. Invalid configuration stops startup before traffic.
 - Repository true with valid user authorization and App authentication: `repositoryProviders` adds `GITHUB`.

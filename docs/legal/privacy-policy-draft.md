@@ -13,10 +13,10 @@ operator: "이호철"
 
 Study-ing은 다음 목적으로 필요한 범위의 개인정보를 처리한다.
 
-- GitLab OAuth 로그인과 Study-ing 계정 관리
-- Workspace 참여, 역할과 GitLab project 접근 권한 확인
+- GitLab OAuth 또는 GitHub App user authorization 로그인과 Study-ing 계정 관리
+- Workspace 참여, 역할과 연결한 저장소 접근 권한 확인
 - 학습 일정, 제출, review와 팀 문서 기능 제공
-- GitLab repository 읽기·쓰기와 동기화
+- GitLab/GitHub repository 읽기·쓰기와 동기화
 - Activity 알림과 읽음 상태 제공
 - 오류 확인, 보안 감사와 서비스 안정성 유지
 - 표시 이름, 학습 기록 이름, 시간대와 화면 설정 제공
@@ -38,12 +38,12 @@ Study-ing에는 현재 결제, 유료 구독, 광고, 맞춤형 광고, 마케�
 
 OAuth access/refresh token은 서버 DB에서 AES-GCM으로 암호화한다. 브라우저에는 OAuth token을 저장하지 않고 HttpOnly session cookie를 사용한다.
 
-### 2.2 GitHub 연결 계정
+### 2.2 GitHub 로그인·연결 계정
 
 - GitHub user ID, username, optional display name, avatar URL, profile URL
 - OAuth access token, optional refresh token/expiry metadata, granted scope
 
-GitHub 연결은 이미 로그인한 사용자가 Settings에서 명시적으로 요청할 때만 GitHub App user authorization으로 수행한다. email은 요청하거나 저장하지 않는다. GitHub 저장소 기능이 활성화된 경우 사용자가 설치 대상으로 선택한 저장소의 metadata, permission, 파일, commit과 comment를 Workspace 기능 제공 범위에서 처리한다.
+GitHub 로그인과 Settings의 명시적 계정 연결은 GitHub App user authorization으로 수행한다. email은 요청하거나 저장하지 않는다. 로그인 중 동일 email·username을 이유로 기존 Study-ing 계정과 자동 병합하지 않는다. GitHub 저장소 기능이 활성화된 경우 사용자가 설치 대상으로 선택한 저장소의 metadata, permission, 파일, commit과 comment를 Workspace 기능 제공 범위에서 처리한다.
 
 ### 2.3 Workspace와 학습 활동
 
@@ -102,9 +102,9 @@ Workspace는 삭제 후 7일 동안 Owner가 복원할 수 있다. 7일이 지�
 
 전자적 record는 DB row 삭제 또는 식별정보 제거 방식으로 처리한다. Production backup의 삭제 반영은 최대 7일 rotation 목표에 따른다.
 
-## 5. GitLab에 남는 정보
+## 5. 연결한 저장소에 남는 정보
 
-Study-ing은 GitLab repository를 학습 일정·제출 원본과 변경 이력에 사용한다. Study-ing account 또는 Workspace를 삭제해도 다음 정보가 GitLab에 남을 수 있다.
+Study-ing은 GitLab 또는 GitHub repository를 학습 일정·제출 원본과 변경 이력에 사용한다. Study-ing account 또는 Workspace를 삭제해도 다음 정보가 연결한 저장소에 남을 수 있다.
 
 - schedule와 submission files
 - team document 등 실제로 repository에 기록된 파일
@@ -115,7 +115,7 @@ Study-ing은 탈퇴나 Workspace 삭제 과정에서 GitLab 또는 GitHub 원본
 
 ## 6. 외부 서비스, 처리위탁과 제3자 제공
 
-현재 로그인 Provider는 GitLab이다. 사용자가 Settings에서 명시적으로 연결하고 GitHub App을 대상 저장소에 설치한 경우 GitHub도 Workspace 저장소 Provider로 사용할 수 있다. GitHub 신규 로그인/가입은 제공하지 않는다.
+현재 GitLab OAuth와 GitHub App user authorization 로그인을 지원한다. 사용자가 Settings에서 GitHub 계정을 명시적으로 추가 연결하거나 GitHub App을 대상 저장소에 설치하면 GitHub Workspace 저장소 기능도 사용할 수 있다.
 
 GitHub 계정을 연결하면 GitHub user ID, username, optional display name, avatar/profile URL과 encrypted GitHub App user access credential을 처리한다. 현재 email은 요청하거나 저장하지 않는다. GitHub Workspace를 사용하면 설치된 저장소 metadata/permission과 사용자가 요청한 repository file/commit/comment를 처리한다.
 

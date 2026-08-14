@@ -12,7 +12,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 /** Single backend source of truth for providers that are safe to expose. */
 @Service
 public class ProviderCapabilities {
-	private static final List<RepositoryProvider> AUTH_PROVIDERS = List.of(RepositoryProvider.GITLAB);
 	private final GitHubAppProperties githubApp;
 	private final GitHubAppConfigurationValidator githubConfiguration;
 
@@ -26,7 +25,11 @@ public class ProviderCapabilities {
 		this(githubApp, null);
 	}
 
-	public List<RepositoryProvider> authProviders() { return AUTH_PROVIDERS; }
+	public List<RepositoryProvider> authProviders() {
+		return githubLoginReady()
+			? List.of(RepositoryProvider.GITLAB, RepositoryProvider.GITHUB)
+			: List.of(RepositoryProvider.GITLAB);
+	}
 	public List<RepositoryProvider> accountLinkProviders() {
 		return githubApp.accountLinkingReady()
 			? List.of(RepositoryProvider.GITLAB, RepositoryProvider.GITHUB)
@@ -45,6 +48,14 @@ public class ProviderCapabilities {
 
 	public boolean supportsAccountLinkProvider(RepositoryProvider provider) {
 		return accountLinkProviders().contains(provider);
+	}
+
+	public boolean supportsAuthProvider(RepositoryProvider provider) {
+		return authProviders().contains(provider);
+	}
+
+	private boolean githubLoginReady() {
+		return githubApp.features().login() && githubApp.userAuthorizationConfigured();
 	}
 
 	private boolean githubRepositoryReady() {

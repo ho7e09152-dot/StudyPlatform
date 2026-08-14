@@ -75,9 +75,9 @@ public class AuthController {
 		}
 		return ResponseEntity.ok(Map.of(
 			"authenticated", true,
-			"mode", "gitlab-oauth",
+			"mode", "oauth",
 			"identityProvider", user.provider().name(),
-			"user", profileResponse(accountService.requireProfileByUserId(user.userId()))
+			"user", profileResponse(accountService.requireProfileByProviderAccountId(user.userId(), user.providerAccountId()))
 		));
 	}
 
@@ -87,11 +87,13 @@ public class AuthController {
 		HttpServletRequest request
 	) {
 		StudyIngPrincipal current = getPrincipal(request);
-		if (current == null) throw new WorkspaceException("AUTH_REQUIRED", "GitLab 로그인이 필요합니다.", 401);
-		OAuthAccountService.AccountProfile profile = accountService.updateProfileByUserId(current.userId(), profileRequest);
+		if (current == null) throw new WorkspaceException("AUTH_REQUIRED", "Study-ing 로그인이 필요합니다.", 401);
+		OAuthAccountService.AccountProfile profile = accountService.updateProfileByUserId(
+			current.userId(), current.providerAccountId(), profileRequest
+		);
 		HttpSession session = request.getSession(false);
 		if (session != null) session.setAttribute(AuthSessionAttributes.STUDY_ING_USER,
-			accountService.requirePrincipalByGitLabUserId(current.gitLabUserId()));
+			accountService.requirePrincipalByProviderAccountId(current.userId(), current.providerAccountId()));
 		workspaceService.updateUserProfile(profile.id(), profile.name(), profile.repositoryFileName());
 		return profileResponse(profile);
 	}
@@ -102,8 +104,10 @@ public class AuthController {
 		HttpServletRequest request
 	) {
 		StudyIngPrincipal current = getPrincipal(request);
-		if (current == null) throw new WorkspaceException("AUTH_REQUIRED", "GitLab 로그인이 필요합니다.", 401);
-		return profileResponse(accountService.updatePreferencesByUserId(current.userId(), preferencesRequest));
+		if (current == null) throw new WorkspaceException("AUTH_REQUIRED", "Study-ing 로그인이 필요합니다.", 401);
+		return profileResponse(accountService.updatePreferencesByUserId(
+			current.userId(), current.providerAccountId(), preferencesRequest
+		));
 	}
 
 	@GetMapping("/gitlab/login")
@@ -182,7 +186,9 @@ public class AuthController {
 		if (session != null) {
 			StudyIngPrincipal user = getPrincipal(request);
 			if (user != null) {
+				if (user.provider() == com.studyworkspace.workspace.domain.RepositoryProvider.GITLAB) {
 				accountService.findGitLabOAuthSessionByUserId(user.userId()).ifPresent(oauth -> oauthService.revoke(oauth.accessToken()));
+				}
 				accountService.deleteCredential(user.userId(), user.provider());
 			}
 			session.invalidate();
@@ -193,7 +199,7 @@ public class AuthController {
 	@DeleteMapping("/account")
 	public ResponseEntity<Void> deleteAccount(HttpServletRequest request) {
 		StudyIngPrincipal user = getPrincipal(request);
-		if (user == null) throw new WorkspaceException("AUTH_REQUIRED", "GitLab 로그인이 필요합니다.", 401);
+		if (user == null) throw new WorkspaceException("AUTH_REQUIRED", "Study-ing 로그인이 필요합니다.", 401);
 		String accessToken = (user.userId().startsWith("legacy:")
 			? accountService.findOAuthSession(user.gitLabUserId())
 			: accountService.findGitLabOAuthSessionByUserId(user.userId()))
@@ -260,10 +266,12 @@ public class AuthController {
 		return ResponseEntity.status(HttpStatus.FOUND).header(HttpHeaders.LOCATION, location).build();
 	}
 
-	private static Map<String, Object> profileResponse(OAuthAccountService.AccountProfile profile) {
+	private Map<String, Object> profileResponse(OAuthAccountService.AccountProfile profile) {
 		Map<String, Object> response = new LinkedHashMap<>();
 		response.put("id", profile.userId());
-		response.put("legacyGitLabUserId", profile.id());
+		response.put("legacyGitLabUserId", accountService
+			.findProviderExternalUserId(profile.userId(), com.studyworkspace.workspace.domain.RepositoryProvider.GITLAB)
+			.map(Long::parseLong).orElse(null));
 		response.put("username", profile.username());
 		response.put("name", profile.name());
 		response.put("avatarUrl", profile.avatarUrl());

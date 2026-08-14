@@ -24,7 +24,7 @@ export async function generateMetadata(): Promise<Metadata> {
       template: "%s · Study-ing",
     },
     description:
-      "GitLab 저장소를 원본으로 사용하는 팀 학습 일정·제출·기록 관리 Workspace",
+      "GitLab·GitHub 저장소를 원본으로 사용하는 팀 학습 일정·제출·기록 관리 Workspace",
     icons: {
       icon: "/study-ing-icon.png?v=20260813",
       shortcut: "/study-ing-icon.png?v=20260813",
@@ -32,14 +32,14 @@ export async function generateMetadata(): Promise<Metadata> {
     },
     openGraph: {
       title: "Study-ing",
-      description: "GitLab 기반 팀 학습 관리",
+      description: "GitLab·GitHub 기반 팀 학습 관리",
       type: "website",
       images: [{ url: socialImage, width: 1200, height: 630 }],
     },
     twitter: {
       card: "summary_large_image",
       title: "Study-ing",
-      description: "GitLab 기반 팀 학습 관리",
+      description: "GitLab·GitHub 기반 팀 학습 관리",
       images: [socialImage],
     },
   };

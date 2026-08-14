@@ -276,7 +276,7 @@ test.describe("Workspace release smoke", () => {
     expect(errors.filter((error) => !error.includes("404"))).toEqual([]);
   });
 
-	 test("GitHub linking capability가 꺼진 배포에서는 Settings 밖에 GitHub UI가 없다", async ({ page }) => {
+	test("GitHub linking capability가 꺼진 배포에서는 Settings 밖에 GitHub UI가 없다", async ({ page }) => {
 		const errors = captureUnexpectedErrors(page);
 		await openWorkspacePage(page, "/settings/accounts");
 		await expect(page.getByRole("heading", { name: "연결된 계정" })).toBeVisible();
@@ -288,9 +288,45 @@ test.describe("Workspace release smoke", () => {
 			contentType: "application/json",
 			body: JSON.stringify({ authenticated: false }),
 		}));
+		await page.route("**/api/v1/capabilities", (route) => route.fulfill({
+			status: 200,
+			contentType: "application/json",
+			body: JSON.stringify({
+				authProviders: ["GITLAB"],
+				accountLinkProviders: ["GITLAB"],
+				repositoryProviders: ["GITLAB"],
+				features: { workspaceDiscovery: true },
+			}),
+		}));
 		await openWorkspacePage(page, "/login");
 		await expect(page.getByRole("link", { name: /GitLab로 계속하기/ })).toBeVisible();
 		await expect(page.getByRole("link", { name: /GitHub/ })).toHaveCount(0);
+		expect(errors).toEqual([]);
+	});
+
+	test("GitHub auth capability가 켜지면 Login에만 Provider 버튼이 추가된다", async ({ page }) => {
+		const errors = captureUnexpectedErrors(page);
+		await page.route("**/api/v1/auth/me", (route) => route.fulfill({
+			status: 200,
+			contentType: "application/json",
+			body: JSON.stringify({ authenticated: false }),
+		}));
+		await page.route("**/api/v1/capabilities", (route) => route.fulfill({
+			status: 200,
+			contentType: "application/json",
+			body: JSON.stringify({
+				authProviders: ["GITLAB", "GITHUB"],
+				accountLinkProviders: ["GITLAB", "GITHUB"],
+				repositoryProviders: ["GITLAB", "GITHUB"],
+				features: { workspaceDiscovery: true },
+			}),
+		}));
+
+		await page.goto("/login?returnUrl=%2Flibrary");
+		await expect(page.getByRole("link", { name: /GitLab로 계속하기/ })).toBeVisible();
+		const github = page.getByRole("link", { name: /GitHub로 계속하기/ });
+		await expect(github).toBeVisible();
+		await expect(github).toHaveAttribute("href", /\/api\/v1\/auth\/github\/login\?returnUrl=%2Flibrary/);
 		expect(errors).toEqual([]);
 	});
 
@@ -373,5 +409,22 @@ test.describe("Workspace release smoke", () => {
       await forwarded;
       await context.close();
     }
+
+		const context = await browser.newContext();
+		const page = await context.newPage();
+		await page.route("**/api/v1/auth/csrf", (route) => route.fulfill({
+			status: 200,
+			contentType: "application/json",
+			body: JSON.stringify({ token: "github-oauth-routing-test", headerName: "X-CSRF-TOKEN" }),
+		}));
+		await page.route("**/api/v1/auth/github/complete", (route) => route.fulfill({
+			status: 200,
+			contentType: "application/json",
+			body: JSON.stringify({ returnUrl: "/records" }),
+		}));
+		const forwarded = page.waitForRequest((request) => new URL(request.url()).pathname === "/records");
+		await page.goto("/auth/callback?provider=GITHUB");
+		await forwarded;
+		await context.close();
   });
 });

@@ -5,7 +5,7 @@ Updated: 2026-08-13
 
 ## Scope
 
-This phase links a GitHub identity to an already authenticated Study-ing user. It does not support GitHub login, repository listing, Workspace connection, Discovery/Join, submission, review or sync.
+This flow links a GitHub identity to an already authenticated Study-ing user. GitHub login and repository operations now use separate capability-gated flows; account linking remains explicit and never performs automatic merging.
 
 ## Flow
 
@@ -56,6 +56,7 @@ Provider disconnect is intentionally not exposed in this phase. The schema suppo
 
 - Feature disabled or user authorization config incomplete: `accountLinkProviders = [GITLAB]`; GitHub UI is absent.
 - `GITHUB_ACCOUNT_LINKING_ENABLED=true` plus complete Client ID/Secret/redirect: `accountLinkProviders = [GITLAB, GITHUB]`.
-- Always in this phase: `authProviders = [GITLAB]`, `repositoryProviders = [GITLAB]`.
+- `GITHUB_LOGIN_ENABLED=true` independently adds GitHub to `authProviders`.
+- `GITHUB_REPOSITORY_ENABLED=true` plus validated App authentication independently adds GitHub to `repositoryProviders`.
 
-Thus a connected GitHub account cannot affect the current GitLab Workspace, Sidebar provider status or Login provider list.
+Connecting a GitHub account never changes the current Workspace repository Provider or Sidebar status. Login, account linking and repository capabilities remain independent.

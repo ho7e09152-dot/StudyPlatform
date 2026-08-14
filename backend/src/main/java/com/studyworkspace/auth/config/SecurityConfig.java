@@ -42,6 +42,8 @@ public class SecurityConfig {
 			.authorizeHttpRequests(authorize -> authorize
 				.requestMatchers(
 					"/api/v1/auth/gitlab/**",
+					"/api/v1/auth/github/**",
+					"/api/v1/provider-accounts/github/callback",
 					"/api/v1/auth/csrf",
 					"/api/v1/capabilities",
 					"/actuator/health/**",
@@ -55,7 +57,7 @@ public class SecurityConfig {
 					response.setCharacterEncoding(StandardCharsets.UTF_8.name());
 					response.setContentType(MediaType.APPLICATION_JSON_VALUE);
 					objectMapper.writeValue(response.getOutputStream(), ApiErrorResponse.of(
-						"AUTH_REQUIRED", "GitLab 로그인이 필요합니다."
+						"AUTH_REQUIRED", "Study-ing 로그인이 필요합니다."
 					));
 				})
 				.accessDeniedHandler((request, response, exception) -> {
