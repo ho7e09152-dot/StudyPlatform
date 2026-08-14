@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { getPageTransitionPath } from "../lib/motion/pageTransition.ts";
+
+test("settings menu routes keep the outer page transition stable", () => {
+  assert.equal(getPageTransitionPath("/settings"), "/settings");
+  assert.equal(getPageTransitionPath("/settings/general"), "/settings");
+  assert.equal(getPageTransitionPath("/settings/study-rules"), "/settings");
+  assert.equal(getPageTransitionPath("/settings/data/migrate"), "/settings/data/migrate");
+  assert.equal(getPageTransitionPath("/schedule"), "/schedule");
+});
 
 test("authenticated UI uses shared motion tokens and reduced-motion foundation", async () => {
   const css = await readFile(new URL("../app/design-system.css", import.meta.url), "utf8");
@@ -28,4 +37,10 @@ test("shared overlays retain an exit state before unmount", async () => {
   }
   assert.match(hook, /prefers-reduced-motion: reduce/);
   assert.match(hook, /setTimeout/);
+});
+
+test("settings applies content motion only to the changing section", async () => {
+  const source = await readFile(new URL("../components/settings/SettingsWorkspace.tsx", import.meta.url), "utf8");
+  assert.match(source, /<main key=\{section\} className="settings-content motion-content-swap"/);
+  assert.doesNotMatch(source, /settings-shell motion-content-swap/);
 });

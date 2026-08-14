@@ -416,7 +416,7 @@ export function SettingsWorkspace({ section = "general" }: { section?: SettingsS
       </header>
       <div className="settings-shell">
         <SettingsNavigation section={section} isOwner={isOwner} />
-        <main className="settings-content" aria-labelledby="settings-content-title">
+        <main key={section} className="settings-content motion-content-swap" aria-labelledby="settings-content-title">
           <header className="settings-content-header">
             <p>{currentSectionLabel(section)}</p>
             <h2 id="settings-content-title">{copy.title}</h2>
