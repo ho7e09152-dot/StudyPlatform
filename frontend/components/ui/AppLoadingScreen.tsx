@@ -3,6 +3,7 @@ import { LoaderCircle } from "lucide-react";
 
 export function AppLoadingScreen({ phase }: { phase: "auth" | "workspace" | "demo" }) {
   const workspacePhase = phase === "workspace";
+  const demoPhase = phase === "demo";
   const statusMessage = phase === "demo"
     ? "데모 페이지를 준비하고 있어요"
     : workspacePhase
@@ -10,7 +11,12 @@ export function AppLoadingScreen({ phase }: { phase: "auth" | "workspace" | "dem
       : "로그인하고 있어요";
 
   return (
-    <main className="oauth-checking-page" role="status" aria-live="polite" aria-busy="true">
+    <main
+      className={`oauth-checking-page${demoPhase ? " oauth-checking-page--demo" : ""}`}
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
+    >
       <section className="oauth-checking-surface">
         <div className="oauth-checking-brand">
           <Image

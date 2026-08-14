@@ -117,12 +117,19 @@ test.describe("Workspace release smoke", () => {
 
   test("demo entry reuses the branded loading screen for at least 2.5 seconds", async ({ page }) => {
     const errors = captureUnexpectedErrors(page);
+    await page.emulateMedia({ colorScheme: "dark" });
+    await page.addInitScript(() => {
+      window.localStorage.setItem("study-workspace-theme", JSON.stringify({ themeMode: "DARK", accentColor: "PURPLE" }));
+    });
     await page.goto("/demo?returnTo=%2Fschedule");
-    await expect(page.getByRole("status")).toContainText("데모 페이지를 준비하고 있어요");
+    const loadingStatus = page.getByRole("status");
+    await expect(loadingStatus).toContainText("데모 페이지를 준비하고 있어요");
     await expect(page.getByText("잠시만 기다려주세요.")).toBeVisible();
+    await expect(loadingStatus).toHaveCSS("background-color", "rgb(255, 255, 255)");
     await page.waitForTimeout(2_000);
     await expect(page).toHaveURL(/\/demo\?/);
     await expect(page).toHaveURL(/\/schedule$/, { timeout: 2_000 });
+    await expect(page.locator(".app-frame")).toHaveAttribute("data-theme", "light");
     expect(errors).toEqual([]);
   });
 

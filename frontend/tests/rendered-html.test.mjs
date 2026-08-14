@@ -101,6 +101,7 @@ test("demo entry is a dedicated transient route", async () => {
   assert.match(html, /데모 페이지를 준비하고 있어요/);
   assert.match(html, /잠시만 기다려주세요/);
   assert.match(html, /oauth-checking-page/);
+  assert.match(html, /oauth-checking-page--demo/);
   assert.match(html, /aria-live="polite"/);
   assert.doesNotMatch(html, /auth-transition/);
 });
