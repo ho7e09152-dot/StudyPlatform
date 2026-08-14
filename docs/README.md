@@ -25,6 +25,8 @@ docs/
 │   └── errors.md
 ├── design/
 │   └── design-system.md
+├── collaboration/
+│   └── git-workflow.md
 ├── operations/
 │   ├── ci.md
 │   ├── staging-e2e.md
@@ -49,6 +51,10 @@ docs/
 | [GitHub App configuration](architecture/providers/github-app-configuration.md) | user authorization, App JWT, PEM과 capability 설정 |
 | [GitHub Repository Adapter](architecture/providers/github-repository-adapter.md) | App 설치, 저장소 권한, read/write와 rollout 경계 |
 | [Multi-provider migration](architecture/providers/migration.md) | V11 migration과 운영 검증 |
+
+## 협업
+
+- [Git 협업 가이드](collaboration/git-workflow.md)는 브랜치 전략, commit 규칙과 AI 에이전트 병행 작업 시 지키는 절차를 다룹니다.
 
 ## 개발 계약
 
