@@ -50,7 +50,7 @@ export function LoginPage() {
     <main className="auth-entry-page">
       <nav className="auth-entry-topbar" aria-label="로그인 보조 탐색">
         <Link href="/">
-          <ArrowLeft size={16} aria-hidden="true" /> 홈
+          <ArrowLeft size={16} aria-hidden="true" /> 홈으로
         </Link>
       </nav>
 
@@ -82,7 +82,7 @@ export function LoginPage() {
         <section className="auth-entry-panel" aria-labelledby="login-title">
           <header className="auth-entry-panel__header">
             <h2 id="login-title">Study-ing 시작하기</h2>
-            <p>사용할 계정으로 Study-ing을 시작하세요.</p>
+            <p>계정을 선택해 Study-ing을 시작하세요.</p>
           </header>
 
           {notice ? <AuthNotice notice={notice} /> : null}

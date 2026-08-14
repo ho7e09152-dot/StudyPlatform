@@ -337,8 +337,24 @@ test.describe("Workspace release smoke", () => {
 		await expect(page.locator(".auth-entry-provider-mark")).toHaveCount(0);
 		await expect(page.getByText("안전한 OAuth 로그인")).toHaveCount(0);
 		await expect(page.getByText("개인 액세스 토큰을 직접 입력할 필요가 없습니다.")).toHaveCount(0);
+		const gitlab = page.getByRole("link", { name: /GitLab로 계속하기/ });
+		const githubBox = await github.boundingBox();
+		const gitlabBox = await gitlab.boundingBox();
+		expect(githubBox?.height).toBe(gitlabBox?.height);
+		expect(githubBox?.width).toBe(gitlabBox?.width);
+
 		const githubBackground = await github.evaluate((element) => getComputedStyle(element).backgroundColor);
+		await github.hover();
+		const githubHoverBackground = await github.evaluate((element) => getComputedStyle(element).backgroundColor);
 		expect(githubBackground).not.toBe("rgb(102, 83, 199)");
+		expect(githubHoverBackground).not.toBe(githubBackground);
+		await github.focus();
+		expect(await github.evaluate((element) => getComputedStyle(element).outlineWidth)).toBe("3px");
+
+		const topbarBox = await page.locator(".auth-entry-topbar").boundingBox();
+		const cardBox = await page.locator(".auth-entry-layout").boundingBox();
+		expect(topbarBox?.x).toBe(cardBox?.x);
+		expect((cardBox?.y ?? 0) - ((topbarBox?.y ?? 0) + (topbarBox?.height ?? 0))).toBeLessThanOrEqual(20);
 		expect(errors).toEqual([]);
 	});
 
