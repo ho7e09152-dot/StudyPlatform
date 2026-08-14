@@ -6,6 +6,8 @@
 
 ## 브랜치와 Commit
 
+> 2인 협업과 AI 에이전트 병행 작업의 실전 절차(동시 작업 충돌 예방, 커밋 전 체크리스트 등)는 [Git 협업 가이드](docs/collaboration/git-workflow.md)를 참고합니다.
+
 ```bash
 git switch master
 git pull origin master
