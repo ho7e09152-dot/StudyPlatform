@@ -108,10 +108,22 @@ test.describe("Workspace release smoke", () => {
     const demoPage = await context.newPage();
     await demoPage.goto("/");
     await demoPage.getByRole("link", { name: "데모 둘러보기" }).first().click();
+    await expect(demoPage.getByText("데모 페이지를 준비하고 있어요")).toBeVisible();
     await expect(demoPage).toHaveURL(/\/today$/);
     await expect(demoPage.getByRole("heading", { name: "오늘 함께 공부하기" })).toBeVisible();
     await expect(demoPage.getByText("저녁 스터디").first()).toBeVisible();
     await context.close();
+  });
+
+  test("demo entry reuses the branded loading screen for at least 2.5 seconds", async ({ page }) => {
+    const errors = captureUnexpectedErrors(page);
+    await page.goto("/demo?returnTo=%2Fschedule");
+    await expect(page.getByRole("status")).toContainText("데모 페이지를 준비하고 있어요");
+    await expect(page.getByText("잠시만 기다려주세요.")).toBeVisible();
+    await page.waitForTimeout(2_000);
+    await expect(page).toHaveURL(/\/demo\?/);
+    await expect(page).toHaveURL(/\/schedule$/, { timeout: 2_000 });
+    expect(errors).toEqual([]);
   });
 
   test("오늘 페이지에서 활동함과 공통 제출 흐름이 이어진다", async ({ page }) => {
