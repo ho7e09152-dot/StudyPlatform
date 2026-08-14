@@ -383,6 +383,46 @@ test.describe("Workspace release smoke", () => {
 		expect(errors).toEqual([]);
 	});
 
+	test("연결된 계정 Provider 목록은 상위 상태가 갱신되어도 다시 로딩되지 않는다", async ({ page }) => {
+		const errors = captureUnexpectedErrors(page);
+		await mockAuthenticatedWorkspace(page);
+		await page.unroute("**/api/v1/capabilities");
+		let capabilityRequests = 0;
+		let releaseCapabilities = () => {};
+		const capabilityGate = new Promise<void>((resolve) => {
+			releaseCapabilities = resolve;
+		});
+		await page.route("**/api/v1/capabilities", async (route) => {
+			capabilityRequests += 1;
+			await capabilityGate;
+			await route.fulfill({
+				status: 200,
+				contentType: "application/json",
+				body: JSON.stringify({
+					authProviders: ["GITLAB", "GITHUB"],
+					accountLinkProviders: ["GITLAB", "GITHUB"],
+					repositoryProviders: ["GITLAB"],
+					features: { workspaceDiscovery: true },
+				}),
+			});
+		});
+
+		await page.goto("/settings/accounts");
+		const accountsSection = page.locator(".settings-content .settings-section-block");
+		await expect(accountsSection).toHaveAttribute("aria-busy", "true");
+		await expect(page.getByText("연결된 계정을 확인하고 있어요.")).toBeVisible();
+		await expect(page.getByText("GitHub 계정", { exact: true })).toHaveCount(0);
+
+		releaseCapabilities();
+		await expect(accountsSection).toHaveAttribute("aria-busy", "false");
+		await expect(page.getByText("GitLab 계정", { exact: true })).toBeVisible();
+		await expect(page.getByText("GitHub 계정", { exact: true })).toBeVisible();
+		await page.waitForTimeout(900);
+		await expect(page.getByText("GitHub 계정", { exact: true })).toBeVisible();
+		expect(capabilityRequests).toBe(1);
+		expect(errors).toEqual([]);
+	});
+
 	test("GitHub auth capability가 켜지면 Login에만 Provider 버튼이 추가된다", async ({ page }) => {
 		const errors = captureUnexpectedErrors(page);
 		await page.route("**/api/v1/auth/me", (route) => route.fulfill({
