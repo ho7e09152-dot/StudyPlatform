@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 import java.time.Duration;
@@ -84,16 +85,41 @@ class GitHubLoginControllerTests {
 			"user-id", "provider-id", RepositoryProvider.GITHUB, "42", "octo", "Octo", null, null
 		);
 		when(githubOAuth.exchangeAndLoadIdentity("code", "verifier")).thenReturn(proof);
-		when(accounts.authenticate(proof.identity(), proof.credential())).thenReturn(principal);
+		when(accounts.resolveProviderLogin(proof.identity(), proof.credential()))
+			.thenReturn(OAuthAccountService.LoginResult.authenticated(principal));
 
 		assertThat(controller.complete(request)).containsEntry("returnUrl", "/library");
 		MockHttpSession session = (MockHttpSession) request.getSession(false);
 		assertThat(session.getAttribute(AuthSessionAttributes.STUDY_ING_USER)).isEqualTo(principal);
 		assertThat(session.getAttribute(AuthSessionAttributes.GITHUB_LOGIN_PENDING_CODE)).isNull();
-		verify(accounts).authenticate(proof.identity(), proof.credential());
+		verify(accounts).resolveProviderLogin(proof.identity(), proof.credential());
 		verify(sessions).register(session, "user-id");
 		assertThatThrownBy(() -> controller.complete(request))
 			.isInstanceOf(WorkspaceException.class).extracting("code").isEqualTo("GITHUB_OAUTH_STATE_INVALID");
+	}
+
+	@Test
+	void firstGitHubLoginStoresPendingRegistrationWithoutCreatingAuthenticatedAccountSession() {
+		MockHttpServletRequest request = pendingRequest();
+		GitHubAccountLinkProof proof = new GitHubAccountLinkProof(
+			new ProviderIdentity(RepositoryProvider.GITHUB, "43", "new-octo", "New Octo", null, null),
+			new ProviderOAuthCredential("token", null, null, "")
+		);
+		OAuthAccountService.PendingRegistration pending = new OAuthAccountService.PendingRegistration(
+			RepositoryProvider.GITHUB, "43", "new-octo", "New Octo", null, null,
+			"encrypted-token", null, null, "", Instant.now()
+		);
+		when(githubOAuth.exchangeAndLoadIdentity("code", "verifier")).thenReturn(proof);
+		when(accounts.resolveProviderLogin(proof.identity(), proof.credential()))
+			.thenReturn(OAuthAccountService.LoginResult.pending(pending));
+
+		controller.complete(request);
+
+		MockHttpSession session = (MockHttpSession) request.getSession(false);
+		assertThat(session.getAttribute(AuthSessionAttributes.STUDY_ING_USER)).isNull();
+		assertThat(session.getAttribute(AuthSessionAttributes.PENDING_REGISTRATION)).isEqualTo(pending);
+		verify(sessions).clear(session);
+		verify(sessions, never()).register(session, "user-id");
 	}
 
 	private static MockHttpServletRequest pendingRequest() {

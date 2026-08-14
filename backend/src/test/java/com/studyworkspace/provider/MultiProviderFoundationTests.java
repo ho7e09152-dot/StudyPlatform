@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
+import static com.studyworkspace.auth.support.OAuthTestAccounts.completeGitLabRegistration;
 
 import java.time.Instant;
 
@@ -32,8 +33,8 @@ class MultiProviderFoundationTests {
 
 	@Test
 	void repeatedGitLabLoginResolvesTheSameStudyIngUserAndProviderAccount() {
-		var first = accounts.upsert(oauth(8080L, "first-token", "first-name"));
-		var second = accounts.upsert(oauth(8080L, "rotated-token", "changed-name"));
+		var first = completeGitLabRegistration(accounts, oauth(8080L, "first-token", "first-name"));
+		var second = accounts.resolveGitLabLogin(oauth(8080L, "rotated-token", "changed-name")).principal();
 		entityManager.flush();
 
 		assertThat(second.userId()).isEqualTo(first.userId());

@@ -19,6 +19,10 @@ public class AccountSessionService {
 		session.setAttribute(FindByIndexNameSessionRepository.PRINCIPAL_NAME_INDEX_NAME, principal(userId));
 	}
 
+	public void clear(HttpSession session) {
+		session.removeAttribute(FindByIndexNameSessionRepository.PRINCIPAL_NAME_INDEX_NAME);
+	}
+
 	public void deleteAll(String userId) {
 		Map<String, ? extends Session> sessions = repository.findByPrincipalName(principal(userId));
 		sessions.keySet().forEach(repository::deleteById);

@@ -28,7 +28,7 @@ public class GitLabOAuthTokenProvider {
 		GitLabOAuthSession oauth = accountService.findGitLabOAuthSessionByUserId(user.userId())
 			.orElseThrow(() -> new WorkspaceException("GITLAB_RECONNECT_REQUIRED", "GitLab 연결을 다시 승인해 주세요.", 401));
 		if (oauth.expiresWithinSeconds(60)) {
-			accountService.upsert(oauthService.refresh(oauth));
+			accountService.refreshGitLabCredential(oauthService.refresh(oauth));
 			oauth = accountService.findGitLabOAuthSessionByUserId(user.userId()).orElse(oauth);
 			session.setAttribute(AuthSessionAttributes.STUDY_ING_USER, accountService.requirePrincipalByGitLabUserId(oauth.user().id()));
 		}

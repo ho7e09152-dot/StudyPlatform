@@ -2,7 +2,7 @@ import { apiGet, apiRequest, resetCsrfToken } from "@/lib/api/client/http";
 import type { ProviderId } from "@/lib/providers/provider-descriptors";
 
 export interface StudyIngUser {
-  id: string;
+  id: string | null;
   legacyGitLabUserId: number | null;
   username: string;
   name: string;
@@ -28,6 +28,7 @@ export interface AuthSession {
   authenticated: boolean;
   mode?: "oauth" | "gitlab-oauth";
   identityProvider?: ProviderId;
+  accountCreated?: boolean;
   user?: StudyIngUser;
 }
 

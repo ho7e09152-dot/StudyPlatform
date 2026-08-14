@@ -3,6 +3,8 @@ package com.studyworkspace.auth.service;
 import static com.studyworkspace.policy.LegalDocumentPolicy.PRIVACY_VERSION;
 import static com.studyworkspace.policy.LegalDocumentPolicy.TERMS_VERSION;
 
+import java.io.Serial;
+import java.io.Serializable;
 import java.time.Instant;
 import java.util.Comparator;
 import java.util.Optional;
@@ -89,6 +91,49 @@ public class OAuthAccountService {
 
 	public record UpdatePreferencesRequest(String themeMode, String accentColor) { }
 
+	/**
+	 * Short-lived signup proof stored in Spring Session until the user accepts the policies.
+	 * Credentials are encrypted before this object leaves the service boundary.
+	 */
+	public record PendingRegistration(
+		RepositoryProvider provider,
+		String externalUserId,
+		String username,
+		String displayName,
+		String avatarUrl,
+		String webUrl,
+		String accessTokenCiphertext,
+		String refreshTokenCiphertext,
+		Instant expiresAt,
+		String scope,
+		Instant createdAt
+	) implements Serializable {
+		@Serial private static final long serialVersionUID = 1L;
+
+		@Override
+		public String toString() {
+			return "PendingRegistration[provider=%s, externalUserId=%s, username=%s, credentials=<redacted>, createdAt=%s]"
+				.formatted(provider, externalUserId, username, createdAt);
+		}
+	}
+
+	public record LoginResult(StudyIngPrincipal principal, PendingRegistration pendingRegistration) {
+		public static LoginResult authenticated(StudyIngPrincipal principal) {
+			return new LoginResult(principal, null);
+		}
+
+		public static LoginResult pending(PendingRegistration pendingRegistration) {
+			return new LoginResult(null, pendingRegistration);
+		}
+
+		public boolean requiresRegistration() {
+			return pendingRegistration != null;
+		}
+	}
+
+	public record CompletedRegistration(StudyIngPrincipal principal, AccountProfile profile) { }
+	private record ValidatedProfile(String displayName, String repositoryFileName, String timezone) { }
+
 	private final UserAccountRepository userRepository;
 	private final ProviderAccountRepository providerAccountRepository;
 	private final OAuthCredentialRepository credentialRepository;
@@ -107,39 +152,44 @@ public class OAuthAccountService {
 	}
 
 	@Transactional
-	public StudyIngPrincipal upsert(GitLabOAuthSession oauth) {
+	public LoginResult resolveGitLabLogin(GitLabOAuthSession oauth) {
 		Instant now = Instant.now();
 		ProviderAccountEntity providerAccount = providerAccountRepository
 			.findByProviderAndExternalUserId(RepositoryProvider.GITLAB.name(), Long.toString(oauth.user().id()))
 			.orElse(null);
-		UserAccountEntity user;
 		if (providerAccount == null) {
-			user = userRepository.findByGitLabUserId(oauth.user().id())
-				.orElseGet(() -> UserAccountEntity.create(oauth.user(), now));
-			user.updateFrom(oauth.user(), now);
-			user = userRepository.save(user);
+			UserAccountEntity legacyUser = userRepository.findByGitLabUserId(oauth.user().id()).orElse(null);
+			if (legacyUser == null) {
+				return LoginResult.pending(pendingRegistration(
+					new ProviderIdentity(RepositoryProvider.GITLAB, Long.toString(oauth.user().id()), oauth.user().username(),
+						oauth.user().name(), oauth.user().avatarUrl(), oauth.user().webUrl()),
+					new ProviderOAuthCredential(oauth.accessToken(), oauth.refreshToken(), oauth.expiresAt(), oauth.scope()), now
+				));
+			}
+			legacyUser.updateFrom(oauth.user(), now);
+			UserAccountEntity user = userRepository.save(legacyUser);
 			providerAccount = ProviderAccountEntity.createGitLab(user.id(), oauth.user(), now);
-		} else {
-			user = userRepository.findById(providerAccount.userId())
-				.orElseThrow(() -> new WorkspaceException("ACCOUNT_NOT_FOUND", "사용자 계정을 찾을 수 없습니다.", 404));
-			user.updateFrom(oauth.user(), now);
-			userRepository.save(user);
-			providerAccount.updateGitLab(oauth.user(), now);
+			providerAccount = providerAccountRepository.save(providerAccount);
+			rotateCredential(providerAccount, user.id(), oauth.accessToken(), oauth.refreshToken(), oauth.expiresAt(), oauth.scope(), now);
+			return LoginResult.authenticated(principal(user, providerAccount));
 		}
+		UserAccountEntity user = userRepository.findById(providerAccount.userId())
+			.orElseThrow(() -> new WorkspaceException("ACCOUNT_NOT_FOUND", "사용자 계정을 찾을 수 없습니다.", 404));
+		user.updateFrom(oauth.user(), now);
+		userRepository.save(user);
+		providerAccount.updateGitLab(oauth.user(), now);
 		providerAccount = providerAccountRepository.save(providerAccount);
+		rotateCredential(providerAccount, user.id(), oauth.accessToken(), oauth.refreshToken(), oauth.expiresAt(), oauth.scope(), now);
+		return LoginResult.authenticated(principal(user, providerAccount));
+	}
 
-		String providerAccountId = providerAccount.id();
-		OAuthCredentialEntity credential = credentialRepository.findById(providerAccountId)
-			.orElseGet(() -> OAuthCredentialEntity.create(providerAccountId));
-		credential.rotate(
-			tokenCipher.encrypt(oauth.accessToken()),
-			tokenCipher.encrypt(oauth.refreshToken()),
-			oauth.expiresAt(),
-			oauth.scope(),
-			now
-		);
-		credentialRepository.save(credential);
-		return principal(user, providerAccount);
+	@Transactional
+	public StudyIngPrincipal refreshGitLabCredential(GitLabOAuthSession oauth) {
+		LoginResult result = resolveGitLabLogin(oauth);
+		if (result.requiresRegistration()) {
+			throw new WorkspaceException("ACCOUNT_NOT_FOUND", "기존 GitLab 계정을 찾을 수 없습니다.", 404);
+		}
+		return result.principal();
 	}
 
 	@Transactional(readOnly = true)
@@ -237,9 +287,9 @@ public class OAuthAccountService {
 		return profile(userRepository.save(user), account);
 	}
 
-	/** Resolves a verified provider identity to one stable Study-ing account without email/username merging. */
+	/** Resolves a verified provider identity without persisting a new user before explicit signup consent. */
 	@Transactional
-	public StudyIngPrincipal authenticate(ProviderIdentity identity, ProviderOAuthCredential oauthCredential) {
+	public LoginResult resolveProviderLogin(ProviderIdentity identity, ProviderOAuthCredential oauthCredential) {
 		if (identity == null || identity.provider() == null || !StringUtils.hasText(identity.externalUserId())
 			|| oauthCredential == null || !StringUtils.hasText(oauthCredential.accessToken())) {
 			throw new WorkspaceException("PROVIDER_AUTH_INVALID", "Provider 로그인 정보를 확인할 수 없습니다.", 400);
@@ -247,13 +297,40 @@ public class OAuthAccountService {
 		Instant now = Instant.now();
 		ProviderAccountEntity account = providerAccountRepository
 			.findByProviderAndExternalUserId(identity.provider().name(), identity.externalUserId()).orElse(null);
+		if (account == null) {
+			return LoginResult.pending(pendingRegistration(identity, oauthCredential, now));
+		}
+		UserAccountEntity user = userRepository.findById(account.userId())
+			.orElseThrow(() -> new WorkspaceException("ACCOUNT_NOT_FOUND", "사용자 계정을 찾을 수 없습니다.", 404));
+		account.updateIdentity(identity.provider(), identity.externalUserId(), identity.username(),
+			identity.displayName(), identity.avatarUrl(), identity.webUrl(), now);
+		account = providerAccountRepository.save(account);
+		rotateCredential(account, user.id(), oauthCredential.accessToken(), oauthCredential.refreshToken(),
+			oauthCredential.expiresAt(), oauthCredential.scope(), now);
+		return LoginResult.authenticated(principal(user, account));
+	}
+
+	@Transactional
+	public CompletedRegistration completeRegistration(PendingRegistration pending, UpdateProfileRequest request) {
+		if (pending == null) throw new WorkspaceException("REGISTRATION_SESSION_REQUIRED", "가입 정보가 만료되었습니다. 다시 로그인해 주세요.", 401);
+		ValidatedProfile validated = validateInitialProfile(request);
+		Instant now = Instant.now();
+		ProviderAccountEntity account = providerAccountRepository
+			.findByProviderAndExternalUserId(pending.provider().name(), pending.externalUserId()).orElse(null);
 		UserAccountEntity user;
 		if (account == null) {
-			user = userRepository.save(UserAccountEntity.createFromProvider(
-				identity.username(), identity.displayName(), now
-			));
-			account = ProviderAccountEntity.create(user.id(), identity.provider(), identity.externalUserId(),
-				identity.username(), identity.displayName(), identity.avatarUrl(), identity.webUrl(), now);
+			user = pending.provider() == RepositoryProvider.GITLAB
+				? UserAccountEntity.create(new com.studyworkspace.gitlab.dto.GitLabUser(
+					Long.parseLong(pending.externalUserId()), pending.username(), pending.displayName(), pending.avatarUrl(), pending.webUrl()), now)
+				: UserAccountEntity.createFromProvider(pending.username(), pending.displayName(), now);
+			user.agreeToPolicies(TERMS_VERSION, PRIVACY_VERSION, now);
+			user.completeProfile(validated.displayName(), validated.repositoryFileName(), validated.timezone(), now);
+			user = userRepository.save(user);
+			account = pending.provider() == RepositoryProvider.GITLAB
+				? ProviderAccountEntity.createGitLab(user.id(), new com.studyworkspace.gitlab.dto.GitLabUser(
+					Long.parseLong(pending.externalUserId()), pending.username(), pending.displayName(), pending.avatarUrl(), pending.webUrl()), now)
+				: ProviderAccountEntity.create(user.id(), pending.provider(), pending.externalUserId(), pending.username(),
+					pending.displayName(), pending.avatarUrl(), pending.webUrl(), now);
 			try {
 				account = providerAccountRepository.saveAndFlush(account);
 			} catch (DataIntegrityViolationException exception) {
@@ -262,20 +339,15 @@ public class OAuthAccountService {
 		} else {
 			user = userRepository.findById(account.userId())
 				.orElseThrow(() -> new WorkspaceException("ACCOUNT_NOT_FOUND", "사용자 계정을 찾을 수 없습니다.", 404));
-			account.updateIdentity(identity.provider(), identity.externalUserId(), identity.username(),
-				identity.displayName(), identity.avatarUrl(), identity.webUrl(), now);
-			account = providerAccountRepository.save(account);
+			if (!user.profileCompleted()) {
+				user.agreeToPolicies(TERMS_VERSION, PRIVACY_VERSION, now);
+				user.completeProfile(validated.displayName(), validated.repositoryFileName(), validated.timezone(), now);
+				user = userRepository.save(user);
+			}
 		}
-
-		String providerAccountId = account.id();
-		String authenticatedUserId = user.id();
-		OAuthCredentialEntity credential = credentialRepository.findById(providerAccountId)
-			.orElseGet(() -> OAuthCredentialEntity.create(providerAccountId, authenticatedUserId));
-		credential.rotate(tokenCipher.encrypt(oauthCredential.accessToken()),
-			StringUtils.hasText(oauthCredential.refreshToken()) ? tokenCipher.encrypt(oauthCredential.refreshToken()) : null,
-			oauthCredential.expiresAt(), oauthCredential.scope(), now);
-		credentialRepository.save(credential);
-		return principal(user, account);
+		persistEncryptedCredential(account, user.id(), pending.accessTokenCiphertext(), pending.refreshTokenCiphertext(),
+			pending.expiresAt(), pending.scope(), now);
+		return new CompletedRegistration(principal(user, account), profile(user, account));
 	}
 
 	@Transactional
@@ -391,6 +463,64 @@ public class OAuthAccountService {
 		);
 		credentialRepository.save(credential);
 		return new ProviderCredential(account.id(), accessToken, refreshToken, expiresAt, scope);
+	}
+
+	private PendingRegistration pendingRegistration(
+		ProviderIdentity identity,
+		ProviderOAuthCredential credential,
+		Instant now
+	) {
+		return new PendingRegistration(
+			identity.provider(), identity.externalUserId(), identity.username(), identity.displayName(), identity.avatarUrl(), identity.webUrl(),
+			tokenCipher.encrypt(credential.accessToken()),
+			StringUtils.hasText(credential.refreshToken()) ? tokenCipher.encrypt(credential.refreshToken()) : null,
+			credential.expiresAt(), credential.scope(), now
+		);
+	}
+
+	private void rotateCredential(
+		ProviderAccountEntity account,
+		String userId,
+		String accessToken,
+		String refreshToken,
+		Instant expiresAt,
+		String scope,
+		Instant now
+	) {
+		persistEncryptedCredential(account, userId, tokenCipher.encrypt(accessToken),
+			StringUtils.hasText(refreshToken) ? tokenCipher.encrypt(refreshToken) : null, expiresAt, scope, now);
+	}
+
+	private void persistEncryptedCredential(
+		ProviderAccountEntity account,
+		String userId,
+		String accessTokenCiphertext,
+		String refreshTokenCiphertext,
+		Instant expiresAt,
+		String scope,
+		Instant now
+	) {
+		OAuthCredentialEntity credential = credentialRepository.findById(account.id())
+			.orElseGet(() -> OAuthCredentialEntity.create(account.id(), userId));
+		credential.rotate(accessTokenCiphertext, refreshTokenCiphertext, expiresAt, scope, now);
+		credentialRepository.save(credential);
+	}
+
+	private static ValidatedProfile validateInitialProfile(UpdateProfileRequest request) {
+		if (request == null) throw new WorkspaceException("INVALID_PROFILE", "프로필 정보가 필요합니다.", 400);
+		String displayName = normalizeDisplayName(request.displayName());
+		String repositoryFileName = normalizeRepositoryFileName(request.repositoryFileName(), displayName);
+		String timezone = normalizeTimezone(request.timezone());
+		if (!request.confirmMinimumAge()) {
+			throw new WorkspaceException("MINIMUM_AGE_CONFIRMATION_REQUIRED", "Study-ing은 만 14세 이상부터 이용할 수 있습니다.", 400);
+		}
+		if (!request.acceptTerms()) {
+			throw new WorkspaceException("TERMS_ACCEPTANCE_REQUIRED", "이용약관에 동의해 주세요.", 400);
+		}
+		if (!request.acceptPrivacy()) {
+			throw new WorkspaceException("PRIVACY_ACCEPTANCE_REQUIRED", "개인정보 처리 안내에 동의해 주세요.", 400);
+		}
+		return new ValidatedProfile(displayName, repositoryFileName, timezone);
 	}
 
 	private ProviderAccountEntity requireProviderAccount(String userId, RepositoryProvider provider) {

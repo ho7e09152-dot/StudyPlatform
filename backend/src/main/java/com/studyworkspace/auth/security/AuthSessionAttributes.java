@@ -2,6 +2,7 @@ package com.studyworkspace.auth.security;
 
 public final class AuthSessionAttributes {
 	public static final String STUDY_ING_USER = "studyIngUser";
+	public static final String PENDING_REGISTRATION = "pendingRegistration";
 
 	/** @deprecated sessions now store {@link StudyIngPrincipal}. */
 	@Deprecated
