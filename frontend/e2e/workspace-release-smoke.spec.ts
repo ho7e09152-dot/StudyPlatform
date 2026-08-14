@@ -394,6 +394,34 @@ test.describe("Workspace release smoke", () => {
 		expect(errors).toEqual([]);
 	});
 
+	test("첫 프로필 설정은 두 이름만 입력받고 시간대는 자동 적용한다", async ({ page }) => {
+		const errors = captureUnexpectedErrors(page);
+		await page.route("**/api/v1/auth/me", (route) => route.fulfill({
+			status: 200,
+			contentType: "application/json",
+			body: JSON.stringify({
+				authenticated: true,
+				identityProvider: "GITLAB",
+				user: {
+					id: "new-user",
+					username: "new-user",
+					name: "새 사용자",
+					profileCompleted: false,
+					repositoryFileName: null,
+					timezone: "Asia/Seoul",
+				},
+			}),
+		}));
+
+		await page.goto("/onboarding/profile?returnTo=%2Ftoday");
+		await expect(page.getByLabel("표시 이름", { exact: false })).toBeVisible();
+		await expect(page.getByLabel("학습 기록 이름", { exact: false })).toBeVisible();
+		await expect(page.locator("details")).toHaveCount(0);
+		await expect(page.getByText("고급 설정")).toHaveCount(0);
+		await expect(page.getByText("시간대", { exact: true })).toHaveCount(0);
+		expect(errors).toEqual([]);
+	});
+
 	test("모바일 연결된 계정 Row는 가로 overflow 없이 stack된다", async ({ page }) => {
 		const errors = captureUnexpectedErrors(page);
 		await page.setViewportSize({ width: 390, height: 844 });

@@ -51,6 +51,9 @@ test("login provider order prefers GitHub without inventing unavailable capabili
 
 test("profile onboarding requires age, Terms, and Privacy independently", async () => {
   const source = await readFile(new URL("../components/auth/ProfileSetupPage.tsx", import.meta.url), "utf8");
+  assert.match(source, /표시 이름/);
+  assert.match(source, /학습 기록 이름/);
+  assert.doesNotMatch(source, /<details|고급 설정|>시간대</);
   assert.match(source, /만 14세 이상입니다/);
   assert.match(source, /acceptTerms/);
   assert.match(source, /acceptPrivacy/);
