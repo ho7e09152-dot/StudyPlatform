@@ -13,12 +13,12 @@ import { safeAppReturnUrl } from "@/lib/auth/redirects";
 import { clearDemoSession, getDemoEntryUrl } from "@/lib/demo/session";
 import { getProviderDescriptor, orderLoginProviders, type ProviderId } from "@/lib/providers/provider-descriptors";
 
-export function LoginPage() {
+export function LoginPage({ initialAuthProviders = ["GITLAB"] }: { initialAuthProviders?: ProviderId[] }) {
   const searchParams = useSearchParams();
   const oauthError = searchParams.get("oauthError");
   const returnUrl = safeAppReturnUrl(searchParams.get("returnUrl"));
   const requestedProvider: ProviderId = searchParams.get("provider") === "GITHUB" ? "GITHUB" : "GITLAB";
-  const [authProviders, setAuthProviders] = useState<ProviderId[]>(["GITLAB"]);
+  const [authProviders, setAuthProviders] = useState<ProviderId[]>(initialAuthProviders);
   const notice = getLoginNoticeState(oauthError, requestedProvider);
   const currentLoginPath = `/login${searchParams.size ? `?${searchParams.toString()}` : ""}`;
   const policyReturnQuery = encodeURIComponent(currentLoginPath);
