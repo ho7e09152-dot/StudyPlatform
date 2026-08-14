@@ -12,6 +12,7 @@ import {
 import type { Workspace } from "@/lib/domain/types";
 import { APP_ROUTES } from "@/lib/routes";
 import { getProviderDescriptor } from "@/lib/providers/provider-descriptors";
+import { useAuth } from "@/components/providers/AuthProvider";
 
 export function DiscoverableWorkspaceSection({
   onJoin,
@@ -22,8 +23,9 @@ export function DiscoverableWorkspaceSection({
   onResolved?: (result: { count: number; error: boolean }) => void;
   hideWhenEmpty?: boolean;
 }) {
+  const { mode } = useAuth();
   const [items, setItems] = useState<DiscoverableWorkspace[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(mode !== "demo");
   const [error, setError] = useState("");
   const [reconnectRequired, setReconnectRequired] = useState(false);
   const [joining, setJoining] = useState<string | null>(null);
@@ -33,6 +35,12 @@ export function DiscoverableWorkspaceSection({
     setLoading(true);
     setError("");
     setReconnectRequired(false);
+    if (mode === "demo") {
+      setItems([]);
+      setLoading(false);
+      onResolved?.({ count: 0, error: false });
+      return;
+    }
     try {
       const result = await listDiscoverableWorkspaces(signal);
       setItems(result);
@@ -48,32 +56,23 @@ export function DiscoverableWorkspaceSection({
     } finally {
       if (!signal?.aborted) setLoading(false);
     }
-  }, [onResolved]);
+  }, [mode, onResolved]);
 
   useEffect(() => {
     const controller = new AbortController();
-		void listDiscoverableWorkspaces(controller.signal)
-			.then((result) => {
-				setItems(result);
-				onResolved?.({ count: result.length, error: false });
-			})
-			.catch((requestError) => {
-				if (controller.signal.aborted) return;
-				setReconnectRequired(requestError instanceof ApiError && [
-					"GITLAB_RECONNECT_REQUIRED",
-					"GITLAB_AUTHENTICATION_FAILED",
-				].includes(requestError.code));
-				setError(getUserFacingError(requestError, "참여 가능한 Workspace를 확인하지 못했어요."));
-				onResolved?.({ count: 0, error: true });
-			})
-			.finally(() => {
-				if (!controller.signal.aborted) setLoading(false);
-			});
-    return () => controller.abort();
-  }, [onResolved]);
+    const timer = window.setTimeout(() => void load(controller.signal), 0);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [load]);
 
   async function join(item: DiscoverableWorkspace) {
     if (joining) return;
+    if (mode === "demo") {
+      setAnnouncement("데모에서는 실제 Workspace에 참여하지 않습니다.");
+      return;
+    }
     setJoining(item.workspaceId);
     setAnnouncement(`${item.workspaceName} 참여를 처리하고 있습니다.`);
     setError("");

@@ -219,11 +219,11 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 			next,
 		]);
 		setCurrentWorkspaceId(next.id);
-		setBackendConnected(true);
+		setBackendConnected(!demoMode);
 		setLastSyncFailures([]);
 		setSyncing(false);
 		notify(message, next.name);
-	}, [notify]);
+	}, [demoMode, notify]);
 
 	const joinDiscoveredWorkspace = useCallback(async (workspaceId: string) => {
 		const result = await joinWorkspaceApi(workspaceId);
@@ -639,11 +639,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   }
 
   if (!selectedWorkspace || !currentUserId) {
-		return <WorkspaceEntryGate forceConnection={pathname === "/workspaces/new"} onWorkspaceReady={(created) => {
-			setWorkspaces((current) => [...current.filter((candidate) => candidate.id !== created.id), created]);
-			setCurrentWorkspaceId(created.id);
-			setBackendConnected(true);
-		}} />;
+		return <WorkspaceEntryGate
+			forceConnection={pathname === "/workspaces/new"}
+			onWorkspaceReady={(created) => activateWorkspace(created, "Workspace를 사용할 준비가 되었어요")}
+		/>;
   }
 
   return (

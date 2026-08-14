@@ -35,6 +35,12 @@ import { ProviderIcon } from "@/components/providers/ProviderIcon";
 import type { Workspace } from "@/lib/domain/types";
 import { APP_ROUTES } from "@/lib/routes";
 import { getUserFacingError } from "@/lib/api/errors";
+import { useAuth } from "@/components/providers/AuthProvider";
+import {
+  createDemoWorkspace,
+  getDemoRepositoryAnalysis,
+  listDemoRepositories,
+} from "@/lib/demo/data";
 
 type FlowState = "loading" | "ready" | "checking" | "saving";
 type PermissionState = "idle" | "checking" | "ready" | "denied";
@@ -50,7 +56,9 @@ export function WorkspaceConnectionFlow({
   existingWorkspaces?: Workspace[];
   onOpenWorkspace?: (workspace: Workspace) => void;
 }) {
-  const [repositories, setRepositories] = useState<Repository[]>([]);
+	const { mode } = useAuth();
+	const demoMode = mode === "demo";
+  const [repositories, setRepositories] = useState<Repository[]>(() => demoMode ? listDemoRepositories() : []);
 	const [provider, setProvider] = useState<ProviderId>("GITLAB");
 	const [repositoryProviders, setRepositoryProviders] = useState<ProviderId[]>(["GITLAB"]);
   const [discoverable, setDiscoverable] = useState<DiscoverableWorkspace[]>([]);
@@ -58,7 +66,7 @@ export function WorkspaceConnectionFlow({
   const [searched, setSearched] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [workspaceName, setWorkspaceName] = useState("");
-  const [state, setState] = useState<FlowState>("loading");
+  const [state, setState] = useState<FlowState>(demoMode ? "ready" : "loading");
   const [permission, setPermission] = useState<PermissionState>("idle");
   const [verifiedAccessLevel, setVerifiedAccessLevel] = useState<number | null>(null);
   const [analysis, setAnalysis] = useState<RepositoryImportAnalysis | null>(null);
@@ -84,6 +92,15 @@ export function WorkspaceConnectionFlow({
     setState("loading");
     setError("");
     setReconnectRequired(false);
+    if (demoMode) {
+      setRepositories(listDemoRepositories(query, provider));
+      setSelectedId(null);
+      setPermission("idle");
+      setAnalysis(null);
+      setSearched(Boolean(query.trim()));
+      setState("ready");
+      return;
+    }
     try {
 		const projects = await listRepositories(query, undefined, provider);
 		setRepositories(projects);
@@ -100,6 +117,9 @@ export function WorkspaceConnectionFlow({
   }
 
   useEffect(() => {
+	if (demoMode) {
+		return;
+	}
 	const controller = new AbortController();
 	void getProviderCapabilities(controller.signal).then((result) => {
 		const available = result.repositoryProviders?.length ? result.repositoryProviders : ["GITLAB"];
@@ -107,9 +127,12 @@ export function WorkspaceConnectionFlow({
 		if (!available.includes(provider)) setProvider(available[0]);
 	}).catch(() => undefined);
 	return () => controller.abort();
-  }, [provider]);
+	}, [demoMode, provider]);
 
   useEffect(() => {
+	if (demoMode) {
+		return;
+	}
     void listRepositories("", undefined, provider)
 		.then((projects) => setRepositories(projects))
       .catch((requestError) => {
@@ -117,15 +140,18 @@ export function WorkspaceConnectionFlow({
 		setError(getUserFacingError(requestError, "저장소를 불러오지 못했습니다."));
       })
       .finally(() => setState("ready"));
-  }, [provider]);
+  }, [demoMode, provider]);
 
 	useEffect(() => {
+		if (demoMode) {
+			return;
+		}
 		const controller = new AbortController();
 		void listDiscoverableWorkspaces(controller.signal)
 			.then(setDiscoverable)
 			.catch(() => undefined);
 		return () => controller.abort();
-	}, []);
+	}, [demoMode]);
 
   async function handleSearch(event: FormEvent) {
     event.preventDefault();
@@ -153,6 +179,12 @@ export function WorkspaceConnectionFlow({
       setPermission("denied");
       return;
     }
+	if (demoMode) {
+		setAnalysis(getDemoRepositoryAnalysis(repository));
+		setPermission("ready");
+		setState("ready");
+		return;
+	}
 
     setState("checking");
     try {
@@ -197,6 +229,10 @@ export function WorkspaceConnectionFlow({
     if (!selected || permission !== "ready" || !analysis || analysis.classification === "CONFLICTED" || !workspaceName.trim()) return;
     setState("saving");
     setError("");
+    if (demoMode) {
+      onCreated(createDemoWorkspace(selected, workspaceName.trim()));
+      return;
+    }
     try {
       const workspace = await createWorkspace({
         name: workspaceName.trim(),
@@ -243,8 +279,8 @@ export function WorkspaceConnectionFlow({
         <header className="workspace-connect__header">
 		  <div className="workspace-connect__provider"><ProviderIcon provider={provider} size={17} /> {providerDescriptor.repositoryLabel} 연결</div>
           <h1>{embedded ? "새 Workspace 연결" : "첫 Workspace를 연결해볼까요?"}</h1>
-		  <p>{providerDescriptor.displayName}에서 접근 가능한 저장소를 선택해 학습 공간으로 연결하세요.</p>
-		  <small>연결한 계정과 GitHub App 설치 범위 안에서 접근 가능한 저장소만 표시합니다.</small>
+		  <p>{demoMode ? "데모 저장소를 선택해 Workspace 연결 흐름을 체험하세요." : `${providerDescriptor.displayName}에서 접근 가능한 저장소를 선택해 학습 공간으로 연결하세요.`}</p>
+		  <small>{demoMode ? "실제 계정이나 저장소에는 접근하지 않으며, 이 화면의 정보는 모두 데모 데이터입니다." : "연결한 계정과 GitHub App 설치 범위 안에서 접근 가능한 저장소만 표시합니다."}</small>
         </header>
 
 		{repositoryProviders.length > 1 ? (

@@ -1,3 +1,5 @@
+import { isDemoSessionActive } from "../../demo/session.ts";
+
 const API_BASE_URL = (
   process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8080"
 ).replace(/\/+$/, "");
@@ -59,6 +61,13 @@ export async function apiRequest<T>(
 	path: string,
 	options: ApiRequestOptions = {},
 ): Promise<T> {
+	if (isDemoSessionActive()) {
+		throw new ApiError(
+			"DEMO_API_ACCESS_BLOCKED",
+			"데모 모드에서는 실제 계정 데이터에 접근하지 않습니다.",
+			403,
+		);
+	}
 	return apiRequestAttempt<T>(path, options, true);
 }
 

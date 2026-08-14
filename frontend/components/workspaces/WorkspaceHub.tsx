@@ -11,6 +11,7 @@ import { getWorkspaceRepositoryConnection, REPOSITORY_PROVIDER_LABEL } from "@/l
 import { APP_ROUTES } from "@/lib/routes";
 import { getUserFacingError } from "@/lib/api/errors";
 import { DiscoverableWorkspaceSection } from "@/components/workspaces/DiscoverableWorkspaceSection";
+import { useAuth } from "@/components/providers/AuthProvider";
 
 function remainingDays(expiresAt: string) {
   return Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86_400_000));
@@ -18,6 +19,7 @@ function remainingDays(expiresAt: string) {
 
 export function WorkspaceHub() {
   const router = useRouter();
+  const { mode } = useAuth();
   const { workspaces, workspace, currentUserId, switchWorkspace, joinDiscoveredWorkspace } = useWorkspace();
   const [deleted, setDeleted] = useState<DeletedWorkspace[]>([]);
   const [restoring, setRestoring] = useState<string | null>(null);
@@ -25,10 +27,13 @@ export function WorkspaceHub() {
   const currentGitLabUserId = workspace.members.find((member) => member.id === currentUserId)?.gitlabUserId;
 
   useEffect(() => {
+    if (mode === "demo") {
+      return;
+    }
     const controller = new AbortController();
     void listDeletedWorkspaces(controller.signal).then(setDeleted).catch(() => undefined);
     return () => controller.abort();
-  }, []);
+  }, [mode]);
 
   const restorable = useMemo(
     () => deleted.filter((item) => item.workspace.members.some((member) => member.gitlabUserId === currentGitLabUserId && member.role === "OWNER" && member.status === "ACTIVE")),

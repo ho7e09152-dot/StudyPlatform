@@ -10,11 +10,12 @@ export function isDemoSessionActive() {
 }
 
 export function startDemoSession() {
-  if (typeof window === "undefined") return;
+  if (typeof window === "undefined") return false;
   try {
     window.sessionStorage.setItem(DEMO_SESSION_KEY, "active");
+    return window.sessionStorage.getItem(DEMO_SESSION_KEY) === "active";
   } catch {
-    // A blocked sessionStorage still falls back to the regular auth flow.
+    return false;
   }
 }
 
