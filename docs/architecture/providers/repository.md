@@ -1,49 +1,34 @@
-# Repository Model
+# Repository 모델
 
 Status: GitLab and GitHub adapters implemented; GitHub rollout is capability-gated
 Updated: 2026-08-14
 
-## Model
+## 모델
 
-`Workspace -> RepositoryConnection` is stored in `repository_connections`.
+`Workspace -> RepositoryConnection`은 `repository_connections`에 저장한다. Identity field는 `provider`, opaque `external_repository_id`, `full_name`, `web_url`, `visibility`, `default_branch`다. DB unique 규칙은 `(provider, external_repository_id)`이므로 `GITLAB:123`과 `GITHUB:123`은 다르고 두 `GITLAB:123` 연결은 거부한다.
 
-Repository identity fields:
+API Workspace 응답은 정규화된 `repository` metadata와 capability(`canRead`, `canWrite`, `canManage`)를 포함한다. `gitlabProjectId`, `gitlabProjectPath`, `defaultBranch`는 GitLab migration 기간에 호환 field로 유지한다.
 
-- `provider`
-- opaque `external_repository_id`
-- `full_name`
-- `web_url`
-- `visibility`
-- `default_branch`
+## Credential 확인
 
-The database uniqueness rule is `(provider, external_repository_id)`. Therefore `GITLAB:123` and `GITHUB:123` are different identities while two `GITLAB:123` connections are rejected.
+`RepositoryCredentialResolver`는 작업하는 Study-ing user와 Workspace repository identity를 받아 그 사용자의 Provider Account credential을 확인한다. Workspace 생성자의 credential을 사용하지 않는다. 미지원 Provider는 정규화된 Provider 오류를 반환한다.
 
-API Workspace responses include normalized `repository` metadata and capabilities (`canRead`, `canWrite`, `canManage`). The compatibility fields `gitlabProjectId`, `gitlabProjectPath`, and `defaultBranch` remain during the GitLab migration window.
+GitLab과 GitHub adapter는 확인 뒤 token을 받으며 Provider별 응답 객체를 adapter 경계 밖으로 노출하지 않는다.
 
-## Credential resolution
+## Migration과 rollback
 
-`RepositoryCredentialResolver` accepts the acting Study-ing user and Workspace repository identity. It resolves that user's Provider Account credential. It never resolves a Workspace creator credential. Unsupported providers return a normalized Provider error.
+V11은 GITLAB Provider Account 생성·backfill, ciphertext 복호화 없는 credential 소유권 전환, Repository Connection 생성·backfill, 기존 GitLab column 제약 완화 순서의 additive migration이다. 호환 mirror를 유지하며 user, Workspace, membership, submission, review, notification, audit FK를 파괴적으로 다시 쓰지 않는다.
 
-`RepositoryDataPort` now normalizes repository list/detail, tree, file create/update, atomic multi-file commit, and commit comments. Schedule, Submission, Review, Sync, import analysis and schema migration route through `RepositoryDataService`. GitLab and GitHub response objects stop inside their adapters.
+`RepositoryDataPort`는 repository 목록·상세, tree, file 생성·수정, atomic multi-file commit과 commit comment를 정규화한다. Schedule, Submission, Review, Sync, import analysis와 schema migration은 `RepositoryDataService`를 통한다. GitLab과 GitHub 응답 객체는 각 adapter 내부에서만 사용한다.
 
-## Migration and rollback
+Application 배포 전 rollback은 DB restore 또는 `provider_account_id`를 `oauth_credentials.user_id`로 복사한 뒤 새 table을 제거하는 검증된 reverse migration이다. 새 쓰기 후 Provider Account 삭제는 안전하지 않으므로 roll-forward해야 한다.
 
-V11 performs additive backfill first:
-
-1. Create and backfill GITLAB Provider Accounts.
-2. Repoint credential ownership without decrypting ciphertext.
-3. Create and backfill Repository Connections.
-4. Relax legacy GitLab columns so a future non-GitLab Workspace can leave them null.
-5. Retain compatibility mirrors; no user, Workspace, membership, submission, review, notification, or audit FK is rewritten destructively.
-
-Rollback before application deployment is a database restore or a tested reverse migration that copies `provider_account_id` back to `oauth_credentials.user_id` before dropping new tables. After new writes occur, dropping Provider Accounts is not safe; roll forward is required.
-
-## Legacy inventory
+## 기존 field 목록
 
 | Field | Status |
 |---|---|
-| `workspace_metadata.gitlab_project_id` | DEPRECATED, current GitLab service still reads it |
-| `workspace_metadata.gitlab_project_path` | DEPRECATED, current GitLab service still reads it |
+| `workspace_metadata.gitlab_project_id` | DEPRECATED, 현재 GitLab service가 사용 |
+| `workspace_metadata.gitlab_project_path` | DEPRECATED, 현재 GitLab service가 사용 |
 | Workspace JSON `gitlabProjectId/gitlabProjectPath` | DEPRECATED response compatibility |
 | Workspace JSON `repository` | CURRENT normalized contract |
 | Discovery `repositoryId/repositoryPath` | DEPRECATED aliases |

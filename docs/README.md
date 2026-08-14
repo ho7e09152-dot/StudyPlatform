@@ -7,6 +7,7 @@
 3. [OpenAPI 계약](api/openapi.yaml)과 [오류 계약](api/errors.md)
 4. 작업 영역에 해당하는 아키텍처 문서
 5. 배포 작업이라면 [운영 문서](operations/production.md)
+6. AI 작업이라면 [Codex 구현·Claude QA 가이드](agents/README.md)
 
 ## 문서 구조
 
@@ -78,6 +79,8 @@ docs/
 `legal/`은 구현 사실, 데이터 inventory, 정책 결정과 공개 전 초안을 분리합니다. `privacy-policy-draft.md`와 `terms-of-service-draft.md`는 `status: draft`인 동안 사용자 화면에 게시하지 않습니다.
 
 ## 유지 규칙
+
+에이전트 기반 작업은 [에이전트 사용 가이드](agents/README.md)와 저장소 루트의 `AGENTS.md`를 따른다.
 
 - 완료된 QA 보고서, 작업 계획, 역할 분담 문서와 생성된 screenshot artifact는 Git에 보관하지 않습니다.
 - 재현 가능한 검증은 문서보다 자동 테스트나 `scripts/`로 남깁니다.

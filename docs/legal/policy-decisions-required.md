@@ -4,18 +4,18 @@ updatedAt: 2026-08-13
 serviceModel: personal-free-noncommercial
 ---
 
-# Study-ing policy decisions and remaining launch inputs
+# Study-ing 정책 결정과 남은 출시 입력
 
 이 문서는 개인 개발자가 운영하는 무료·비상업 토이 프로젝트 Study-ing의 현재 운영 결정을 기록한다. `DECIDED`는 현재 제품 정책이며 법정 보유기간이라는 뜻이 아니다. `LAUNCH BLOCKER`와 `LEGAL REVIEW REQUIRED`는 실제 값 입력 또는 전문 검토 전 공개 문안으로 확정할 수 없는 항목이다.
 
-## Status definitions
+## Status 정의
 
 - `DECIDED`: 운영자가 현재 제품 범위에서 확정한 정책이며 코드 또는 runbook에 반영했다.
 - `LAUNCH BLOCKER`: 공개 전 실제 운영자가 값을 입력하거나 인프라를 확인해야 한다.
 - `LEGAL REVIEW REQUIRED`: 데이터 흐름 사실은 확인했지만 법적 분류·효과는 전문 검토가 필요하다.
 - `FOLLOW-UP`: 현재 출시 범위에는 필요하지 않으며 기능 추가 시 재검토한다.
 
-## Decided policies
+## 결정된 정책
 
 ### LEGAL-001 — 서비스 형태와 비즈니스 모델
 
@@ -136,7 +136,7 @@ serviceModel: personal-free-noncommercial
 | Contact | `ho7e09152@gmail.com` |
 | Status | DECIDED / EMAIL RECEIPT TEST REQUIRED |
 
-## Remaining launch blockers
+## 남은 출시 blocker
 
 ### LEGAL-101 — 운영자와 연락처
 
@@ -169,7 +169,7 @@ serviceModel: personal-free-noncommercial
 | Review Needed | 개인정보 처리 적법 근거, 책임 범위, 이용 제한 절차, 준거법·관할, 미성년 정책 문구, 약관 변경·재동의 기준. |
 | Status | LEGAL REVIEW REQUIRED |
 
-## Follow-up triggers
+## 후속 검토 조건
 
 다음 기능을 추가하기 전 이 문서와 Terms/Privacy를 재검토한다.
 
@@ -182,7 +182,7 @@ serviceModel: personal-free-noncommercial
 - 자동 data export
 - Terms/Privacy version 변경에 대한 실제 re-consent 화면
 
-## Publication gate
+## 공개 조건
 
 Draft를 `/terms`, `/privacy`에 반영하기 전에 다음을 모두 충족한다.
 
