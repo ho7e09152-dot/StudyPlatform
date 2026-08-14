@@ -13,7 +13,12 @@ function captureUnexpectedErrors(page: Page) {
 async function openWorkspacePage(page: Page, path: string) {
   const publicPath = ["/", "/login", "/auth/callback", "/terms", "/privacy", "/demo"]
     .some((candidate) => path === candidate || path.startsWith(`${candidate}?`));
-  await page.goto(publicPath ? path : `/demo?returnTo=${encodeURIComponent(path)}`);
+  if (publicPath) {
+    await page.goto(path);
+  } else {
+    await page.goto(`/demo?returnTo=${encodeURIComponent(path)}`);
+    await page.waitForURL((url) => `${url.pathname}${url.search}` === path, { timeout: 7_000 });
+  }
   await page.waitForLoadState("networkidle");
 }
 
@@ -131,6 +136,125 @@ test.describe("Workspace release smoke", () => {
     await expect(page).toHaveURL(/\/schedule$/, { timeout: 2_000 });
     await expect(page.locator(".app-frame")).toHaveAttribute("data-theme", "light");
     expect(errors).toEqual([]);
+  });
+
+  test("demo workspace and settings never request or render authenticated account data", async ({ page }) => {
+    test.setTimeout(60_000);
+    const apiRequests: string[] = [];
+    await page.route("**/api/v1/**", async (route) => {
+      const url = new URL(route.request().url());
+      apiRequests.push(`${route.request().method()} ${url.pathname}`);
+
+      if (url.pathname === "/api/v1/capabilities") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            authProviders: ["GITLAB", "GITHUB"],
+            accountLinkProviders: ["GITLAB", "GITHUB"],
+            repositoryProviders: ["GITLAB"],
+            features: { workspaceDiscovery: true },
+          }),
+        });
+        return;
+      }
+
+      if (url.pathname === "/api/v1/repositories") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([{
+            provider: "GITLAB",
+            externalId: "actual-private-repository",
+            name: "ACTUAL_PRIVATE_REPOSITORY_SENTINEL",
+            fullName: "actual-user/private-repository",
+            visibility: "private",
+            defaultBranch: "main",
+            webUrl: "https://gitlab.example/actual-user/private-repository",
+            capabilities: { canRead: true, canWrite: true, canManage: true },
+            providerPermission: "40",
+            connectionState: "AVAILABLE",
+          }]),
+        });
+        return;
+      }
+
+      if (url.pathname === "/api/v1/me/provider-accounts") {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify([{
+            id: "actual-provider-account",
+            provider: "GITLAB",
+            externalUserId: "actual-user",
+            username: "ACTUAL_ACCOUNT_SENTINEL",
+            displayName: "Actual Account",
+            avatarUrl: null,
+            webUrl: null,
+            status: "CONNECTED",
+          }]),
+        });
+        return;
+      }
+
+      await route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+    });
+
+    await page.goto("/demo?returnTo=%2Fworkspaces%2Fnew");
+    await expect(page).toHaveURL(/\/workspaces\/new$/, { timeout: 5_000 });
+    await expect(page.getByText("데모 알고리즘 연습")).toBeVisible();
+    await expect(page.getByText("ACTUAL_PRIVATE_REPOSITORY_SENTINEL")).toHaveCount(0);
+
+    await page.getByRole("option", { name: /데모 알고리즘 연습/ }).click();
+    await expect(page.getByText("연결할 준비가 되었어요.")).toBeVisible();
+    await page.getByRole("button", { name: "Workspace 연결하기" }).click();
+    await expect(page).toHaveURL(/\/today$/);
+    await expect(page.getByText("데모 알고리즘 연습").first()).toBeVisible();
+
+    await page.goto("/workspaces");
+    await expect(page.getByRole("heading", { name: "Workspace", exact: true })).toBeVisible();
+
+    for (const section of ["general", "study-rules", "commit-rules", "members", "notifications", "repository", "data", "profile", "accounts", "appearance", "security", "account", "danger"]) {
+      await page.goto(`/settings/${section}`);
+      await expect(page.getByRole("heading", { name: "설정", exact: true })).toBeVisible();
+    }
+    await expect(page.getByText("ACTUAL_ACCOUNT_SENTINEL")).toHaveCount(0);
+    await page.goto("/settings/accounts");
+    await expect(page.getByText("데모 계정", { exact: true })).toBeVisible();
+    await expect(page.locator(".provider-account-row a")).toHaveCount(0);
+    await page.goto("/settings/accounts?providerLink=github_collision");
+    await expect(page.locator(".provider-link-result")).toHaveCount(0);
+    await expect(page.locator("a[href*='provider-accounts']")).toHaveCount(0);
+    await page.goto("/settings/account");
+    await expect(page.getByRole("button", { name: "데모 계정" })).toBeDisabled();
+    expect(apiRequests).toEqual([]);
+  });
+
+  test("demo remains local after every seed workspace is deleted and reconnected", async ({ page }) => {
+    test.setTimeout(45_000);
+    const apiRequests: string[] = [];
+    await page.route("**/api/v1/**", async (route) => {
+      apiRequests.push(`${route.request().method()} ${new URL(route.request().url()).pathname}`);
+      await route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ code: "REAL_API_SENTINEL" }) });
+    });
+
+    await page.goto("/demo?returnTo=%2Fsettings%2Fdanger");
+    await expect(page).toHaveURL(/\/settings\/danger$/, { timeout: 5_000 });
+
+    for (let index = 0; index < initialWorkspaces.length; index += 1) {
+      await page.getByRole("button", { name: "Workspace 삭제" }).click();
+      const dialog = page.getByRole("dialog", { name: "Workspace를 삭제할까요?" });
+      await dialog.getByRole("button", { name: "Workspace 삭제" }).click();
+      await expect(dialog).toBeHidden();
+    }
+
+    await expect(page.getByRole("heading", { name: "첫 Workspace를 연결해볼까요?" })).toBeVisible();
+    await page.getByRole("option", { name: /데모 알고리즘 연습/ }).click();
+    await page.getByRole("button", { name: "Workspace 연결하기" }).click();
+    await page.goto("/settings/notifications");
+    await page.getByRole("switch").first().click();
+    await expect(page.getByText("변경사항은 즉시 저장되며")).toBeVisible();
+    expect(apiRequests).toEqual([]);
   });
 
   test("오늘 페이지에서 활동함과 공통 제출 흐름이 이어진다", async ({ page }) => {

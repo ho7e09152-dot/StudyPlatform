@@ -312,7 +312,7 @@ function ConnectedAccountsSettings({
 		status: "CONNECTED",
 	} satisfies ProviderAccount;
 	const visibleAccounts = mode === "demo" ? [demoAccount] : buildProviderAccountRows(accounts, accountLinkProviders);
-	const linkNotice = getProviderLinkNotice(linkResult);
+	const linkNotice = mode === "demo" ? null : getProviderLinkNotice(linkResult);
 
 	return <section className="settings-section-block" aria-busy={!resolved}>
 		{!resolved ? <p className="settings-scope-note" role="status">연결된 계정을 확인하고 있어요.</p> : null}
@@ -324,12 +324,14 @@ function ConnectedAccountsSettings({
 				<span className="provider-account-icon"><ProviderIcon provider={account.provider} size={21} /></span>
 				<div><strong>{descriptor.displayName} 계정</strong><small>{account.username ? `@${account.username}` : "연결되지 않음"}</small></div>
 				<span className={`status-badge ${connected ? "success" : "neutral"}`}>{connected ? "연결됨" : "연결되지 않음"}</span>
-				<a className="button button--secondary button--small" href={connectUrl}><RefreshCcw size={14} /> {connected ? descriptor.reconnectLabel : descriptor.connectLabel}</a>
+				{mode === "demo"
+					? <span className="settings-scope-note">데모 계정</span>
+					: <a className="button button--secondary button--small" href={connectUrl}><RefreshCcw size={14} /> {connected ? descriptor.reconnectLabel : descriptor.connectLabel}</a>}
 			</div>;
 		}) : null}
 		{linkNotice ? <div className={`onboarding-error provider-link-result${linkNotice.tone === "neutral" ? " is-neutral" : ""}`} role={linkNotice.tone === "neutral" ? "status" : "alert"}><span>{linkNotice.message}</span>{linkNotice.retry ? <a className="button button--secondary button--small" href={getProviderAccountLinkUrl("GITHUB")}>다시 시도</a> : null}</div> : null}
 		{failed ? <p className="settings-scope-note" role="alert">연결된 계정을 모두 확인하지 못했습니다. 잠시 후 다시 시도해 주세요.</p> : null}
-		<p className="settings-scope-note">재승인은 개인 Provider 권한만 갱신하며 Workspace 저장소 연결은 바뀌지 않습니다.</p>
+		<p className="settings-scope-note">{mode === "demo" ? "표시된 계정은 체험용 목업이며 실제 Provider 계정과 연결되지 않습니다." : "재승인은 개인 Provider 권한만 갱신하며 Workspace 저장소 연결은 바뀌지 않습니다."}</p>
 	</section>;
 }
 
@@ -437,7 +439,7 @@ export function SettingsWorkspace({ section = "general" }: { section?: SettingsS
 				demoDisplayName={user?.name ?? null}
 			/> : null}
           {section === "appearance" ? <AppearanceSettings /> : null}
-          {section === "account" ? <AccountSettings onDelete={() => setConfirmation("account")} /> : null}
+          {section === "account" ? <AccountSettings demoMode={mode === "demo"} onDelete={() => setConfirmation("account")} /> : null}
           {section === "security" ? <SecuritySettings canManage={canManage} events={auditEvents} /> : null}
           {section === "danger" ? isOwner ? <DangerSettings isOwner={isOwner} onDelete={() => setConfirmation("workspace")} /> : <RestrictedSettings title="소유자만 접근할 수 있어요" description="Workspace 삭제와 복원 정책은 소유자만 관리할 수 있습니다." /> : null}
         </main>
@@ -746,8 +748,8 @@ export function SettingsWorkspace({ section = "general" }: { section?: SettingsS
     return <div className="settings-sections"><section className="settings-section-block"><h3>화면 테마</h3><div className="settings-mode-control" role="radiogroup" aria-label="화면 테마"><button type="button" role="radio" aria-checked={themeMode === "LIGHT"} disabled={themeSaving} onClick={() => void setThemeMode("LIGHT")}><Eye size={16} /> 라이트</button><button type="button" role="radio" aria-checked={themeMode === "DARK"} disabled={themeSaving} onClick={() => void setThemeMode("DARK")}><Eye size={16} /> 다크</button></div></section><section className="settings-section-block"><h3>강조 색상</h3><p>버튼, 선택 상태와 주요 안내에 적용됩니다.</p><div className="accent-options settings-accent-options" role="radiogroup" aria-label="강조 색상">{ACCENT_OPTIONS.map((option) => <button key={option.value} className="accent-option" data-accent-option={option.value.toLowerCase()} type="button" role="radio" aria-checked={accentColor === option.value} disabled={themeSaving} onClick={() => void setAccentColor(option.value)}><i>{accentColor === option.value ? <Check size={14} /> : null}</i><span>{option.label}</span></button>)}</div></section></div>;
   }
 
-  function AccountSettings({ onDelete }: { onDelete: () => void }) {
-    return <div className="settings-sections"><section className="settings-section-block"><h3>약관 및 개인정보</h3><SettingRows><SettingRow label="이용약관"><Link className="settings-text-link" href="/terms?returnTo=/settings/account">보기 <ChevronRight size={14} /></Link></SettingRow><SettingRow label="개인정보 처리 안내"><Link className="settings-text-link" href="/privacy?returnTo=/settings/account">보기 <ChevronRight size={14} /></Link></SettingRow></SettingRows></section><section className="personal-danger-section"><div><h3>Study-ing 계정 탈퇴</h3><p>Study-ing 계정과 OAuth 연결 정보가 삭제되고, Workspace 멤버 정보는 탈퇴한 사용자로 바뀝니다. Workspace의 공동 기록과 일부 운영 기록, 연결한 저장소에 이미 저장된 파일은 남을 수 있습니다.</p></div><button type="button" className="button button--danger" onClick={onDelete}>계정 탈퇴</button></section></div>;
+  function AccountSettings({ demoMode: demo, onDelete }: { demoMode: boolean; onDelete: () => void }) {
+    return <div className="settings-sections"><section className="settings-section-block"><h3>약관 및 개인정보</h3><SettingRows><SettingRow label="이용약관"><Link className="settings-text-link" href="/terms?returnTo=/settings/account">보기 <ChevronRight size={14} /></Link></SettingRow><SettingRow label="개인정보 처리 안내"><Link className="settings-text-link" href="/privacy?returnTo=/settings/account">보기 <ChevronRight size={14} /></Link></SettingRow></SettingRows></section><section className="personal-danger-section"><div><h3>Study-ing 계정 탈퇴</h3><p>{demo ? "데모에는 실제 Study-ing 계정이나 OAuth 연결 정보가 없습니다." : "Study-ing 계정과 OAuth 연결 정보가 삭제되고, Workspace 멤버 정보는 탈퇴한 사용자로 바뀝니다. Workspace의 공동 기록과 일부 운영 기록, 연결한 저장소에 이미 저장된 파일은 남을 수 있습니다."}</p></div><button type="button" className="button button--danger" disabled={demo} onClick={onDelete}>{demo ? "데모 계정" : "계정 탈퇴"}</button></section></div>;
   }
 
   function SecuritySettings({ canManage: manageable, events }: { canManage: boolean; events: AuditEvent[] }) {
