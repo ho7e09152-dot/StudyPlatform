@@ -1,234 +1,263 @@
-# 저장소 구조·에이전트 지침 리팩터링 가이드
+# YAML·Compose·CI 리팩터링 가이드
 
-이 문서는 Study-ing 저장소 구조와 AI agent 지침을 정리할 때 다른 agent에게 전달할 공통 작업 기준이다. 일회성 작업 계획이나 QA 결과가 아니므로 `docs/agents/`에서 관리한다. 실제 작업 전에는 현재 working tree와 참조 관계를 다시 확인하며, 이 문서의 수치만 근거로 파일을 삭제하지 않는다.
+이 문서는 Study-ing 저장소의 YAML 설정과 운영 진입점을 정리할 때 다른 agent에게 전달하는 공통 작업 기준이다. 목표는 파일 수를 기계적으로 줄이는 것이 아니라, 현재 플랫폼과 맞지 않는 설정을 제거하고 Local·Sandbox·Production 실행 경로를 명확하게 만드는 것이다.
+
+실제 작업 전에는 현재 branch, working tree, 원격 저장소와 참조 관계를 다시 확인한다. 이 문서의 기준선만으로 설정 파일을 삭제하거나 이동하지 않는다.
 
 ## 목표와 완료 조건
 
-- 사용 중인 코드·설정·운영 도구는 보존하고, 불필요하거나 오해를 만드는 placeholder만 제거한다.
-- Codex와 Claude Code가 중복 없이 같은 프로젝트 불변조건을 적용한다.
-- 읽기 전용 QA 역할은 문구뿐 아니라 가능한 범위에서 tool permission과 검증 절차로 보호한다.
-- 위험도, 요청 agent, QA 결과와 위험 수용 책임이 하나의 계약으로 연결된다.
-- 변경 후 관련 Frontend·Backend·문서·운영 검사를 실제로 실행하고 결과를 보고한다.
+- GitHub 원격 저장소에서 실제로 동작하는 CI를 정본으로 사용한다.
+- 기본 Local Compose는 현재 application에 필요한 infrastructure만 실행한다.
+- Local·Sandbox·Production·GitHub App secret override의 실행 방법을 한 곳에서 찾을 수 있게 한다.
+- Spring profile, OpenAPI 계약, 테스트 fixture처럼 도구가 관례적으로 찾는 YAML은 현재 위치에 유지한다.
+- 설정 파일을 이동하거나 제거할 때 관련 문서, script, Make target과 예제 환경변수를 같은 변경에서 동기화한다.
+- 전환이 완료되고 대체 경로가 검증된 뒤에만 기존 설정을 제거한다.
 
 ## 작업 전 공통 규칙
 
-1. 루트와 변경 영역의 `AGENTS.md`를 먼저 확인한다.
-2. `git status --short`로 기존 변경을 기록하고 다른 사람의 변경을 덮어쓰지 않는다.
-3. 삭제 전 `git grep`, build 설정, Compose, CI, Makefile과 운영 문서에서 참조를 확인한다.
-4. 자동 생성물과 Git 추적 파일을 구분한다. `node_modules/`, `dist/`, `.wrangler/`, `build/`는 로컬 존재만으로 삭제 대상 코드로 판단하지 않는다.
-5. 한 작업에서는 아래 작업 ID 하나 또는 서로 강하게 결합된 작업만 처리한다.
-6. migration 번호, API path·field·enum·error code와 optimistic locking 필드는 구조 정리 과정에서 바꾸지 않는다.
-7. 삭제는 명시적인 파일 목록으로 수행하고, 재귀 wildcard 삭제는 사용하지 않는다.
-
-## 현재 기준선
-
-2026-08-14 점검 기준이며 작업 시작 시 다시 측정한다.
-
-- Backend 아래 `.gitkeep`: 43개
-  - 같은 디렉터리에 실제 파일이 있어 불필요한 항목: 17개
-  - 빈 패키지를 유지하는 placeholder: 26개
-- main과 test가 모두 비어 있는 Backend 영역: `dashboard`, `records`, `repository`, `session`, `submission`
-- 프로젝트 명령·문서에서 참조되지 않은 수동 QA script 후보: 3개
-- application에서 사용하지 않고 Local Compose에서 선택적으로 실행되는 Redis service: 1개
-- Agent 관련 파일은 현재 working tree에서 untracked 상태이므로 공유 전 추적 여부를 별도로 확인해야 한다.
+1. 루트와 변경 영역의 `AGENTS.md`를 확인한다.
+2. `git status --short`, `git branch --show-current`, `git remote -v`로 작업 기준선을 기록한다.
+3. 삭제·이동 전 `git grep`으로 Makefile, script, CI, README와 운영 문서의 참조를 확인한다.
+4. API path·schema·field·enum·error code와 migration 순서는 구조 정리 과정에서 변경하지 않는다.
+5. 환경변수 이름을 바꿀 때 Compose, application 설정, `.env.example`과 운영 문서를 함께 수정한다.
+6. token, OAuth code, private key, Cookie와 실제 `.env` 내용을 출력하거나 commit하지 않는다.
+7. 한 변경에는 아래 작업 ID 하나 또는 서로 강하게 결합된 작업만 포함한다.
+8. 실행하지 않은 검사는 통과했다고 기록하지 않는다.
 
 기준선 확인 명령:
 
 ```powershell
 git status --short
-git ls-files 'backend/src/**/.gitkeep'
-git grep -n -e 'qa-login-routing.mjs' -e 'qa-public-pages-interactions.mjs' -e 'qa-records-responsive.mjs'
-git grep -n -e 'REDIS_' -e 'redis:'
+git branch --show-current
+git remote -v
+git ls-files '*.yml' '*.yaml'
+git grep -n -E 'compose\.(yml|prod\.yml|sandbox\.yml|github-app\.yml)|docker compose'
+git grep -n -i 'redis'
 ```
+
+## 현재 기준선
+
+2026-08-14 점검 기준으로 Git이 추적하는 YAML은 12개다.
+
+| 분류 | 파일 | 현재 판단 |
+|---|---|---|
+| CI | `.gitlab-ci.yml` | 현재 GitHub 원격과 불일치하므로 대체 후 제거 후보 |
+| OpenAPI lint | `.redocly.yaml` | 도구의 표준 진입점이며 유지 |
+| Spring | `backend/src/main/resources/application.yml` | 유지 |
+| Spring Production | `backend/src/main/resources/application-prod.yml` | 유지 |
+| Spring Test | `backend/src/test/resources/application.yml` | 유지 |
+| Test fixture | `backend/src/test/resources/fixtures/repository/*.yml` | 유지 |
+| Local Compose | `compose.yml` | 유지하되 미사용 Redis 정리 필요 |
+| Production Compose | `compose.prod.yml` | 운영 script가 사용하므로 유지 |
+| Sandbox Compose | `compose.sandbox.yml` | 독립된 배포 topology이므로 유지 |
+| GitHub App override | `compose.github-app.yml` | private key mount 분리를 위해 유지 |
+| API 계약 | `docs/api/openapi.yaml` | 정본이므로 유지 |
+
+파일 수 자체는 과도하지 않다. 우선 해결할 문제는 다음 두 가지다.
+
+- 원격은 GitHub인데 CI 설정과 운영 가이드는 GitLab 기준이다.
+- application이 Redis를 사용하지 않지만 기본 Local Compose가 Redis를 함께 실행한다.
 
 ## 우선순위별 작업 목록
 
-### P0 — Agent 지침의 적용 가능성
+### P0 — 현재 플랫폼에 맞는 CI 정본 확립
 
-#### AGT-01 — Agent 파일 공유 상태 확정
+#### CI-01 — GitLab CI를 GitHub Actions로 전환
 
-- 담당 권장: Codex main agent
-- 대상: `AGENTS.md`, `CLAUDE.md`, 하위 지침, `.agents/`, `.claude/`, `.codex/`, `docs/agents/`
-- 작업:
-  - 각 파일이 팀 공통 설정인지 로컬 전용인지 분류한다.
-  - 팀 공통 파일만 Git 추적 대상으로 제안한다.
-  - 실제 handoff, QA 결과, 임시 계획은 `.agents/`에 저장하거나 commit하지 않는다.
-- 완료 조건:
-  - 팀 공통 지침이 새 checkout에서도 발견된다.
-  - 비밀정보와 개인 환경 경로가 포함되지 않는다.
-
-#### AGT-02 — Claude Code 실행 가이드 수정
-
-- 담당 권장: Codex main agent
-- 대상: `docs/agents/claude-validation.md`
-- 작업:
-  - custom agent 목록 확인 용도로 적힌 `claude agents` 안내를 제거한다. 해당 명령은 설치 버전에 따라 background agent 관리 명령이다.
-  - `claude --version`, `/context`, `claude --agent <name>` 등 현재 설치 버전에서 검증한 절차만 남긴다.
-  - 특정 버전 동작을 영구 사실처럼 단정하지 않는다.
-- 완료 조건:
-  - 문서의 모든 명령이 `claude --help` 결과와 일치한다.
-
-#### AGT-03 — 하위 Claude 지침 중복 제거
-
-- 담당 권장: Codex main agent
-- 대상: `backend/CLAUDE.md`, `frontend/CLAUDE.md`, `docs/CLAUDE.md`, `deploy/CLAUDE.md`, `ops/CLAUDE.md`
-- 작업:
-  - Claude Code가 상위 `CLAUDE.md`를 계층적으로 읽는 것을 전제로 `@../CLAUDE.md` 중복 import를 제거한다.
-  - Claude Code가 직접 읽지 않는 영역별 `AGENTS.md` import와 영역 고유 검토 항목은 유지한다.
-- 완료 조건:
-  - 루트 불변조건이 한 번만 주입된다.
-  - 각 영역의 추가 검토 항목은 유지된다.
-
-#### AGT-04 — 읽기 전용 QA의 강제 경계 보강
-
-- 담당 권장: Codex main agent 구현, `security-reviewer` 검증
-- 대상: `.claude/agents/*.md`, 필요 시 project Claude settings 또는 hook
-- 작업:
-  - `Write`, `Edit` 금지만으로는 `Bash` 쓰기를 막지 못한다는 점을 반영한다.
-  - `qa-reviewer`와 `security-reviewer`에는 필요한 최소 tool만 허용한다.
-  - `test-runner`는 build artifact 생성이 가능하므로 역할을 “tracked source 불변 검증”으로 정의한다.
-  - 모든 QA agent가 실행 전후 `git status --short`를 비교하고 working tree 변경을 보고하게 한다.
-- 금지:
-  - 검토 편의를 이유로 permission bypass를 기본값으로 설정하지 않는다.
-  - test, formatter 또는 dependency 설치가 tracked file을 바꾼 상태에서 `PASS`를 반환하지 않는다.
-- 완료 조건:
-  - 지침과 실제 tool permission의 차이가 문서화된다.
-  - 수정 agent와 검증 agent의 책임이 분리된다.
-
-#### AGT-05 — QA 계약 일관성 보완
-
-- 담당 권장: Codex main agent 구현, `qa-reviewer` 검증
-- 대상: `.agents/checklists/change-impact.md`, `.agents/contracts/qa-handoff.md`, `.agents/contracts/qa-report.md`
-- 작업:
-  - 고위험 변경에서 `qa-reviewer`, `security-reviewer`를 함께 요청할 수 있도록 복수 agent 필드를 지원한다.
-  - 낮은 위험은 Claude 검증 없이 종료할 수 있다는 루트 정책과 checklist 문구를 맞춘다.
-  - `PASS_WITH_RISKS`에 위험 수용 책임자, 수용 근거, 재검토 조건 또는 기한을 추가한다.
-- 완료 조건:
-  - 낮음·중간·높음 위험도 각각에 모순 없는 handoff 예시를 만들 수 있다.
-
-### P1 — 저장소 구조 정리
-
-#### STR-01 — 불필요한 `.gitkeep` 제거
-
-- 담당 권장: `backend-implementer`
-- 즉시 제거 가능 조건:
-  - `.gitkeep`과 같은 디렉터리에 이미 Git 추적 파일이 존재한다.
-- 별도 판단 필요 조건:
-  - `.gitkeep`이 유일한 파일이며 디렉터리가 미래 설계만 표현한다.
-- 작업:
-  - 실제 파일이 있는 디렉터리의 불필요한 `.gitkeep`부터 작은 변경으로 제거한다.
-  - `dashboard`, `records`, `repository`, `session`, `submission` 빈 패키지는 현재 구현 위치와 문서를 확인한 후 별도 변경으로 다룬다.
-- 완료 조건:
-  - Java package tree가 실제 package 선언과 일치한다.
-  - Backend compile과 test 결과가 정리 전후 동일하다.
-
-#### STR-02 — 빈 Backend 도메인 패키지 결정
-
-- 담당 권장: `feature-planner` 분석 후 `backend-implementer` 구현
-- 선택지:
-  1. 가까운 시일 내 구현 계획과 담당자가 있으면 유지 근거를 문서화한다.
-  2. 실제 기능이 `workspace` 등 다른 package에 구현됐다면 빈 package와 관련 `.gitkeep`을 제거한다.
-  3. package 경계 자체가 잘못됐다면 이번 정리와 분리해 별도 refactoring으로 계획한다.
-- 금지:
-  - 빈 디렉터리를 채우기 위해 기존 클래스를 기계적으로 이동하지 않는다.
-  - package 이동과 API·DB 동작 변경을 한 변경에 섞지 않는다.
-
-#### QA-01 — 수동 QA script 통합 또는 제거
-
-- 담당 권장: `frontend-implementer`, `test-runner` 검증
+- 담당 권장: `integration-implementer` 구현, `qa-reviewer` 검증
 - 대상:
-  - `scripts/qa-login-routing.mjs`
-  - `scripts/qa-public-pages-interactions.mjs`
-  - `scripts/qa-records-responsive.mjs`
+  - `.gitlab-ci.yml`
+  - 신규 `.github/workflows/ci.yml`
+  - `docs/operations/ci.md`
+  - `README.md`, `AGENTS.md`, `CONTRIBUTING.md`의 CI 관련 문구
+  - 필요 시 `.gitlab/merge_request_templates/Default.md`
 - 작업:
-  - 유지 가치가 있는 assertion은 `frontend/e2e/`의 Playwright test로 이동한다.
-  - `/home/roro/...`와 같은 개인 `executablePath` 기본값을 제거한다.
-  - 실제 sandbox URL을 기본값으로 호출하지 않고 명시적인 환경변수를 요구한다.
-  - 통합 후 원본 script가 완전히 대체됐을 때만 삭제한다.
+  1. 기존 GitLab job의 명령, cache, artifact와 실패 보고 방식을 목록화한다.
+  2. 아래 검사를 GitHub Actions job으로 동등하게 옮긴다.
+     - OpenAPI lint
+     - repository secret·hygiene 검사
+     - Frontend lint, audit, test, E2E
+     - Backend test
+  3. pull request와 기본 branch push trigger를 명시한다.
+  4. GitHub Actions에서 필요한 권한은 최소값으로 선언한다.
+  5. 실제 workflow 성공을 확인한 뒤 CI 문서와 저장소 설명을 GitHub 기준으로 동기화한다.
+  6. 대체 workflow가 검증된 마지막 변경에서 `.gitlab-ci.yml`을 제거한다.
+- 금지:
+  - GitHub Actions가 준비되기 전에 `.gitlab-ci.yml`부터 삭제하지 않는다.
+  - CI 이관 과정에서 검사 범위를 조용히 축소하지 않는다.
+  - 실제 secret 값을 workflow나 문서에 기록하지 않는다.
 - 완료 조건:
-  - CI 또는 `package.json`에서 재현 가능한 명령으로 실행된다.
-  - screenshot과 결과 파일은 ignored artifact 경로에만 생성된다.
+  - pull request에서 기존 CI와 동등한 검사가 실행된다.
+  - 실패 artifact와 test report를 GitHub UI에서 확인할 수 있다.
+  - 문서에 GitLab Pipeline·Runner를 현재 운영 경로로 안내하는 문구가 남지 않는다.
 
-#### OPS-01 — Redis 기본 실행 여부 결정
+#### CI-02 — GitHub 협업 파일 정합성 정리
+
+- 담당 권장: Codex main agent
+- 선행 조건: `CI-01`
+- 작업:
+  - GitLab Merge Request template이 계속 필요한지 확인한다.
+  - GitHub를 유일한 협업 플랫폼으로 사용한다면 내용을 `.github/PULL_REQUEST_TEMPLATE.md`로 이관한다.
+  - 이관 후 GitLab 전용 template과 중복 문서를 제거한다.
+- 완료 조건:
+  - 새 pull request에서 팀 checklist를 바로 사용할 수 있다.
+  - 현재 사용하지 않는 플랫폼의 template이 정본처럼 보이지 않는다.
+
+### P1 — Local Compose 최소화
+
+#### OPS-01 — 미사용 Redis 제거 또는 profile 격리
 
 - 담당 권장: `integration-implementer`, `qa-reviewer` 검증
-- 대상: `compose.yml`, `.env.example`, `Makefile`, `docs/getting-started.md`
+- 대상:
+  - `compose.yml`
+  - `.env.example`
+  - `Makefile`
+  - `README.md`
+  - `docs/getting-started.md`
 - 현재 사실:
   - application session source는 Spring Session JDBC다.
-  - 현재 Backend build에는 Redis application dependency가 없다.
-- 선택지:
-  1. 사용 계획이 없으면 Redis service와 관련 변수·문구를 함께 제거한다.
-  2. 분산 rate limit 계획 때문에 보존한다면 Compose profile로 격리한다.
+  - Backend build에는 Redis application dependency가 없다.
+  - Production Compose는 Redis를 실행하지 않는다.
+- 기본 권장안:
+  - 가까운 도입 계획이 없다면 Local Redis service, volume, `REDIS_*` 예제 변수와 관련 문구를 함께 제거한다.
+- 대안:
+  - 분산 rate limit 등 확정된 후속 계획이 있다면 Redis를 Compose profile로 격리하고 기본 `docker compose up`에서는 실행하지 않는다.
 - 완료 조건:
-  - 기본 `docker compose up`이 필요한 infrastructure만 실행한다.
-  - Makefile과 시작 문서가 실제 Compose 동작과 일치한다.
+  - 기본 Local Compose가 PostgreSQL 등 현재 필요한 infrastructure만 실행한다.
+  - `Makefile`과 시작 문서가 실제 동작을 정확히 설명한다.
+  - Redis를 유지하는 경우 활성화 명령과 사용 목적이 문서화된다.
 
-### P2 — 문서와 낮은 위험 설정 정리
+#### OPS-02 — Compose 실행 진입점 표준화
 
-#### DOC-01 — 환경 의존 문구 제거
-
-- 담당 권장: Codex main agent
-- 대상: `docs/agents/codex-implementation.md`
+- 담당 권장: `integration-implementer`
+- 대상:
+  - `Makefile`
+  - `docs/getting-started.md`
+  - `docs/operations/production.md`
+  - `docs/architecture/providers/github-app-configuration.md`
 - 작업:
-  - “현재 환경에는 Codex CLI가 설치되어 있지 않다” 같은 개인 환경 사실을 조건형 안내로 바꾼다.
-  - 설치 여부와 버전은 사용자가 실행 시 확인하게 한다.
+  - 반복되는 Compose 명령을 목적이 드러나는 Make target으로 제공한다.
+  - 최소한 Local, Sandbox, Sandbox + GitHub App key, Production config 검증 경로를 구분한다.
+  - 사용자 문서에 환경별 파일 조합과 필요한 env file을 표로 정리한다.
+- 권장 target 예시:
 
-#### DOC-02 — 한국어 문서 정책 준수
+```text
+make infra-up
+make infra-down
+make sandbox-up
+make sandbox-github-up
+make prod-config
+make prod-up
+```
 
-- 담당 권장: Codex main agent, `qa-reviewer` 검증
-- 대상: 특히 `docs/operations/production.md`의 영문 설명
-- 작업:
-  - 설명 문장은 한국어로 동기화한다.
-  - 환경변수, CLI, API path, protocol 이름과 계약 값은 번역하지 않는다.
+- 완료 조건:
+  - 사용자가 Compose 파일 조합을 외우지 않고 표준 명령으로 실행할 수 있다.
+  - 문서의 명령과 Make target이 같은 Compose 파일을 참조한다.
 
-#### CFG-01 — 빈 `next.config.ts` 유지 여부
+### P2 — 설정 위치와 명명 정리
 
-- 담당 권장: `frontend-implementer`
-- 작업:
-  - Next.js·Vinext build가 파일을 암묵적으로 소비하는지 현재 버전에서 확인한다.
-  - 제거 전 `npm run build`, `npm run test`, 관련 E2E를 비교한다.
-- 판단:
-  - 빈 파일이라는 이유만으로 즉시 제거하지 않는다.
+#### CFG-01 — Compose 파일은 우선 루트에 유지
 
-## 삭제 판단표
+현재 단계에서는 Compose 파일을 `deploy/compose/` 같은 하위 디렉터리로 이동하지 않는다.
 
-| 대상 | 기본 판단 | 삭제 조건 |
+- 근거:
+  - `compose.yml`은 Docker Compose의 기본 파일명이다.
+  - 상대 build context, bind mount와 env file 기준 경로가 바뀔 수 있다.
+  - backup·restore script와 운영 문서가 `compose.prod.yml`을 직접 참조한다.
+  - 디렉터리 이동은 외관 개선에 비해 회귀 범위가 크다.
+- 재검토 조건:
+  - Compose variant가 더 늘어나 루트 파일만으로 환경 관계를 설명하기 어려워진 경우
+  - 배포 도구 전환으로 기존 상대경로 계약을 함께 재설계하는 경우
+  - 모든 Local·Sandbox·Production 경로를 자동 검증할 수 있는 경우
+
+#### CFG-02 — GitHub App override의 분리 유지
+
+`compose.github-app.yml`은 private key bind mount와 container UID/GID override만 담당한다. 이를 `compose.sandbox.yml`에 무조건 합치지 않는다.
+
+- GitHub App key가 필요하지 않은 환경은 secret mount 없이 실행되어야 한다.
+- 파일명을 바꿀 경우 `.env.example`, Provider 설정 문서와 운영 명령을 같은 변경에서 수정한다.
+- optional override라는 의미가 문서에서 충분히 드러나면 단순한 외관 개선을 위한 rename은 보류한다.
+
+### P3 — 대형 YAML 분할은 보류
+
+#### API-01 — OpenAPI modularization 판단
+
+`docs/api/openapi.yaml`은 크지만 API 계약 정본이다. 파일 크기만으로 `$ref` 기반 다중 파일 구조로 나누지 않는다.
+
+- 별도 작업으로 검토할 조건:
+  - domain별 병렬 변경에서 충돌이 반복적으로 발생한다.
+  - Redocly lint, 문서 생성과 Backend 계약 검사가 다중 파일 구조를 지원한다.
+  - bundle artifact 생성과 배포 경로를 CI에서 검증할 수 있다.
+- 금지:
+  - 경로, `operationId`, schema, enum과 error code를 분할 과정에서 변경하지 않는다.
+
+## 삭제·유지 판단표
+
+| 대상 | 기본 판단 | 변경 조건 |
 |---|---|---|
-| 실제 파일과 같은 디렉터리의 `.gitkeep` | 제거 권장 | Git 추적 payload가 존재함 |
-| 빈 Backend package placeholder | 조건부 제거 | 확정된 구현 계획·참조·생성 규칙이 없음 |
-| `scripts/qa-*.mjs` 3개 | 통합 후 제거 | Playwright 또는 다른 반복 가능한 검사로 완전히 대체됨 |
-| Local Redis service | 조건부 제거 또는 profile 격리 | 현재 application dependency와 운영 사용처가 없음 |
-| `frontend/next.config.ts` | 보류 | build와 Vinext 동작에 영향이 없음을 검증함 |
-| `deploy/`, `ops/`, `.openai/`, `worker/` | 유지 | 현재 Compose·문서·Vite 구성에서 참조됨 |
-| ignored build directory | Git 대상 아님 | 필요하면 로컬에서만 안전하게 정리 |
+| `.gitlab-ci.yml` | 대체 후 제거 | GitHub Actions 동등 검사가 실제 성공함 |
+| `.gitlab/merge_request_templates/Default.md` | 이관 후 제거 후보 | GitHub PR template으로 이관됨 |
+| Local Redis service·volume | 제거 권장 | 현재 application 사용처와 확정된 도입 계획이 없음 |
+| `REDIS_*` 예제 변수 | Redis와 함께 제거 | 다른 script·문서 사용처가 없음 |
+| `.redocly.yaml` | 유지 | OpenAPI lint가 참조함 |
+| Spring `application*.yml` | 유지 | Spring profile의 표준 설정 진입점임 |
+| 테스트 fixture YAML | 유지 | 테스트가 읽는 입력 데이터임 |
+| Compose 4종 | 루트 유지 | 역할이 서로 다르고 운영 참조가 존재함 |
+| `docs/api/openapi.yaml` | 유지 | API 계약 정본임 |
+
+## 작업 순서와 commit 경계
+
+권장 순서는 다음과 같다.
+
+1. `CI-01`: GitHub Actions 추가와 문서 전환
+2. GitHub Actions 성공 확인 후 GitLab CI 제거
+3. `CI-02`: 협업 template 정리
+4. `OPS-01`: Local Redis 정리
+5. `OPS-02`: Make target과 Compose 사용 문서 정리
+
+CI 추가와 기존 CI 제거는 검증 가능한 경우 하나의 pull request에서 처리할 수 있지만, commit은 복구하기 쉽도록 분리한다. Redis 정리와 CI 이관은 서로 독립된 변경으로 유지한다.
+
+권장 commit 예시:
+
+```text
+ci(github): add repository validation workflow
+docs(ci): migrate pipeline guide to github actions
+ci(gitlab): remove replaced pipeline configuration
+refactor(compose): remove unused local redis service
+docs(compose): document environment entrypoints
+```
 
 ## 작업 단위별 검증
 
 | 변경 | 최소 검사 |
 |---|---|
-| Agent Markdown/TOML | local link 확인, 현재 CLI help 대조, `git diff --check` |
-| Backend `.gitkeep`·package | `gradlew.bat test` 또는 `./gradlew test` |
-| Frontend QA 통합 | `npm run lint`, `npm run test`, 관련 `npm run test:e2e` |
-| Compose·Redis | `docker compose config`, 시작 문서 대조 |
-| 운영·보안 지침 | `qa-reviewer`, 고위험이면 `security-reviewer` |
+| GitHub Actions | workflow 문법 검사, 각 job 실제 실행 결과 확인 |
+| OpenAPI job | `make api-lint` 또는 동일한 Redocly 명령 |
+| Frontend CI | `npm run lint`, `npm run test`, 관련 E2E |
+| Backend CI | `gradlew.bat test` 또는 `./gradlew test` |
+| Compose·Redis | 각 조합의 `docker compose ... config`, Local 시작 문서 대조 |
+| Make target | target이 참조하는 Compose 명령 dry run 또는 config 확인 |
+| 문서 전용 변경 | local link·명령·파일명 확인, `git diff --check` |
 
-실행하지 못한 검사는 성공으로 기록하지 않고 `NOT_RUN`과 이유를 남긴다.
+고위험 secret mount나 운영 배포 경로를 변경하면 [QA 인수인계 계약](../../.agents/contracts/qa-handoff.md)에 따라 `qa-reviewer`와 `security-reviewer` 검증을 요청한다. 실제 QA 결과와 임시 handoff는 commit하지 않는다.
 
 ## Agent 인수인계 예시
 
 ```text
-feature-planner를 사용해 <작업 ID>의 실제 참조와 영향 범위를 분석해 주세요.
-기존 working tree 변경을 보존하고 삭제 후보를 사용 중·미사용·판단 보류로 분류해 주세요.
-분석 후 담당 implementer가 가장 작은 변경으로 구현하고 관련 검사를 실행해 주세요.
-중간 이상 위험이면 .agents/contracts/qa-handoff.md 형식으로 qa-reviewer에게 전달하고,
-인증·권한·credential·개인정보·migration·삭제·복구·배포가 포함되면 security-reviewer도 요청해 주세요.
+<작업 ID>만 수행해 주세요.
+현재 working tree 변경을 보존하고, 삭제 전 git grep으로 모든 참조를 확인해 주세요.
+설정 파일과 함께 Makefile, script, README, 운영 문서와 .env.example의 정합성을 확인해 주세요.
+가장 작은 일관된 변경으로 구현하고 이 문서의 최소 검사를 실제 실행해 주세요.
+실행하지 못한 검사는 NOT_RUN과 이유를 남겨 주세요.
+운영 secret·배포 경로 변경이면 qa-reviewer와 security-reviewer에게 읽기 전용 검증을 요청해 주세요.
 ```
 
 ## 완료 보고 형식
 
 - 작업 ID:
-- 변경 또는 제거한 파일:
+- 변경·제거한 파일:
 - 유지한 후보와 근거:
+- 동기화한 문서·script·환경변수:
 - 실행한 검사와 결과:
 - 실행하지 못한 검사:
 - QA status:
