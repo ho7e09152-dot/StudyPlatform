@@ -1,21 +1,21 @@
 # Study-ing
 
-> GitLab 저장소를 학습 기록의 원본으로 유지하면서 일정, 제출, 리뷰와 팀 진행 상황을 한곳에서 관리하는 학습 Workspace 플랫폼
+> 연결된 GitLab 또는 GitHub Repository를 학습 기록의 원본으로 유지하면서 일정, 제출, 리뷰와 팀 진행 상황을 한곳에서 관리하는 학습 Workspace 플랫폼
 
 ![Study-ing](frontend/public/og.png)
 
 ## 무엇을 제공하나요?
 
-- GitLab OAuth 로그인과 접근 가능한 프로젝트 기반 Workspace 생성
+- GitLab OAuth 또는 GitHub App 로그인과 접근 가능한 Repository 기반 Workspace 생성
 - Repository 권한 기반 Workspace 발견 및 명시적 참여
 - 여러 학습 항목과 1·2차 마감을 포함한 일정 관리
-- 링크·텍스트·코드 제출과 사용자 계정 기반 GitLab commit
+- 링크·텍스트·코드 제출과 사용자 Provider 계정 기반 Repository commit
 - 팀원 제출 열람, review, Activity와 알림
 - 학습 세션·팀 문서를 모아보는 학습 라이브러리
 - 기간별 완료율, 점수와 팀 학습 기록
 - Owner·Manager·Member 역할과 Repository 권한을 분리한 접근 제어
 
-Study-ing은 GitLab을 대체하지 않습니다. 일정과 제출 원본은 연결된 Repository에 기록하고, 애플리케이션 DB에는 계정·Workspace·설정·알림과 화면 조회에 필요한 동기화 데이터를 저장합니다.
+Study-ing은 Repository Provider를 대체하지 않습니다. 일정과 제출 원본은 연결된 Repository에 기록하고, 애플리케이션 DB에는 계정·Workspace·설정·알림과 화면 조회에 필요한 동기화 데이터를 저장합니다.
 
 ## 기술 구성
 
@@ -23,11 +23,11 @@ Study-ing은 GitLab을 대체하지 않습니다. 일정과 제출 원본은 연
 |---|---|
 | Frontend | React 19, Next.js 16, Vinext/Vite, TypeScript, CSS, Playwright |
 | Backend | Java 21, Spring Boot 4.1, Spring Security, Spring Data JPA, Flyway |
-| Data | PostgreSQL, Spring Session JDBC, GitLab Repository |
-| Integration | GitLab OAuth/API, capability-gated GitHub Connected Account linking |
+| Data | PostgreSQL, Spring Session JDBC, GitLab 또는 GitHub Repository |
+| Integration | GitLab OAuth/API, capability-gated GitHub App Login·Connected Account linking·Repository API |
 | Operations | Docker Compose, Nginx, GitLab CI |
 
-GitHub는 현재 로그인이나 Repository Provider가 아닙니다. 설정에서 계정을 연결하는 기반만 capability로 제한해 제공하며, 실제 인증 및 Repository 기능은 GitLab만 지원합니다.
+GitHub Login, Connected Account linking과 Repository 기능은 각각 독립적인 capability와 GitHub App 설정이 완전할 때만 노출됩니다. capability가 비활성화되거나 설정이 불완전하면 해당 UI와 Backend 경로를 사용할 수 없습니다.
 
 ## 빠른 시작
 
@@ -98,5 +98,6 @@ study_platform/
 - [디자인 시스템](docs/design/design-system.md)
 - [Production runbook](docs/operations/production.md)
 - [기여 가이드](CONTRIBUTING.md)
+- [Codex 구현·Claude QA 가이드](docs/agents/README.md)
 
 현재 동작을 이해할 때는 오래된 설계 메모 대신 위 문서와 실제 코드·테스트·OpenAPI를 기준으로 판단합니다.

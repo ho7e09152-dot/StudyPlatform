@@ -1,8 +1,8 @@
-# Study-ing public launch checklist
+# Study-ing 공개 출시 체크리스트
 
 내부 출시 준비 문서다. 사용자-facing Legal Page에는 노출하지 않는다.
 
-## P0 — operator and legal publication
+## P0 — 운영자와 법무 문서 공개
 
 - [x] 운영자 `이호철` 입력
 - [ ] 서비스 문의 `ho7e09152@gmail.com` 실제 수신 테스트
@@ -14,7 +14,7 @@
 - [ ] Profile onboarding에서 만 14세 이상, Terms, Privacy 세 동의가 각각 기록되는지 확인
 - [ ] 향후 version 변경 시 재동의 화면 구현 전 required version을 올리지 않음
 
-## P0 — infrastructure inventory
+## P0 — 인프라 목록
 
 - [ ] `{{PRODUCTION_HOSTING_PROVIDER}}`, `{{PRODUCTION_SERVER_REGION}}` 입력
 - [ ] `{{PRODUCTION_DB_PROVIDER}}`, `{{PRODUCTION_DB_REGION}}` 입력
@@ -23,7 +23,7 @@
 - [ ] 국외 이전/국외 처리 해당 여부와 필요한 고지·동의 검토
 - [ ] 외부 proxy/CDN/monitoring/backup vendor inventory 완료
 
-## P0 — security and logging
+## P0 — 보안과 logging
 
 - [ ] HTTPS와 Secure/HttpOnly/SameSite=Lax session cookie 실응답 확인
 - [ ] 모든 proxy layer에서 OAuth callback query access log 차단
@@ -33,9 +33,9 @@
 - [ ] DB/disk/backup encryption 확인
 - [ ] [incident response runbook](incident-response.md)의 owner/contact placeholder 입력 및 tabletop 점검
 
-## P0 — retention and deletion
+## P0 — 보유와 삭제
 
-- [ ] Flyway V12까지 적용 확인
+- [ ] Flyway V13까지 적용 확인
 - [ ] notification 90일, sync log 30일, audit 180일 cleanup scheduler 실행 확인
 - [ ] Workspace soft delete 7일과 restore/final purge 확인
 - [ ] encrypted DB backup 최대 7일 rotation rule 확인
@@ -44,7 +44,7 @@
 - [ ] Account delete 직후 protected API가 credential 없음으로 차단되고 session이 만료되는지 확인
 - [ ] GitLab files/commits/comments가 Study-ing 삭제와 별개임을 실제 문구와 대조
 
-## P1 — operations
+## P1 — 운영
 
 - [ ] 개인정보 열람·정정·삭제·처리정지 요청의 본인확인·처리·회신 절차 확정
 - [ ] 서비스 종료 고지와 Study-ing DB 정리 절차 확정
@@ -53,7 +53,7 @@
 - [ ] abandoned onboarding account cleanup 정책 후속 결정
 - [ ] soft-deleted document/message 자체 retention 후속 결정
 
-## Future change triggers
+## 향후 재검토 조건
 
 다음 기능 추가 전 Terms/Privacy와 onboarding consent를 다시 검토한다.
 

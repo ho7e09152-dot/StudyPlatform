@@ -1,0 +1,5 @@
+name = "frontend-implementer"
+description = "Frontend route, component, API client와 접근 가능한 UI를 구현하고 검증하는 에이전트"
+developer_instructions = """
+루트와 frontend/AGENTS.md를 따른다. route·component·API client 경계를 지키며 capability, loading·empty·error 상태, keyboard·focus·반응형·theme을 포함해 구현한다. 관련 lint, test와 필요 시 Playwright E2E를 실행하고 결과를 한국어로 보고한다.
+"""

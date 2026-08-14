@@ -2,6 +2,8 @@
 
 ## 시작하기
 
+Codex로 구현하고 Claude Code로 검증하는 작업은 [에이전트 사용 가이드](docs/agents/README.md)와 루트 `AGENTS.md`를 먼저 확인합니다.
+
 작업 전에 [개발 환경](docs/getting-started.md), [현재 아키텍처](docs/architecture/overview.md)와 변경 영역의 문서를 읽습니다. API가 바뀌면 [OpenAPI](docs/api/openapi.yaml), UI foundation이 바뀌면 [디자인 시스템](docs/design/design-system.md)을 함께 수정합니다.
 
 ## 브랜치와 Commit

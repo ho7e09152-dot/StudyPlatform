@@ -1,44 +1,30 @@
-# Multi-provider Migration Plan
+# Multi-provider Migration 계획
 
 Status: V11 implemented and verified on H2 PostgreSQL mode; production backup/restore rehearsal required
 Updated: 2026-08-13
 
-## Pre-migration checks
+## Migration 전 검사
 
-- Count `user_accounts`, `workspace_metadata`, and `oauth_credentials`.
-- Confirm every credential `user_id` resolves to one user.
-- Confirm every non-null `gitlab_user_id` and `gitlab_project_id` is unique.
-- Take an encrypted database backup and verify restore credentials.
-- Stop concurrent application writes during the V11 deployment window.
+- `user_accounts`, `workspace_metadata`, `oauth_credentials` 수를 기록한다.
+- 모든 credential `user_id`가 정확히 한 user를 가리키는지 확인한다.
+- null이 아닌 `gitlab_user_id`, `gitlab_project_id`가 unique인지 확인한다.
+- 암호화 DB backup을 만들고 restore credential을 검증한다.
+- V11 배포 중 application의 동시 쓰기를 중단한다.
 
-## V11 stages
+## V11 단계
 
-1. Add `provider_accounts` and its external identity constraints.
-2. Backfill one GITLAB account per existing user, preserving user UUIDs.
-3. Repoint credential ownership to Provider Account without decrypting ciphertext.
-4. Keep a deprecated user-id mirror for one compatibility release.
-5. Add `repository_connections` and backfill every Workspace as GITLAB.
-6. Relax legacy GitLab columns for future non-GitLab rows; do not drop them yet.
-7. Deploy code that reads normalized fields first and compatibility fields second.
+1. `provider_accounts`와 외부 identity constraint를 추가한다.
+2. user UUID를 유지하며 기존 user마다 GITLAB account 하나를 backfill한다.
+3. ciphertext를 복호화하지 않고 credential 소유권을 Provider Account로 옮긴다.
+4. 한 compatibility release 동안 deprecated user-id mirror를 유지한다.
+5. `repository_connections`를 추가하고 모든 Workspace를 GITLAB으로 backfill한다.
+6. 향후 non-GitLab row를 위해 기존 GitLab column의 제약을 완화하되 아직 삭제하지 않는다.
+7. 정규화 field를 먼저, compatibility field를 다음으로 읽는 code를 배포한다.
 
-## Post-migration verification
+## Migration 후 검증
 
-The following counts must match pre-migration values:
-
-- users
-- Workspaces
-- credentials
-- active memberships
-
-Additionally verify:
-
-- exactly one GITLAB Provider Account per legacy GitLab user
-- no orphan Provider Account or credential
-- one Repository Connection per existing Workspace
-- credential decrypt/refresh succeeds for a sampled account
-- Login resolves the existing Study-ing UUID rather than creating a duplicate
-- Workspace Discovery, Join, repository write, and account deletion regression tests pass
+user, Workspace, credential, active membership 수가 migration 전과 같아야 한다. 기존 GitLab user마다 GITLAB Provider Account가 정확히 하나인지, orphan account/credential이 없는지, 기존 Workspace마다 Repository Connection이 하나인지 확인한다. 표본 account의 credential decrypt/refresh, 기존 UUID로의 Login, Workspace Discovery·Join·repository write·account 삭제 회귀 test를 검증한다.
 
 ## Rollback
 
-Before accepting new multi-provider writes, restore the pre-migration backup or run a reviewed reverse migration that restores credential `user_id` from Provider Account ownership. Never drop Provider Accounts after new providers are linked. From that point the safe recovery path is roll-forward.
+새 multi-provider 쓰기를 받기 전에는 migration 전 backup을 restore하거나 Provider Account 소유권에서 credential `user_id`를 복원하는 검토된 reverse migration을 실행할 수 있다. 새 Provider가 연결된 뒤에는 Provider Account를 삭제하지 않으며 안전한 복구 경로는 roll-forward다.
