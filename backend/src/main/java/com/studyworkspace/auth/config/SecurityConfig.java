@@ -43,6 +43,7 @@ public class SecurityConfig {
 				.requestMatchers(
 					"/api/v1/auth/gitlab/**",
 					"/api/v1/auth/github/**",
+					"/api/v1/auth/me",
 					"/api/v1/provider-accounts/github/callback",
 					"/api/v1/auth/csrf",
 					"/api/v1/capabilities",

@@ -71,7 +71,7 @@ public class AuthController {
 	public ResponseEntity<Map<String, Object>> me(HttpServletRequest request) {
 		StudyIngPrincipal user = getPrincipal(request);
 		if (user == null) {
-			return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("authenticated", false));
+			return ResponseEntity.ok(Map.of("authenticated", false));
 		}
 		return ResponseEntity.ok(Map.of(
 			"authenticated", true,

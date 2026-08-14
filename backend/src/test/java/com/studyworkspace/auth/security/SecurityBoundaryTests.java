@@ -74,6 +74,13 @@ class SecurityBoundaryTests {
 	}
 
 	@Test
+	void unauthenticatedSessionProbeReturnsAQuietPublicState() throws Exception {
+		mockMvc.perform(get("/api/v1/auth/me"))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.authenticated").value(false));
+	}
+
+	@Test
 	void sessionIdentityUsesStableSerializationVersions() {
 		assertThat(ObjectStreamClass.lookup(GitLabUser.class).getSerialVersionUID()).isZero();
 		assertThat(ObjectStreamClass.lookup(StudyIngPrincipal.class).getSerialVersionUID()).isEqualTo(1L);
