@@ -17,8 +17,10 @@ class WorkspaceRepositoryPathTests {
 	}
 
 	@Test
-	void rejectsArbitraryBasePaths() {
-		assertThatThrownBy(() -> WorkspaceRepositoryPath.normalizeBasePath("src"))
-			.isInstanceOf(WorkspaceException.class);
+	void acceptsSafeCustomBasePathsAndRejectsTraversal() {
+		assertThat(WorkspaceRepositoryPath.normalizeBasePath("/study/algorithm/")).isEqualTo("study/algorithm");
+		assertThatThrownBy(() -> WorkspaceRepositoryPath.normalizeBasePath("study/../private"))
+			.isInstanceOf(WorkspaceException.class)
+			.extracting("code").isEqualTo("INVALID_REPOSITORY_BASE_PATH");
 	}
 }

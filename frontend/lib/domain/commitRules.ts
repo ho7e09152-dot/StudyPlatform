@@ -18,7 +18,7 @@ export const COMMIT_RULE_VARIABLES = [
 export type CommitRuleContext = Record<(typeof COMMIT_RULE_VARIABLES)[number]["key"], string>;
 
 const VARIABLE_PATTERN = /\{([A-Za-z][A-Za-z0-9]*)\}/g;
-const SUPPORTED_VARIABLES = new Set(COMMIT_RULE_VARIABLES.map(({ key }) => key));
+const SUPPORTED_VARIABLES = new Set<string>(COMMIT_RULE_VARIABLES.map(({ key }) => key));
 const MAX_LENGTH_CONTEXT: CommitRuleContext = {
   action: "update",
   name: "가".repeat(40),

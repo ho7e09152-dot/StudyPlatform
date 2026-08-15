@@ -77,6 +77,26 @@ class RepositoryImportAnalysisServiceTests {
 		assertThat(result.compatibleSubmissions()).isEqualTo(1);
 	}
 
+	@Test
+	void detectsARepeatedExistingMarkdownLayoutWithoutMovingFiles() {
+		GitLabOAuthProjectService gitLab = mock(GitLabOAuthProjectService.class);
+		when(gitLab.getProject("token", 12)).thenReturn(project());
+		when(gitLab.getAllRepositoryTree("token", 12, "main")).thenReturn(List.of(
+			new GitLabTreeItem("one", "김서연.md", "blob", "study/260810/김서연.md", "100644"),
+			new GitLabTreeItem("two", "김서연.md", "blob", "study/260811/김서연.md", "100644"),
+			new GitLabTreeItem("readme", "README.md", "blob", "README.md", "100644")
+		));
+
+		var result = new RepositoryImportAnalysisService(gitLab, new SessionYamlParser()).analyze("token", 12);
+
+		assertThat(result.classification()).isEqualTo("DETECTED");
+		assertThat(result.repositoryBasePath()).isEqualTo("study");
+		assertThat(result.detectedLayout().folderBlocks()).containsExactly("DATE");
+		assertThat(result.detectedLayout().fileNameBlocks()).containsExactly("NAME");
+		assertThat(result.detectedRecords()).isEqualTo(2);
+		assertThat(result.layoutConfidence()).isEqualTo(1.0);
+	}
+
 	private static GitLabProject project() {
 		return new GitLabProject(12, "Study", "team/study", "main", "https://gitlab.example/team/study", "private");
 	}

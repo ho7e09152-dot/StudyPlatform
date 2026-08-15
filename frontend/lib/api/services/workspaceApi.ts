@@ -7,6 +7,7 @@ import type {
   StudyMember,
 } from "@/lib/domain/types";
 import type { ProviderId } from "@/lib/providers/provider-descriptors";
+import type { RepositoryStorageLayout } from "@/lib/domain/repository-storage-layout";
 
 function workspacePath(workspaceId: string) {
   return `/api/v1/workspaces/${encodeURIComponent(workspaceId)}`;
@@ -261,6 +262,7 @@ export interface CreateWorkspaceInput {
   repositorySchemaVersion: number;
   importMode: string;
   expectedTreeFingerprint: string;
+  storageLayout?: RepositoryStorageLayout;
 }
 
 export interface WorkspaceSyncResult {

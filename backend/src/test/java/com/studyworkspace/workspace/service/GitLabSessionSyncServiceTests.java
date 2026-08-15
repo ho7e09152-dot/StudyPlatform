@@ -13,6 +13,7 @@ import com.studyworkspace.gitlab.dto.GitLabUser;
 import com.studyworkspace.gitlab.service.GitLabOAuthProjectService;
 import com.studyworkspace.workspace.domain.WorkspaceModels.CreateWorkspaceRequest;
 import com.studyworkspace.workspace.domain.WorkspaceModels.WorkspaceState;
+import com.studyworkspace.workspace.domain.RepositoryStorageLayout;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tools.jackson.databind.ObjectMapper;
@@ -64,6 +65,38 @@ class GitLabSessionSyncServiceTests {
 		assertThat(result.workspace().sessions().get("2026-08-09").lastCommitId()).isEqualTo("sha-1");
 		assertThat(result.importedSubmissions()).isEqualTo(1);
 		assertThat(result.workspace().submissions().get("260809/member-7").lastCommitId()).isEqualTo("submission-sha");
+	}
+
+	@Test
+	void importsDetectedPlainMarkdownWithoutMovingTheRepositoryFile() {
+		WorkspaceService workspaces = new WorkspaceService(new ObjectMapper(), tempDir.resolve("detected.json").toString(), false);
+		RepositoryStorageLayout layout = new RepositoryStorageLayout(
+			List.of("DATE"), List.of("NAME"), "YYYY", "MM", "YYMMDD", "md"
+		);
+		WorkspaceState workspace = workspaces.create(
+			new CreateWorkspaceRequest(
+				"Study", 12, "team/study", "main", "Asia/Seoul", "study", 3, "DETECTED", null,
+				"Owner.md", null, null, "GITLAB", "12", layout
+			),
+			new GitLabUser(7, "owner", "Owner", null, null)
+		);
+		GitLabOAuthProjectService gitLab = mock(GitLabOAuthProjectService.class);
+		when(gitLab.getAllRepositoryTree("token", 12, "main")).thenReturn(List.of(
+			new GitLabTreeItem("record", "Owner.md", "blob", "study/260809/Owner.md", "100644")
+		));
+		when(gitLab.getRepositoryFile("token", 12, "study/260809/Owner.md", "main"))
+			.thenReturn(file("study/260809/Owner.md", "# 기존 회고\n오늘 배운 내용", "record-sha"));
+
+		var result = new GitLabSessionSyncService(
+			gitLab, new SessionYamlParser(), workspaces, new SubmissionMarkdownCodec(new ObjectMapper())
+		).sync("token", workspace.id());
+
+		assertThat(result.failures()).isEmpty();
+		assertThat(result.workspace().sessions()).containsOnlyKeys("2026-08-09");
+		assertThat(result.workspace().submissions()).containsKey("260809/member-7");
+		assertThat(result.workspace().submissions().get("260809/member-7").submissions().getFirst().value())
+			.contains("기존 회고");
+		assertThat(result.workspace().submissions().get("260809/member-7").lastCommitId()).isEqualTo("record-sha");
 	}
 
 	private static GitLabFileContent file(String path, String content, String sha) {

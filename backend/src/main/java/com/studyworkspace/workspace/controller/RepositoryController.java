@@ -9,6 +9,8 @@ import com.studyworkspace.provider.ProviderCapabilities;
 import com.studyworkspace.workspace.domain.RepositoryProvider;
 import com.studyworkspace.workspace.domain.WorkspaceException;
 import com.studyworkspace.workspace.dto.RepositorySummary;
+import com.studyworkspace.workspace.dto.RepositoryTreeEntry;
+import com.studyworkspace.workspace.domain.WorkspaceModels.RepositoryIdentity;
 import com.studyworkspace.workspace.service.RepositoryDataService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -56,6 +58,29 @@ public class RepositoryController {
 		HttpServletRequest request
 	) {
 		return analysis.analyze(accessToken(requireSupported(provider), principal, request), provider, externalId);
+	}
+
+	@GetMapping("/{provider}/{externalId}/tree")
+	public List<RepositoryTreeEntry> tree(
+		@PathVariable RepositoryProvider provider,
+		@PathVariable String externalId,
+		@AuthenticationPrincipal StudyIngPrincipal principal,
+		HttpServletRequest request
+	) {
+		provider = requireSupported(provider);
+		String token = accessToken(provider, principal, request);
+		RepositorySummary repository = repositories.require(provider).getRepository(token, externalId);
+		RepositoryIdentity identity = new RepositoryIdentity(
+			provider.name(), repository.externalId(), repository.fullName(), repository.webUrl(), repository.visibility(),
+			repository.defaultBranch(), repository.capabilities().canRead(), repository.capabilities().canWrite(),
+			repository.capabilities().canManage(), repository.providerPermission()
+		);
+		if (!org.springframework.util.StringUtils.hasText(repository.defaultBranch())) return List.of();
+		List<com.studyworkspace.workspace.port.RepositoryDataPort.TreeEntry> entries = repositories.require(provider).listTree(token, identity);
+		if (entries.size() > 10_000) {
+			throw new WorkspaceException("REPOSITORY_TREE_TOO_LARGE", "폴더 선택을 위해 표시할 수 있는 저장소 항목 수를 초과했습니다.", 413);
+		}
+		return entries.stream().map(entry -> new RepositoryTreeEntry(entry.path(), entry.name(), entry.type())).toList();
 	}
 
 	private RepositoryProvider requireSupported(RepositoryProvider provider) {

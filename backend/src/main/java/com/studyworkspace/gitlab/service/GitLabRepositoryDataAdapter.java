@@ -67,6 +67,7 @@ public class GitLabRepositoryDataAdapter implements RepositoryDataPort {
 			case "MOVE" -> GitLabCommitAction.move(action.sourcePath(), action.targetPath());
 			case "CREATE" -> GitLabCommitAction.create(action.targetPath(), action.content());
 			case "UPDATE" -> GitLabCommitAction.update(action.targetPath(), action.content(), action.expectedVersion());
+			case "DELETE" -> GitLabCommitAction.delete(action.targetPath(), action.expectedVersion());
 			default -> throw new IllegalArgumentException("Unsupported repository action: " + action.action());
 		}).toList();
 		return gitLab.createCommit(token, parseId(repository.externalRepositoryId()), branch, message, mapped, authorName).id();

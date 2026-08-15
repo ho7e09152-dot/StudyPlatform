@@ -1,58 +1,81 @@
-# GitLab 저장 구조 V2
+# Repository 학습 기록 저장 구조
 
-Study-ing이 새로 만드는 Workspace는 학습 데이터를 저장소 루트에 흩어 놓지 않고 서비스 전용 경로에 모읍니다.
+Study-ing은 Workspace마다 저장소 안의 학습 기록 위치와 경로 규칙을 관리합니다. 저장소가 원본이며 DB의 일정·제출 데이터는 빠른 조회와 동기화를 위한 상태입니다.
+
+## 지원 버전
+
+| 버전 | 용도 | 기본 경로 |
+|---|---|---|
+| V1 | 기존 호환 | `YYMMDD/session.yml`, `YYMMDD/{이름}.md` |
+| V2 | 기존 Study-ing 관리 구조 | `.study-workspace/sessions/{연도}/{날짜}/...` |
+| V3 | Workspace별 사용자 설정 구조 | 선택한 기준 경로 + 블록 규칙 |
+
+V1/V2 Workspace는 연결할 때 현재 구조를 그대로 유지합니다. 사용자 설정이 있는 새 Workspace만 V3를 사용합니다.
+
+## V3 저장 구조
+
+사용자는 `YEAR`, `MONTH`, `DATE`, `DAY`, `NAME`, `ITEM` 블록을 한 줄 규칙에 배치합니다. 구분선 왼쪽은 폴더 구조이고 가장 오른쪽 슬롯은 파일 이름입니다. 기본 추천값은 다음과 같습니다.
 
 ```text
-.study-workspace/
-├── config.yml
-└── sessions/
-    └── 2026/
-        └── 2026-08-10/
-            ├── session.yml
-            └── submissions/
-                ├── 김서연.md
-                └── 이민준.md
+기준 경로: .study-workspace/sessions
+폴더: YEAR / MONTH / DAY
+파일: NAME.md
+
+.study-workspace/sessions/
+└── 2026/
+    └── 08/
+        └── 14/
+            ├── 김서연.md
+            └── 이민준.md
 ```
 
-## 설계 원칙
+- `DATE`는 `260814`처럼 연·월·일을 모두 포함하는 전체 날짜이고, `DAY`는 `14`처럼 일자만 표현합니다.
+- 날짜와 작성자를 식별할 수 있도록 전체 경로에 `DATE` 또는 유효한 `YEAR/MONTH/DAY` 조합과 `NAME`이 필요합니다.
+- 블록은 전체 경로에서 중복 사용할 수 없습니다.
+- 폴더의 시간 블록은 `YEAR → MONTH → DATE` 또는 `YEAR → MONTH → DAY` 순서를 유지합니다. 전체 날짜를 월 아래에 둔 `MONTH/DATE`도 허용하지만 `DATE`와 `DAY`는 같은 일자를 중복 표현하므로 함께 사용할 수 없습니다. UI는 유효한 삽입 위치만 허용하고 서버도 같은 규칙을 검증합니다.
+- 추천 구조는 `YEAR=YYYY`, `MONTH=MM`, `DAY=DD`를 사용합니다.
+- `DATE`는 위치와 무관하게 `YYYY-MM-DD`, `YYYYMMDD`, `YY-MM-DD`, `YYMMDD`처럼 항상 전체 날짜를 표현합니다. `DAY`는 `DD` 또는 `DD_KO`(`14일`)만 사용합니다.
+- 파일 이름 슬롯은 정확히 하나의 `DATE` 또는 `NAME`만 허용합니다. 파일 이름으로 사용한 블록은 폴더에서 사용할 수 없으며, 파일 이름을 교체하면 이전 블록은 유효한 폴더 위치로 이동합니다.
+- 파일이 `NAME.md`이면 날짜 식별 블록은 폴더에, 파일이 `DATE.md`이면 작성자를 식별하는 `NAME`은 폴더에 둡니다.
+- `DAY`만으로는 날짜를 복원할 수 없으므로 별도 `YEAR/MONTH` 또는 연도를 포함하는 `MONTH` 포맷이 필요합니다. 전체 `DATE`를 선택하면 별도의 `DAY`는 사용하지 않습니다.
+- 한글 단위가 필요한 경우 연도(`2026년/26년`), 월(`08월/8월`), 전체 월(`2026년-08월/26년-08월`), 전체 날짜(`2026년-08월-14일/26년-08월-14일`) 포맷을 선택할 수 있습니다.
+- 현재 파일 확장자는 Markdown(`.md`)만 지원합니다.
+- `ITEM`을 폴더에 사용하면 항목별 파일 경로를 만들고 DB에서는 멤버별 제출 상태로 다시 합칩니다.
+- 내부 일정 metadata는 선택한 기준 경로 아래 `.study-ing/sessions/{YYYY-MM-DD}.yml`에 둡니다. 사용자 Preview에서는 학습 기록 경로 이해에 필요한 파일만 보여줍니다.
 
-- `config.yml`의 `repositorySchemaVersion`이 현재 구조 버전을 나타냅니다.
-- 일정 파일은 `sessions/{연도}/{YYYY-MM-DD}/session.yml`에 저장합니다.
-- 멤버 제출 파일은 같은 날짜의 `submissions/` 아래에 저장합니다.
-- 사용자에게 보이는 제출 파일명은 프로필에서 정한 이름을 사용합니다.
-- GitLab은 원본이고 DB의 일정·제출 데이터는 빠른 조회와 동기화를 위한 캐시입니다.
+V3 설정은 `.study-workspace/config.yml`에 기록합니다. 설정에는 schema version, 기준 경로, 블록 순서와 날짜 포맷만 포함되며 OAuth credential이나 개인 설정은 포함하지 않습니다.
+
+## 기존 Repository 감지
+
+Workspace 연결 분석은 LLM을 사용하지 않고 tree 경로의 반복 패턴을 계산합니다. 현재 감지하는 대표 형태는 다음과 같습니다.
+
+```text
+{base}/{YYMMDD}/{name}.md
+{base}/{name}/{YYMMDD}.md
+{base}/{year}/{month}/{date}/{name}.md
+```
+
+Markdown 파일 중 같은 후보 패턴이 2개 이상이며 반복률이 60% 이상일 때만 `DETECTED`로 제안합니다. 신뢰도가 낮으면 추천 구조를 보여주고 사용자가 직접 지정하게 합니다. 감지는 파일을 읽거나 이동하지 않으며, 선택 결과는 이후 새 학습 기록의 경로 규칙으로 사용합니다.
+
+감지된 날짜와 현재 Workspace 멤버 이름이 일치하는 일반 Markdown은 파일을 수정하지 않고 `기존 학습 기록` 항목으로 읽습니다. 다른 멤버의 파일은 그 사용자가 Workspace에 참여한 뒤 동기화할 수 있습니다. 원본에 Study-ing metadata가 없으므로 기존 Markdown 안의 세부 항목 의미까지 추측하지는 않습니다. 사용자가 해당 기록을 수정할 때부터 그 파일에 Study-ing metadata를 기록합니다.
+
+## 기존 파일 보호
+
+- Workspace 생성 과정에서는 기존 파일을 이동하거나 이름을 바꾸지 않습니다.
+- `.study-workspace/config.yml` 외에는 생성 시점에 새 파일을 만들지 않습니다.
+- 사용자가 선택한 학습 기록 영역 밖의 파일은 읽기 목록에는 나타날 수 있지만 Study-ing 쓰기 대상이 아닙니다.
+- 구조 변경과 파일 migration은 생성 흐름과 분리된 명시적 작업이어야 합니다.
+- 저장소 분석 이후 tree fingerprint가 달라지면 생성을 중단하고 재분석합니다.
 
 ## 제출 커밋 규칙
 
-Workspace 소유자와 관리자는 Settings의 `커밋 규칙`에서 제출 커밋 메시지 기본값과 제출 화면 안내 문구를 관리합니다. 설정은 `WorkspaceSettings.commitRules`에 저장되며 기존 Workspace에 값이 없으면 서버가 기본값을 보완합니다.
+Workspace 소유자와 관리자는 Settings의 `커밋 규칙`에서 제출 커밋 메시지 기본값과 제출 화면 안내 문구를 관리합니다.
 
 - 기본 규칙: `{action}: {name} · {date} · {item}`
 - 지원 변수: `{action}`, `{name}`, `{date}`, `{item}`, `{itemId}`, `{session}`
-- 제출 화면은 규칙을 현재 사용자·일정·항목 값으로 치환해 기본 메시지를 만듭니다.
-- 제출자는 저장 전에 메시지를 수정할 수 있습니다.
-- 서버는 최종 메시지를 제어 문자 없이 200자 이내로 검증합니다.
-- Workspace 설정의 안내 문구는 제출 모달의 커밋 메시지 입력 아래에 표시합니다.
+- 제출자는 저장 전에 최종 메시지를 수정할 수 있습니다.
+- 서버는 제어 문자를 제거하고 200자 이내로 검증합니다.
 
-## 기존 V1 저장소 호환
+## V1 → V2 기존 migration
 
-기존 `YYMMDD/session.yml`, `YYMMDD/{멤버}.md` 구조는 계속 읽고 쓸 수 있습니다. 연결 시 자동으로 파일을 이동하지 않습니다. Owner가 설정의 **저장 구조 정리**를 명시적으로 실행할 때만 V2로 변경합니다.
-
-마이그레이션은 다음 순서로 동작합니다.
-
-1. 저장소 tree를 읽어 이동 대상과 충돌을 미리 보여줍니다.
-2. 미리보기 시점의 tree fingerprint를 저장합니다.
-3. 실행 직전에 tree를 다시 읽고 fingerprint가 달라졌으면 중단합니다.
-4. GitLab Commit API의 여러 `move` action과 `config.yml` 변경을 단일 커밋으로 수행합니다.
-5. 커밋 성공 후 Workspace DB의 스키마 버전을 V2로 바꾸고 GitLab 원본을 다시 동기화합니다.
-
-다음 조건에서는 자동 마이그레이션을 중단합니다.
-
-- `.study-workspace` 대상 경로가 다른 용도로 이미 사용 중인 경우
-- 이동 대상 V2 파일이 이미 존재하는 경우
-- 날짜 폴더 안에 서비스가 해석하지 못하는 파일이 있는 경우
-- 미리보기 이후 저장소 tree가 변경된 경우
-- 단일 안전 커밋 한도인 99개 이동 파일을 초과한 경우
-
-## 롤백
-
-모든 이동은 GitLab 커밋 하나로 남으므로 GitLab에서 해당 커밋을 revert하면 파일 구조를 되돌릴 수 있습니다. 되돌린 뒤에는 현재 Workspace의 `repositorySchemaVersion`과 실제 저장소 구조가 달라지므로 운영자가 DB 상태를 V1으로 복구하거나 Workspace를 다시 연결해야 합니다.
+기존 설정의 **저장 구조 정리**는 V1을 V2로 옮기는 별도 기능입니다. tree fingerprint와 대상 충돌을 검사한 뒤 GitLab의 단일 multi-action commit으로 처리합니다. 이 기능은 V3 구조 빌더와 자동 연결되지 않으며 Workspace 생성 중에는 실행되지 않습니다.

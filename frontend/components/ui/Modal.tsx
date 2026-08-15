@@ -14,14 +14,18 @@ export function Modal({
   title,
   description,
   onClose,
+  onEscapeKeyDown,
+  closeOnBackdrop = true,
   children,
   size = "medium",
 }: {
   title: string;
   description?: string;
   onClose: () => void;
+  onEscapeKeyDown?: () => boolean;
+  closeOnBackdrop?: boolean;
   children: ReactNode;
-  size?: "medium" | "large" | "editor";
+  size?: "medium" | "large" | "editor" | "folder-picker";
 }) {
   const titleId = useId();
   const descriptionId = useId();
@@ -35,7 +39,13 @@ export function Modal({
     document.body.style.overflow = "hidden";
 
     function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") requestClose();
+      if (event.key === "Escape") {
+        if (onEscapeKeyDown?.()) {
+          event.preventDefault();
+          return;
+        }
+        requestClose();
+      }
       if (event.key !== "Tab" || !panel) return;
       const focusable = Array.from(
         panel.querySelectorAll<HTMLElement>(
@@ -60,7 +70,7 @@ export function Modal({
       document.body.style.overflow = "";
       previous?.focus();
     };
-  }, [requestClose]);
+  }, [onEscapeKeyDown, requestClose]);
 
   const layer = (
     <div className="modal-layer" role="presentation" data-motion-state={motionState}>
@@ -68,7 +78,7 @@ export function Modal({
         className="modal-scrim"
         type="button"
         aria-label="대화상자 닫기"
-        onClick={requestClose}
+        onClick={closeOnBackdrop ? requestClose : undefined}
       />
       <div
         ref={panelRef}

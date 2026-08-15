@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   AlertTriangle,
   Check,
@@ -24,7 +24,7 @@ import {
   syncWorkspace,
   type DiscoverableWorkspace,
 } from "@/lib/api/services/workspaceApi";
-import { analyzeRepository, getRepository, listRepositories } from "@/lib/api/services/repositoryApi";
+import { analyzeRepository, getRepository, listRepositories, listRepositoryTree, type RepositoryTreeEntry } from "@/lib/api/services/repositoryApi";
 import type { RepositoryImportAnalysis } from "@/lib/api/types/gitlab";
 import {
   getRepositoryVisibilityLabel,
@@ -41,6 +41,13 @@ import {
   getDemoRepositoryAnalysis,
   listDemoRepositories,
 } from "@/lib/demo/data";
+import { StorageLayoutBuilder } from "@/components/onboarding/StorageLayoutBuilder";
+import {
+  RECOMMENDED_STORAGE_LAYOUT,
+  validateStorageBasePath,
+  validateStorageLayout,
+  type RepositoryStorageLayout,
+} from "@/lib/domain/repository-storage-layout";
 
 type FlowState = "loading" | "ready" | "checking" | "saving";
 type PermissionState = "idle" | "checking" | "ready" | "denied";
@@ -70,6 +77,13 @@ export function WorkspaceConnectionFlow({
   const [permission, setPermission] = useState<PermissionState>("idle");
   const [verifiedAccessLevel, setVerifiedAccessLevel] = useState<number | null>(null);
   const [analysis, setAnalysis] = useState<RepositoryImportAnalysis | null>(null);
+  const [repositoryTree, setRepositoryTree] = useState<RepositoryTreeEntry[]>([]);
+  const [repositoryTreeLoading, setRepositoryTreeLoading] = useState(false);
+  const [repositoryTreeError, setRepositoryTreeError] = useState("");
+  const repositoryTreeRequest = useRef(0);
+  const [repositoryBasePath, setRepositoryBasePath] = useState(".study-workspace/sessions");
+  const [storageLayout, setStorageLayout] = useState<RepositoryStorageLayout>(() => structuredClone(RECOMMENDED_STORAGE_LAYOUT));
+  const [showStorageOptions, setShowStorageOptions] = useState(false);
   const [error, setError] = useState("");
   const [reconnectRequired, setReconnectRequired] = useState(false);
 	const [joining, setJoining] = useState(false);
@@ -87,6 +101,9 @@ export function WorkspaceConnectionFlow({
     ? discoverable.find((candidate) => candidate.provider === selected.provider && candidate.externalRepositoryId === selected.externalId)
     : undefined;
 	const providerDescriptor = getProviderDescriptor(provider);
+  const normalizedStorageBase = repositoryBasePath.trim().replace(/^\/+|\/+$/g, "");
+  const storageBaseBlocked = Boolean(normalizedStorageBase && repositoryTree.some((entry) => entry.type === "blob"
+    && (entry.path === normalizedStorageBase || normalizedStorageBase.startsWith(`${entry.path}/`))));
 
   async function loadRepositories(query = "") {
     setState("loading");
@@ -97,6 +114,10 @@ export function WorkspaceConnectionFlow({
       setSelectedId(null);
       setPermission("idle");
       setAnalysis(null);
+      setRepositoryTree([]);
+      setRepositoryTreeLoading(false);
+      setRepositoryTreeError("");
+      setShowStorageOptions(false);
       setSearched(Boolean(query.trim()));
       setState("ready");
       return;
@@ -107,6 +128,10 @@ export function WorkspaceConnectionFlow({
       setSelectedId(null);
       setPermission("idle");
       setAnalysis(null);
+      setRepositoryTree([]);
+      setRepositoryTreeLoading(false);
+      setRepositoryTreeError("");
+      setShowStorageOptions(false);
       setSearched(Boolean(query.trim()));
     } catch (requestError) {
       setReconnectRequired(requestError instanceof ApiError && requestError.code === "GITLAB_RECONNECT_REQUIRED");
@@ -122,7 +147,7 @@ export function WorkspaceConnectionFlow({
 	}
 	const controller = new AbortController();
 	void getProviderCapabilities(controller.signal).then((result) => {
-		const available = result.repositoryProviders?.length ? result.repositoryProviders : ["GITLAB"];
+		const available: ProviderId[] = result.repositoryProviders?.length ? result.repositoryProviders : ["GITLAB"];
 		setRepositoryProviders(available);
 		if (!available.includes(provider)) setProvider(available[0]);
 	}).catch(() => undefined);
@@ -164,6 +189,12 @@ export function WorkspaceConnectionFlow({
     setPermission("checking");
     setVerifiedAccessLevel(repository.accessLevel ?? null);
     setAnalysis(null);
+    setRepositoryTree([]);
+    setRepositoryTreeLoading(false);
+    setRepositoryTreeError("");
+    setRepositoryBasePath(".study-workspace/sessions");
+    setStorageLayout(structuredClone(RECOMMENDED_STORAGE_LAYOUT));
+    setShowStorageOptions(false);
     setError("");
     setReconnectRequired(false);
 
@@ -180,13 +211,18 @@ export function WorkspaceConnectionFlow({
       return;
     }
 	if (demoMode) {
-		setAnalysis(getDemoRepositoryAnalysis(repository));
+		const demoAnalysis = getDemoRepositoryAnalysis(repository);
+		setAnalysis(demoAnalysis);
+		setRepositoryBasePath(demoAnalysis.repositoryBasePath);
+		setStorageLayout(structuredClone(RECOMMENDED_STORAGE_LAYOUT));
 		setPermission("ready");
+		setRepositoryTreeLoading(false);
 		setState("ready");
 		return;
 	}
 
     setState("checking");
+    void loadRepositoryFolders(repository);
     try {
       const [connection, repositoryAnalysis] = await Promise.all([
         getRepository(repository.provider, repository.externalId),
@@ -200,6 +236,15 @@ export function WorkspaceConnectionFlow({
         return;
       }
       setAnalysis(repositoryAnalysis);
+      if (repositoryAnalysis.detectedLayout) {
+        setStorageLayout(repositoryAnalysis.detectedLayout);
+        setRepositoryBasePath(repositoryAnalysis.repositoryBasePath || "");
+      } else if (repositoryAnalysis.classification === "EMPTY" || repositoryAnalysis.classification === "LEGACY") {
+        setStorageLayout(structuredClone(RECOMMENDED_STORAGE_LAYOUT));
+        setRepositoryBasePath(".study-workspace/sessions");
+      } else {
+        setRepositoryBasePath(repositoryAnalysis.repositoryBasePath);
+      }
       setPermission("ready");
     } catch (requestError) {
 	  setReconnectRequired(requestError instanceof ApiError && requestError.code.includes("REAUTH"));
@@ -207,6 +252,29 @@ export function WorkspaceConnectionFlow({
       setPermission(requestError instanceof ApiError && requestError.status === 403 ? "denied" : "idle");
     } finally {
       setState("ready");
+    }
+  }
+
+  async function loadRepositoryFolders(repository: Repository) {
+    const requestId = ++repositoryTreeRequest.current;
+    if (demoMode) {
+      setRepositoryTree([]);
+      setRepositoryTreeLoading(false);
+      setRepositoryTreeError("");
+      return;
+    }
+    setRepositoryTreeLoading(true);
+    setRepositoryTreeError("");
+    try {
+      const nextTree = await listRepositoryTree(repository.provider, repository.externalId);
+      if (requestId !== repositoryTreeRequest.current) return;
+      setRepositoryTree(nextTree);
+    } catch (requestError) {
+      if (requestId !== repositoryTreeRequest.current) return;
+      setRepositoryTree([]);
+      setRepositoryTreeError(getUserFacingError(requestError, "폴더를 불러오지 못했어요."));
+    } finally {
+      if (requestId === repositoryTreeRequest.current) setRepositoryTreeLoading(false);
     }
   }
 
@@ -226,7 +294,9 @@ export function WorkspaceConnectionFlow({
 
   async function handleCreate(event: FormEvent) {
     event.preventDefault();
-    if (!selected || permission !== "ready" || !analysis || analysis.classification === "CONFLICTED" || !workspaceName.trim()) return;
+    const usesConfigurableLayout = analysis?.classification === "EMPTY" || analysis?.classification === "LEGACY" || analysis?.classification === "DETECTED";
+    if (!selected || permission !== "ready" || !analysis || analysis.classification === "CONFLICTED" || !workspaceName.trim()
+      || (usesConfigurableLayout && (repositoryTreeLoading || Boolean(repositoryTreeError) || validateStorageLayout(storageLayout).length > 0 || validateStorageBasePath(repositoryBasePath) || storageBaseBlocked))) return;
     setState("saving");
     setError("");
     if (demoMode) {
@@ -242,10 +312,11 @@ export function WorkspaceConnectionFlow({
         gitlabProjectPath: selected.path,
         defaultBranch: selected.defaultBranch ?? "main",
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Seoul",
-        repositoryBasePath: analysis.repositoryBasePath,
-        repositorySchemaVersion: analysis.repositorySchemaVersion,
+        repositoryBasePath: usesConfigurableLayout ? repositoryBasePath : analysis.repositoryBasePath,
+        repositorySchemaVersion: usesConfigurableLayout ? 3 : analysis.repositorySchemaVersion,
         importMode: analysis.classification,
         expectedTreeFingerprint: analysis.treeFingerprint,
+        storageLayout: usesConfigurableLayout ? storageLayout : undefined,
       });
       try {
         onCreated((await syncWorkspace(workspace.id)).workspace);
@@ -283,12 +354,13 @@ export function WorkspaceConnectionFlow({
 		  <small>{demoMode ? "실제 계정이나 저장소에는 접근하지 않으며, 이 화면의 정보는 모두 데모 데이터입니다." : "연결한 계정과 GitHub App 설치 범위 안에서 접근 가능한 저장소만 표시합니다."}</small>
         </header>
 
+		{!showStorageOptions ? <>
 		{repositoryProviders.length > 1 ? (
 		  <div className="workspace-connect__provider-selector" role="tablist" aria-label="저장소 Provider">
 			{repositoryProviders.map((item) => (
 			  <button key={item} type="button" role="tab" aria-selected={provider === item}
 				className={provider === item ? "is-selected" : undefined}
-				onClick={() => { setState("loading"); setProvider(item); setSelectedId(null); setAnalysis(null); setError(""); }}>
+				onClick={() => { setState("loading"); setProvider(item); setSelectedId(null); setAnalysis(null); setShowStorageOptions(false); setError(""); }}>
 				<ProviderIcon provider={item} size={16} /> {getProviderDescriptor(item).displayName}
 			  </button>
 			))}
@@ -341,12 +413,13 @@ export function WorkspaceConnectionFlow({
 			</div>
           )}
         </section>
+		</> : null}
 
         {selected ? (
           <section className="workspace-connect__section" aria-labelledby="connection-check-title">
             <div className="workspace-connect__section-heading">
-              <span>2</span>
-              <div><h2 id="connection-check-title">연결 확인</h2><p>Workspace 이름과 저장소 상태를 확인하세요.</p></div>
+              <span>{showStorageOptions ? "3" : "2"}</span>
+              <div><h2 id="connection-check-title">{showStorageOptions ? "Workspace 설정" : "연결 확인"}</h2><p>{showStorageOptions ? "이름과 학습 기록 저장 방식을 확인하세요." : "저장소 권한과 기존 학습 기록을 확인하세요."}</p></div>
             </div>
 
             {connectedWorkspace ? (
@@ -365,43 +438,86 @@ export function WorkspaceConnectionFlow({
 				</div>
             ) : (
               <form className="workspace-connect__create" onSubmit={handleCreate}>
-                <label className="field">
-                  <span>Workspace 이름</span>
-                  <input value={workspaceName} onChange={(event) => setWorkspaceName(event.target.value)} maxLength={80} required />
-				  <small>저장소 이름과 다르게 정할 수 있습니다.</small>
-                </label>
-
-                <PermissionCheck
-                  state={permission}
-                  accessLevel={verifiedAccessLevel}
-                  defaultBranch={selected.defaultBranch}
-                  webUrl={selected.webUrl}
-				  provider={selected.provider}
-                />
-
-                {state === "checking" ? (
-                  <div className="repository-analysis-loading" role="status" aria-live="polite">
-                    <LoaderCircle className="spin" />
-                    <span><strong>기존 학습 기록을 확인하고 있어요</strong><small>일정과 제출 기록의 호환성을 안전하게 분석합니다.</small></span>
+                {showStorageOptions ? <>
+                  <div className="workspace-connect__selected-repository">
+                    <ProviderIcon provider={selected.provider} size={17} />
+                    <span><strong>{selected.name}</strong><small>{getProviderDescriptor(selected.provider).displayName} · {selected.path}</small></span>
+                    <button type="button" onClick={(event) => { event.preventDefault(); setShowStorageOptions(false); setError(""); }}>저장소 변경</button>
                   </div>
-                ) : null}
-                {analysis ? <RepositoryAnalysisCard analysis={analysis} /> : null}
 
-                {error ? (
-                  <div className="workspace-connect__error" role="alert">
-                    <AlertTriangle size={18} /><span><strong>프로젝트를 확인하지 못했어요.</strong><small>{error}</small></span>
-					{reconnectRequired ? <a className="button button--secondary button--small" href={provider === "GITHUB" ? "/settings/accounts" : getGitLabReconnectUrl(APP_ROUTES.workspaceNew)}>다시 연결</a> : <button className="button button--secondary button--small" type="button" onClick={() => void selectRepository(selected)}><RotateCcw size={15} /> 다시 시도</button>}
-                  </div>
-                ) : null}
+                  <label className="field">
+                    <span>Workspace 이름</span>
+                    <input value={workspaceName} onChange={(event) => setWorkspaceName(event.target.value)} maxLength={80} required />
+				    <small>저장소 이름과 다르게 정할 수 있습니다.</small>
+                  </label>
 
-                {analysis && permission === "ready" ? (
-                  <div className="workspace-connect__actions">
-                    <span>{analysis.classification === "CONFLICTED" ? "문제를 해결한 뒤 다시 분석해 주세요." : "연결하면 기존 저장소 파일은 그대로 유지됩니다."}</span>
-                    <button className="button button--primary" type="submit" disabled={analysis.classification === "CONFLICTED" || !workspaceName.trim() || state === "saving"}>
-                      {state === "saving" ? <><LoaderCircle className="spin" size={17} /> 연결 중…</> : analysis.classification === "COMPATIBLE" || analysis.classification === "PARTIALLY_COMPATIBLE" ? "기존 학습 기록과 연결하기" : "Workspace 연결하기"}
-                    </button>
-                  </div>
-                ) : null}
+                  {analysis && ["EMPTY", "LEGACY", "DETECTED"].includes(analysis.classification) ? (
+                    <StorageLayoutBuilder
+                      basePath={repositoryBasePath}
+                      layout={storageLayout}
+                      tree={repositoryTree}
+                      treeLoading={repositoryTreeLoading}
+                      treeError={repositoryTreeError}
+                      detectedRecords={analysis.classification === "DETECTED" ? analysis.detectedRecords : 0}
+                      onRetryTree={() => void loadRepositoryFolders(selected)}
+                      onBasePathChange={setRepositoryBasePath}
+                      onLayoutChange={setStorageLayout}
+                    />
+                  ) : analysis && ["COMPATIBLE", "PARTIALLY_COMPATIBLE"].includes(analysis.classification) ? (
+                    <div className="storage-layout-existing">
+                      <CheckCircle2 size={18} />
+                      <span><strong>기존 Study-ing 저장 구조를 유지합니다.</strong><small>현재 파일을 이동하지 않고 새 기록도 같은 위치에 저장합니다.</small></span>
+                    </div>
+                  ) : null}
+
+                  {error ? (
+                    <div className="workspace-connect__error" role="alert">
+                      <AlertTriangle size={18} /><span><strong>Workspace를 연결하지 못했어요.</strong><small>{error}</small></span>
+					  {reconnectRequired ? <a className="button button--secondary button--small" href={provider === "GITHUB" ? "/settings/accounts" : getGitLabReconnectUrl(APP_ROUTES.workspaceNew)}>다시 연결</a> : null}
+                    </div>
+                  ) : null}
+
+                  {analysis ? (
+                    <div className="workspace-connect__actions workspace-connect__actions--wizard">
+                      <button className="button button--secondary" type="button" onClick={(event) => { event.preventDefault(); setShowStorageOptions(false); setError(""); }}>이전 단계</button>
+                      <button className="button button--primary" type="submit" disabled={!workspaceName.trim() || state === "saving"
+                        || (["EMPTY", "LEGACY", "DETECTED"].includes(analysis.classification)
+                          && (repositoryTreeLoading || Boolean(repositoryTreeError) || validateStorageLayout(storageLayout).length > 0 || Boolean(validateStorageBasePath(repositoryBasePath)) || storageBaseBlocked))}>
+                        {state === "saving" ? <><LoaderCircle className="spin" size={17} /> 연결 중…</> : analysis.classification === "COMPATIBLE" || analysis.classification === "PARTIALLY_COMPATIBLE" ? "기존 학습 기록과 연결하기" : "Workspace 연결하기"}
+                      </button>
+                    </div>
+                  ) : null}
+                </> : <>
+                  <PermissionCheck
+                    state={permission}
+                    accessLevel={verifiedAccessLevel}
+                    defaultBranch={selected.defaultBranch}
+                    webUrl={selected.webUrl}
+				    provider={selected.provider}
+                  />
+
+                  {state === "checking" ? (
+                    <div className="repository-analysis-loading" role="status" aria-live="polite">
+                      <LoaderCircle className="spin" />
+                      <span><strong>기존 학습 기록을 확인하고 있어요</strong><small>일정과 제출 기록의 호환성을 안전하게 분석합니다.</small></span>
+                    </div>
+                  ) : null}
+                  {analysis ? <RepositoryAnalysisCard analysis={analysis} /> : null}
+
+                  {error ? (
+                    <div className="workspace-connect__error" role="alert">
+                      <AlertTriangle size={18} /><span><strong>프로젝트를 확인하지 못했어요.</strong><small>{error}</small></span>
+					  {reconnectRequired ? <a className="button button--secondary button--small" href={provider === "GITHUB" ? "/settings/accounts" : getGitLabReconnectUrl(APP_ROUTES.workspaceNew)}>다시 연결</a> : <button className="button button--secondary button--small" type="button" onClick={() => void selectRepository(selected)}><RotateCcw size={15} /> 다시 시도</button>}
+                    </div>
+                  ) : null}
+
+                  {analysis && permission === "ready" ? (
+                    <div className="workspace-connect__actions">
+                      <span>{analysis.classification === "CONFLICTED" ? "문제를 해결한 뒤 다시 분석해 주세요." : "연결하면 기존 저장소 파일은 그대로 유지됩니다."}</span>
+                      <button className="button button--primary" type="button" disabled={analysis.classification === "CONFLICTED"} onClick={(event) => { event.preventDefault(); setShowStorageOptions(true); }}>계속</button>
+                    </div>
+                  ) : null}
+                </>}
               </form>
             )}
           </section>
@@ -451,6 +567,7 @@ function PermissionCheck({ state, accessLevel, defaultBranch, webUrl, provider }
 
 function RepositoryAnalysisCard({ analysis }: { analysis: RepositoryImportAnalysis }) {
   const compatible = analysis.classification === "COMPATIBLE" || analysis.classification === "PARTIALLY_COMPATIBLE";
+  const detected = analysis.classification === "DETECTED";
   const conflicted = analysis.classification === "CONFLICTED";
   const empty = analysis.classification === "EMPTY";
   return (
@@ -458,8 +575,8 @@ function RepositoryAnalysisCard({ analysis }: { analysis: RepositoryImportAnalys
       <header>
         <span>{conflicted ? <AlertTriangle size={18} /> : compatible ? <FileCheck2 size={18} /> : <Database size={18} />}</span>
         <div>
-          <strong>{conflicted ? "연결하기 전에 확인이 필요해요." : compatible ? "기존 학습 기록을 찾았어요." : empty ? "연결할 준비가 되었어요." : "연결할 준비가 되었어요."}</strong>
-          <small>{conflicted ? `${analysis.issues.length}개의 학습 데이터 문제가 발견되었습니다.` : empty ? "기존 저장소 파일은 그대로 유지됩니다." : "인식한 학습 기록만 연결하고 다른 파일은 그대로 유지합니다."}</small>
+          <strong>{conflicted ? "연결하기 전에 확인이 필요해요." : compatible ? "기존 Study-ing 학습 기록을 찾았어요." : detected ? "반복되는 학습 기록 구조를 찾았어요." : empty ? "연결할 준비가 되었어요." : "저장 구조를 직접 확인해주세요."}</strong>
+          <small>{conflicted ? `${analysis.issues.length}개의 학습 데이터 문제가 발견되었습니다.` : detected ? "현재 파일을 이동하지 않고 같은 경로 규칙을 사용합니다." : empty ? "추천 저장 방식이 자동으로 설정되었습니다." : "기존 저장소 파일은 변경하지 않습니다."}</small>
         </div>
       </header>
       {compatible ? (

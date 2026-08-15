@@ -49,3 +49,16 @@ export function analyzeRepository(provider: ProviderId, externalId: string, sign
     signal,
   );
 }
+
+export interface RepositoryTreeEntry {
+  path: string;
+  name: string;
+  type: "blob" | "tree";
+}
+
+export function listRepositoryTree(provider: ProviderId, externalId: string, signal?: AbortSignal) {
+  return apiGet<RepositoryTreeEntry[]>(
+    `/api/v1/repositories/${provider}/${encodeURIComponent(externalId)}/tree`,
+    signal,
+  );
+}

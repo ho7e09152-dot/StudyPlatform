@@ -3,6 +3,7 @@ import { initialWorkspaces } from "@/lib/data/seed";
 import type { Repository } from "@/lib/domain/repository";
 import type { Workspace } from "@/lib/domain/types";
 import type { ProviderId } from "@/lib/providers/provider-descriptors";
+import { RECOMMENDED_STORAGE_LAYOUT } from "@/lib/domain/repository-storage-layout";
 
 const demoRepositories: Repository[] = [
   {
@@ -45,14 +46,17 @@ export function getDemoRepositoryAnalysis(repository: Repository): RepositoryImp
     projectPath: repository.path,
     defaultBranch: repository.defaultBranch ?? "main",
     classification: "EMPTY",
-    repositoryBasePath: "",
-    repositorySchemaVersion: 1,
+    repositoryBasePath: ".study-workspace/sessions",
+    repositorySchemaVersion: 3,
     treeFingerprint: `demo-${repository.externalId}`,
     totalFiles: 0,
     compatibleSessions: 0,
     compatibleSubmissions: 0,
     ignoredFiles: 0,
     issues: [],
+    detectedLayout: structuredClone(RECOMMENDED_STORAGE_LAYOUT),
+    layoutConfidence: 1,
+    detectedRecords: 0,
   };
 }
 
@@ -81,5 +85,6 @@ export function createDemoWorkspace(repository: Repository, name: string): Works
       canManage: true,
       providerPermission: "DEMO",
     },
+    storageLayout: structuredClone(RECOMMENDED_STORAGE_LAYOUT),
   };
 }

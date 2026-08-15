@@ -8,9 +8,14 @@ public final class WorkspaceRepositoryPath {
 	public static String normalizeBasePath(String value) {
 		if (!StringUtils.hasText(value)) return "";
 		String normalized = value.trim().replaceAll("^/+|/+$", "");
-		if (!normalized.equals(".study-workspace")) {
+		boolean invalid = normalized.isBlank() || normalized.length() > 240 || normalized.contains("\\")
+			|| normalized.chars().anyMatch(Character::isISOControl)
+			|| java.util.Arrays.stream(normalized.split("/"))
+				.anyMatch(segment -> segment.isBlank() || ".".equals(segment) || "..".equals(segment)
+					|| ".git".equalsIgnoreCase(segment));
+		if (invalid) {
 			throw new com.studyworkspace.workspace.domain.WorkspaceException(
-				"INVALID_REPOSITORY_BASE_PATH", "지원하지 않는 Workspace 저장 경로입니다.", 400
+				"INVALID_REPOSITORY_BASE_PATH", "학습 기록 위치가 올바르지 않습니다.", 400
 			);
 		}
 		return normalized;

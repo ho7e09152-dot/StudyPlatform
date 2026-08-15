@@ -1,3 +1,5 @@
+import type { RepositoryStorageLayout } from "./repository-storage-layout";
+
 export type SessionType = "algorithm" | "english" | "cs" | "free";
 
 export type SubmissionType = "link" | "text" | "code" | "mixed";
@@ -80,6 +82,7 @@ export interface MemberSubmissionFile {
   reflection?: string;
   lastCommitId: string;
   lastCommitMessage?: string;
+  itemCommitIds?: Record<string, string>;
 }
 
 export interface WorkspaceSettings {
@@ -106,7 +109,7 @@ export interface Workspace {
   defaultBranch: string;
   repositoryBasePath: string;
   repositorySchemaVersion: number;
-  importMode: "EMPTY" | "COMPATIBLE" | "LEGACY" | "PARTIALLY_COMPATIBLE";
+  importMode: "EMPTY" | "COMPATIBLE" | "LEGACY" | "DETECTED" | "PARTIALLY_COMPATIBLE";
   status: "ACTIVE" | "SOFT_DELETED";
   lastSyncedAt: string;
   members: StudyMember[];
@@ -125,6 +128,7 @@ export interface Workspace {
     canManage: boolean;
     providerPermission?: string | null;
   } | null;
+  storageLayout?: RepositoryStorageLayout | null;
 }
 
 export interface DashboardMetrics {

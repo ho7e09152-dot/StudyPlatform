@@ -219,6 +219,32 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/RepositoryImportAnalysis" }
 
+  /repositories/{provider}/{externalId}/tree:
+    get:
+      tags: [Repository]
+      summary: 저장 위치 선택을 위한 Provider 저장소 tree 조회
+      operationId: listProviderRepositoryTree
+      x-implementation-status: implemented
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/RepositoryProvider" }
+        - name: externalId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: normalized repository tree entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RepositoryTreeEntry" }
+        "413":
+          $ref: "#/components/responses/InvalidRequest"
+
   /auth/gitlab/login:
     get:
       tags: [Auth]
@@ -2139,16 +2165,16 @@ components:
 
     RepositoryImportAnalysis:
       type: object
-      required: [projectId, classification, repositoryBasePath, repositorySchemaVersion, treeFingerprint, totalFiles, compatibleSessions, compatibleSubmissions, ignoredFiles, issues]
+      required: [projectId, classification, repositoryBasePath, repositorySchemaVersion, treeFingerprint, totalFiles, compatibleSessions, compatibleSubmissions, ignoredFiles, issues, detectedLayout, layoutConfidence, detectedRecords]
       properties:
         projectId: { type: integer, format: int64 }
         projectPath: { type: string }
         defaultBranch: { type: string }
         classification:
           type: string
-          enum: [EMPTY, COMPATIBLE, LEGACY, PARTIALLY_COMPATIBLE, CONFLICTED]
+          enum: [EMPTY, COMPATIBLE, LEGACY, DETECTED, PARTIALLY_COMPATIBLE, CONFLICTED]
         repositoryBasePath: { type: string }
-        repositorySchemaVersion: { type: integer, enum: [1, 2] }
+        repositorySchemaVersion: { type: integer, enum: [1, 2, 3] }
         treeFingerprint: { type: string, minLength: 64, maxLength: 64 }
         totalFiles: { type: integer, minimum: 0 }
         compatibleSessions: { type: integer, minimum: 0 }
@@ -2162,6 +2188,40 @@ components:
               path: { type: string }
               code: { type: string }
               message: { type: string }
+        detectedLayout:
+          oneOf:
+            - $ref: "#/components/schemas/RepositoryStorageLayout"
+            - type: "null"
+        layoutConfidence: { type: number, minimum: 0, maximum: 1 }
+        detectedRecords: { type: integer, minimum: 0 }
+
+    RepositoryStorageLayout:
+      type: object
+      required: [folderBlocks, fileNameBlocks, yearFormat, monthFormat, dateFormat, dayFormat, extension]
+      properties:
+        folderBlocks:
+          type: array
+          uniqueItems: true
+          items: { type: string, enum: [YEAR, MONTH, DATE, DAY, NAME, ITEM] }
+        fileNameBlocks:
+          type: array
+          minItems: 1
+          maxItems: 1
+          uniqueItems: true
+          items: { type: string, enum: [DATE, NAME] }
+        yearFormat: { type: string, enum: [YYYY, YY, YYYY_KO, YY_KO] }
+        monthFormat: { type: string, enum: [MM, M, YYYY-MM, YY-MM, MM_KO, M_KO, YYYY_MM_KO, YY_MM_KO] }
+        dateFormat: { type: string, enum: [YYYY-MM-DD, YYYYMMDD, YY-MM-DD, YYMMDD, YYYY_MM_DD_KO, YY_MM_DD_KO] }
+        dayFormat: { type: string, enum: [DD, DD_KO] }
+        extension: { type: string, enum: [md] }
+
+    RepositoryTreeEntry:
+      type: object
+      required: [path, name, type]
+      properties:
+        path: { type: string }
+        name: { type: string }
+        type: { type: string, enum: [blob, tree] }
 
     GitLabProject:
       type: object
@@ -2208,7 +2268,7 @@ components:
           type: integer
         importMode:
           type: string
-          enum: [EMPTY, COMPATIBLE, LEGACY, PARTIALLY_COMPATIBLE]
+          enum: [EMPTY, COMPATIBLE, LEGACY, DETECTED, PARTIALLY_COMPATIBLE]
         deletedAt:
           type: [string, "null"]
           format: date-time
@@ -2230,6 +2290,10 @@ components:
                 $ref: "#/components/schemas/WorkspaceMember"
             settings:
               $ref: "#/components/schemas/WorkspaceSettings"
+            storageLayout:
+              oneOf:
+                - $ref: "#/components/schemas/RepositoryStorageLayout"
+                - type: "null"
     WorkspaceResponse:
       type: object
       required: [data]
@@ -2288,17 +2352,20 @@ components:
           type: string
         repositoryBasePath:
           type: string
-          enum: ["", ".study-workspace"]
+          maxLength: 240
+          description: 저장소 루트 기준 학습 기록 경로. 빈 문자열은 저장소 루트입니다.
         repositorySchemaVersion:
           type: integer
-          enum: [1, 2]
+          enum: [1, 2, 3]
         importMode:
           type: string
-          enum: [EMPTY, COMPATIBLE, LEGACY, PARTIALLY_COMPATIBLE]
+          enum: [EMPTY, COMPATIBLE, LEGACY, DETECTED, PARTIALLY_COMPATIBLE]
         expectedTreeFingerprint:
           type: string
           minLength: 64
           maxLength: 64
+        storageLayout:
+          $ref: "#/components/schemas/RepositoryStorageLayout"
     RepositorySchemaMigrationRequest:
       type: object
       required: [expectedTreeFingerprint]

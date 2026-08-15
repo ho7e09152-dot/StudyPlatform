@@ -25,8 +25,9 @@ public class RepositoryInitializationService {
 	}
 
 	public void initialize(String accessToken, WorkspaceState workspace, String authorName) {
-		if (!WorkspaceRepositoryLayout.MANAGED_BASE_PATH.equals(workspace.repositoryBasePath())) return;
-		String content = configContent(workspace.id(), workspace.repositorySchemaVersion());
+		if (!WorkspaceRepositoryLayout.MANAGED_BASE_PATH.equals(workspace.repositoryBasePath())
+			&& WorkspaceRepositoryLayout.schemaVersion(workspace.repositorySchemaVersion()) != WorkspaceRepositoryLayout.CUSTOM_SCHEMA_VERSION) return;
+		String content = configContent(workspace);
 		RepositoryDataPort repository = repositories.require(workspace.repository());
 		try {
 			repository.createFile(
@@ -48,5 +49,25 @@ public class RepositoryInitializationService {
 		return "version: 1\nrepositorySchemaVersion: "
 			+ WorkspaceRepositoryLayout.schemaVersion(repositorySchemaVersion)
 			+ "\nworkspaceId: \"" + workspaceId + "\"\n";
+	}
+
+	public static String configContent(WorkspaceState workspace) {
+		StringBuilder content = new StringBuilder(configContent(workspace.id(), workspace.repositorySchemaVersion()));
+		if (WorkspaceRepositoryLayout.schemaVersion(workspace.repositorySchemaVersion()) == WorkspaceRepositoryLayout.CUSTOM_SCHEMA_VERSION
+			&& workspace.storageLayout() != null) {
+			content.append("repositoryBasePath: \"").append(escape(workspace.repositoryBasePath())).append("\"\n")
+				.append("storageFolderBlocks: \"").append(String.join(",", workspace.storageLayout().folderBlocks())).append("\"\n")
+				.append("storageFileNameBlocks: \"").append(String.join(",", workspace.storageLayout().fileNameBlocks())).append("\"\n")
+				.append("storageYearFormat: \"").append(workspace.storageLayout().yearFormat()).append("\"\n")
+				.append("storageMonthFormat: \"").append(workspace.storageLayout().monthFormat()).append("\"\n")
+				.append("storageDateFormat: \"").append(workspace.storageLayout().dateFormat()).append("\"\n")
+				.append("storageDayFormat: \"").append(workspace.storageLayout().dayFormat()).append("\"\n")
+				.append("storageExtension: \"").append(workspace.storageLayout().extension()).append("\"\n");
+		}
+		return content.toString();
+	}
+
+	private static String escape(String value) {
+		return value == null ? "" : value.replace("\\", "\\\\").replace("\"", "\\\"");
 	}
 }

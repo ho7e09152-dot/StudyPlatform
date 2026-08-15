@@ -23,6 +23,7 @@ import java.util.stream.Collectors;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 import com.studyworkspace.workspace.domain.CommitRulePolicy;
+import com.studyworkspace.workspace.domain.RepositoryStorageLayout;
 import com.studyworkspace.workspace.domain.WorkspaceException;
 import com.studyworkspace.gitlab.dto.GitLabUser;
 import com.studyworkspace.auth.security.StudyIngPrincipal;
@@ -64,6 +65,7 @@ public class WorkspaceService {
 		String write(
 			WorkspaceState workspace,
 			StudySession session,
+			SessionItem item,
 			StudyMember member,
 			MemberSubmissionFile current,
 			MemberSubmissionFile next,
@@ -183,10 +185,16 @@ public class WorkspaceService {
 		);
 		long legacyGitLabProjectId = "GITLAB".equals(repository.provider()) ? Long.parseLong(repository.externalRepositoryId()) : 0;
 		String branch = StringUtils.hasText(repository.defaultBranch()) ? repository.defaultBranch().trim() : "main";
+		RepositoryStorageLayout storageLayout = request.storageLayout() == null
+			? null : new RepositoryStorageLayoutPolicy().validate(request.storageLayout());
+		int schemaVersion = storageLayout == null
+			? WorkspaceRepositoryLayout.schemaVersion(request.repositorySchemaVersion())
+			: WorkspaceRepositoryLayout.CUSTOM_SCHEMA_VERSION;
+		String basePath = WorkspaceRepositoryPath.normalizeBasePath(request.repositoryBasePath());
 		WorkspaceState workspace = new WorkspaceState(
 			id, request.name().trim(), legacyGitLabProjectId, repository.fullName(), branch,
-			WorkspaceRepositoryPath.normalizeBasePath(request.repositoryBasePath()),
-			WorkspaceRepositoryLayout.schemaVersion(request.repositorySchemaVersion()),
+			basePath,
+			schemaVersion,
 			StringUtils.hasText(request.importMode()) ? request.importMode() : "EMPTY", "ACTIVE", now(),
 			List.of(owner), Map.of(), Map.of(),
 			new WorkspaceSettings(
@@ -194,7 +202,8 @@ public class WorkspaceService {
 				true,
 				new Notifications(true, true, true)
 			),
-			repository
+			repository,
+			storageLayout
 		);
 		store(workspace);
 		persist();
@@ -297,7 +306,7 @@ public class WorkspaceService {
 			current.id(), name, current.gitlabProjectId(), current.gitlabProjectPath(), current.defaultBranch(),
 			current.repositoryBasePath(), current.repositorySchemaVersion(), current.importMode(), current.status(),
 			current.lastSyncedAt(), current.members(), current.sessions(), current.submissions(), settings,
-			current.repository()
+			current.repository(), current.storageLayout()
 		);
 		store(updated);
 		persist();
@@ -315,7 +324,7 @@ public class WorkspaceService {
 			WorkspaceRepositoryPath.normalizeBasePath(repositoryBasePath),
 			WorkspaceRepositoryLayout.schemaVersion(repositorySchemaVersion),
 			current.importMode(), current.status(), current.lastSyncedAt(), current.members(), current.sessions(),
-			current.submissions(), current.settings()
+			current.submissions(), current.settings(), current.repository(), null
 		);
 		store(updated);
 		persist();
@@ -360,7 +369,8 @@ public class WorkspaceService {
 		WorkspaceState updated = new WorkspaceState(
 			current.id(), current.name(), current.gitlabProjectId(), current.gitlabProjectPath(), current.defaultBranch(),
 			current.repositoryBasePath(), current.repositorySchemaVersion(), current.importMode(), status,
-			current.lastSyncedAt(), current.members(), current.sessions(), current.submissions(), current.settings()
+			current.lastSyncedAt(), current.members(), current.sessions(), current.submissions(), current.settings(),
+			current.repository(), current.storageLayout()
 		);
 		store(updated);
 		persist();
@@ -478,7 +488,8 @@ public class WorkspaceService {
 			WorkspaceState anonymizedWorkspace = new WorkspaceState(
 				workspace.id(), workspace.name(), workspace.gitlabProjectId(), workspace.gitlabProjectPath(), workspace.defaultBranch(),
 				workspace.repositoryBasePath(), workspace.repositorySchemaVersion(), workspace.importMode(), workspace.status(),
-				workspace.lastSyncedAt(), anonymized, Map.copyOf(sessions), Map.copyOf(submissions), workspace.settings()
+				workspace.lastSyncedAt(), anonymized, Map.copyOf(sessions), Map.copyOf(submissions), workspace.settings(),
+				workspace.repository(), workspace.storageLayout()
 			);
 			store(anonymizedWorkspace);
 			changed = true;
@@ -662,7 +673,7 @@ public class WorkspaceService {
 	public WorkspaceState upsertSubmission(String workspaceId, String date, String itemId, SubmissionRequest request, long gitLabUserId) {
 		return upsertSubmission(
 			workspaceId, date, itemId, request, gitLabUserId,
-			(workspace, session, member, current, next, commitMessage) -> localCommitId()
+			(workspace, session, item, member, current, next, commitMessage) -> localCommitId()
 		);
 	}
 
@@ -684,7 +695,7 @@ public class WorkspaceService {
 		StudyMember member = currentMember(workspace, gitLabUserId);
 		String key = session.folder() + "/" + member.id();
 		MemberSubmissionFile current = workspace.submissions().get(key);
-		validateExpectedSubmissionCommit(current, request.expectedFileCommitId());
+		validateExpectedSubmissionCommit(workspace, current, itemId, request.expectedFileCommitId());
 		String timestamp = now();
 		SubmissionEntry previous = current == null ? null : current.submissions().stream()
 			.filter(entry -> entry.itemId().equals(itemId)).findFirst().orElse(null);
@@ -698,10 +709,10 @@ public class WorkspaceService {
 		MemberSubmissionFile candidate = new MemberSubmissionFile(
 			1, member.id(), member.gitlabUserId(), member.displayName(), session.folder(), session.revision(), session.type(), timestamp,
 			List.copyOf(entries), current == null ? null : current.reflection(),
-			null, request.commitMessage().trim()
+			null, request.commitMessage().trim(), current == null ? Map.of() : current.itemCommitIds()
 		);
-		String commitId = requireCommitId(writer.write(workspace, session, member, current, candidate, request.commitMessage().trim()));
-		MemberSubmissionFile saved = withSubmissionCommitId(candidate, commitId);
+		String commitId = requireCommitId(writer.write(workspace, session, item, member, current, candidate, request.commitMessage().trim()));
+		MemberSubmissionFile saved = withSubmissionCommitId(candidate, itemId, commitId);
 		Map<String, MemberSubmissionFile> submissions = new LinkedHashMap<>(workspace.submissions());
 		submissions.put(key, saved);
 		WorkspaceState updated = copy(workspace, workspace.sessions(), submissions, workspace.settings(), workspace.lastSyncedAt());
@@ -713,7 +724,7 @@ public class WorkspaceService {
 	public WorkspaceState deleteSubmission(String workspaceId, String date, String itemId, long gitLabUserId) {
 		return deleteSubmission(
 			workspaceId, date, itemId, gitLabUserId,
-			(workspace, session, member, current, next, commitMessage) -> localCommitId()
+			(workspace, session, item, member, current, next, commitMessage) -> localCommitId()
 		);
 	}
 
@@ -736,11 +747,15 @@ public class WorkspaceService {
 		String commitMessage = "study: remove submission " + itemId;
 		MemberSubmissionFile candidate = new MemberSubmissionFile(
 			current.version(), current.memberId(), current.gitlabUserId(), current.username(), current.date(), session.revision(), current.sessionType(),
-			now(), entries, current.reflection(), null, commitMessage
+			now(), entries, current.reflection(), null, commitMessage, current.itemCommitIds()
 		);
+		SessionItem item = java.util.stream.Stream.concat(session.items().stream(), session.archivedItems().stream())
+			.filter(candidateItem -> candidateItem.id().equals(itemId)).findFirst()
+			.orElseThrow(() -> error("ITEM_NOT_FOUND", "삭제할 학습 항목을 찾을 수 없습니다.", 404));
 		MemberSubmissionFile saved = withSubmissionCommitId(
 			candidate,
-			requireCommitId(writer.write(workspace, session, member, current, candidate, commitMessage))
+			itemId,
+			requireCommitId(writer.write(workspace, session, item, member, current, candidate, commitMessage))
 		);
 		Map<String, MemberSubmissionFile> submissions = new LinkedHashMap<>(workspace.submissions());
 		submissions.put(key, saved);
@@ -888,14 +903,18 @@ public class WorkspaceService {
 		return "code".equals(request.type()) ? request.value() : request.value().trim();
 	}
 
-	private static void validateExpectedSubmissionCommit(MemberSubmissionFile current, String expectedCommitId) {
-		if (current == null) {
+	private static void validateExpectedSubmissionCommit(WorkspaceState workspace, MemberSubmissionFile current,
+		String itemId, String expectedCommitId) {
+		boolean itemFiles = workspace.storageLayout() != null && workspace.storageLayout().usesItemFiles();
+		String currentCommitId = current == null ? null
+			: itemFiles ? current.itemCommitIds().get(itemId) : current.lastCommitId();
+		if (!StringUtils.hasText(currentCommitId)) {
 			if (StringUtils.hasText(expectedCommitId)) {
 				throw error("SUBMISSION_CONFLICT", "제출 파일 상태가 변경되었습니다. 최신 내용을 다시 확인해 주세요.", 409);
 			}
 			return;
 		}
-		if (!StringUtils.hasText(expectedCommitId) || !expectedCommitId.equals(current.lastCommitId())) {
+		if (!StringUtils.hasText(expectedCommitId) || !expectedCommitId.equals(currentCommitId)) {
 			throw error("SUBMISSION_CONFLICT", "제출 파일이 다른 변경과 충돌했습니다. 최신 내용을 다시 확인해 주세요.", 409);
 		}
 	}
@@ -972,7 +991,7 @@ public class WorkspaceService {
 		return new WorkspaceState(
 			current.id(), current.name(), current.gitlabProjectId(), current.gitlabProjectPath(), current.defaultBranch(),
 			current.repositoryBasePath(), current.repositorySchemaVersion(), current.importMode(), current.status(), syncedAt,
-			current.members(), Map.copyOf(sessions), Map.copyOf(submissions), settings
+			current.members(), Map.copyOf(sessions), Map.copyOf(submissions), settings, current.repository(), current.storageLayout()
 		);
 	}
 
@@ -980,7 +999,8 @@ public class WorkspaceService {
 		return new WorkspaceState(
 			current.id(), current.name(), current.gitlabProjectId(), current.gitlabProjectPath(), current.defaultBranch(),
 			current.repositoryBasePath(), current.repositorySchemaVersion(), current.importMode(), current.status(),
-			current.lastSyncedAt(), members, current.sessions(), current.submissions(), current.settings()
+			current.lastSyncedAt(), members, current.sessions(), current.submissions(), current.settings(),
+			current.repository(), current.storageLayout()
 		);
 	}
 
@@ -992,10 +1012,13 @@ public class WorkspaceService {
 		);
 	}
 
-	private static MemberSubmissionFile withSubmissionCommitId(MemberSubmissionFile file, String commitId) {
+	private static MemberSubmissionFile withSubmissionCommitId(MemberSubmissionFile file, String itemId, String commitId) {
+		Map<String, String> itemCommitIds = new LinkedHashMap<>(file.itemCommitIds());
+		if (file.submissions().stream().anyMatch(entry -> entry.itemId().equals(itemId))) itemCommitIds.put(itemId, commitId);
+		else itemCommitIds.remove(itemId);
 		return new MemberSubmissionFile(
 			file.version(), file.memberId(), file.gitlabUserId(), file.username(), file.date(), file.sessionRevision(), file.sessionType(),
-			file.updatedAt(), file.submissions(), file.reflection(), commitId, file.lastCommitMessage()
+			file.updatedAt(), file.submissions(), file.reflection(), commitId, file.lastCommitMessage(), Map.copyOf(itemCommitIds)
 		);
 	}
 
@@ -1069,7 +1092,7 @@ public class WorkspaceService {
 			workspace.repositorySchemaVersion() == null || workspace.repositorySchemaVersion() < 1 ? 1 : workspace.repositorySchemaVersion(),
 			workspace.importMode() == null ? "COMPATIBLE" : workspace.importMode(),
 			workspace.status(), workspace.lastSyncedAt(), List.copyOf(members), workspace.sessions(), workspace.submissions(), workspace.settings(),
-			workspace.repository()
+			workspace.repository(), workspace.storageLayout()
 		);
 	}
 
@@ -1156,7 +1179,7 @@ public class WorkspaceService {
 			.map(connection -> new WorkspaceState(
 				state.id(), state.name(), state.gitlabProjectId(), state.gitlabProjectPath(), state.defaultBranch(),
 				state.repositoryBasePath(), state.repositorySchemaVersion(), state.importMode(), state.status(), state.lastSyncedAt(),
-				state.members(), state.sessions(), state.submissions(), state.settings(), connection.toIdentity()
+				state.members(), state.sessions(), state.submissions(), state.settings(), connection.toIdentity(), state.storageLayout()
 			))
 			.orElse(state);
 	}

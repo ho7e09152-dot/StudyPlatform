@@ -32,6 +32,7 @@ public class SessionYamlParser {
 		WorkspaceRepositoryLayout.SessionLocation location = WorkspaceRepositoryLayout
 			.matchSession(path, WorkspaceRepositoryLayout.LEGACY_SCHEMA_VERSION)
 			.or(() -> WorkspaceRepositoryLayout.matchSession(path, WorkspaceRepositoryLayout.CURRENT_SCHEMA_VERSION))
+			.or(() -> WorkspaceRepositoryLayout.matchSession(path, WorkspaceRepositoryLayout.CUSTOM_SCHEMA_VERSION))
 			.orElseThrow(() -> invalid("일정 파일 경로 형식이 올바르지 않습니다."));
 		if (!StringUtils.hasText(content)) {
 			throw invalid("session.yml 파일이 비어 있습니다.");

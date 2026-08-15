@@ -49,6 +49,8 @@ import com.studyworkspace.workspace.service.RepositoryImportAnalysisService;
 import com.studyworkspace.workspace.service.RepositoryInitializationService;
 import com.studyworkspace.workspace.service.RepositorySchemaMigrationService;
 import com.studyworkspace.workspace.service.WorkspaceRepositoryLayout;
+import com.studyworkspace.workspace.service.RepositoryStorageLayoutPolicy;
+import com.studyworkspace.workspace.service.WorkspaceRepositoryPath;
 import com.studyworkspace.workspace.service.SubmissionReviewService;
 import com.studyworkspace.workspace.dto.SubmissionReviewThread;
 import com.studyworkspace.workspace.dto.CreateSubmissionReviewRequest;
@@ -95,6 +97,7 @@ public class WorkspaceController {
 	private final RepositoryInitializationService repositoryInitializationService;
 	private final RepositorySchemaMigrationService repositorySchemaMigrationService;
 	private final SubmissionReviewService submissionReviewService;
+	private final RepositoryStorageLayoutPolicy storageLayoutPolicy;
 
 	public WorkspaceController(
 		WorkspaceService service,
@@ -119,7 +122,8 @@ public class WorkspaceController {
 		OAuthAccountService accountService,
 		RepositoryInitializationService repositoryInitializationService,
 		RepositorySchemaMigrationService repositorySchemaMigrationService,
-		SubmissionReviewService submissionReviewService
+		SubmissionReviewService submissionReviewService,
+		RepositoryStorageLayoutPolicy storageLayoutPolicy
 	) {
 		this.service = service;
 		this.tokenProvider = tokenProvider;
@@ -144,6 +148,7 @@ public class WorkspaceController {
 		this.repositoryInitializationService = repositoryInitializationService;
 		this.repositorySchemaMigrationService = repositorySchemaMigrationService;
 		this.submissionReviewService = submissionReviewService;
+		this.storageLayoutPolicy = storageLayoutPolicy;
 	}
 
 	@GetMapping
@@ -222,29 +227,43 @@ public class WorkspaceController {
 		if ("CONFLICTED".equals(analysis.classification())) {
 			throw new WorkspaceException("REPOSITORY_PATH_CONFLICT", "서비스 전용 저장 경로가 기존 파일과 충돌합니다.", 409);
 		}
-		CreateWorkspaceRequest verified = new CreateWorkspaceRequest(
-			request.name(),
-			provider == RepositoryProvider.GITLAB ? Long.parseLong(project.externalId()) : 0,
-			project.fullName(),
-			StringUtils.hasText(project.defaultBranch()) ? project.defaultBranch() : "main",
-			profile.timezone(),
-			analysis.repositoryBasePath(),
-			analysis.repositorySchemaVersion(),
-			analysis.classification(),
-			analysis.treeFingerprint(),
-			profile.repositoryFileName(),
-			project.webUrl(),
-			project.visibility(),
-			provider.name(),
-			project.externalId()
-		);
-		int accessLevel = project.capabilities().canManage() ? 40 : 30;
+		var storageLayout = request.storageLayout() == null ? null : storageLayoutPolicy.validate(request.storageLayout());
 		RepositoryIdentity identity = new RepositoryIdentity(
 			provider.name(), project.externalId(), project.fullName(), project.webUrl(), project.visibility(),
 			StringUtils.hasText(project.defaultBranch()) ? project.defaultBranch() : "main",
 			project.capabilities().canRead(), project.capabilities().canWrite(), project.capabilities().canManage(),
 			project.providerPermission()
 		);
+		String repositoryBasePath = storageLayout == null
+			? analysis.repositoryBasePath()
+			: request.repositoryBasePath();
+		if (storageLayout != null) {
+			var currentTree = StringUtils.hasText(project.defaultBranch())
+				? repositories.require(provider).listTree(accessToken, identity) : List.<com.studyworkspace.workspace.port.RepositoryDataPort.TreeEntry>of();
+			var currentFiles = currentTree.stream().filter(entry -> "blob".equals(entry.type())).toList();
+			if (!analysis.treeFingerprint().equals(RepositoryImportAnalysisService.fingerprint(currentFiles))) {
+				throw new WorkspaceException("REPOSITORY_CHANGED", "저장소가 분석 이후 변경되었습니다. 다시 분석해 주세요.", 409);
+			}
+			repositoryBasePath = storageLayoutPolicy.validateBasePath(repositoryBasePath, currentTree);
+		}
+		CreateWorkspaceRequest verified = new CreateWorkspaceRequest(
+			request.name(),
+			provider == RepositoryProvider.GITLAB ? Long.parseLong(project.externalId()) : 0,
+			project.fullName(),
+			StringUtils.hasText(project.defaultBranch()) ? project.defaultBranch() : "main",
+			profile.timezone(),
+			repositoryBasePath,
+			storageLayout == null ? analysis.repositorySchemaVersion() : WorkspaceRepositoryLayout.CUSTOM_SCHEMA_VERSION,
+			analysis.classification(),
+			analysis.treeFingerprint(),
+			profile.repositoryFileName(),
+			project.webUrl(),
+			project.visibility(),
+			provider.name(),
+			project.externalId(),
+			storageLayout
+		);
+		int accessLevel = project.capabilities().canManage() ? 40 : 30;
 		WorkspaceState created = service.create(verified, user, accessLevel, identity);
 		try {
 			repositoryInitializationService.initialize(accessToken, created, profile.name());
@@ -647,8 +666,8 @@ public class WorkspaceController {
 		String accessToken = credentialResolver.resolve(user, service.get(workspaceId), servletRequest).accessToken();
 		WorkspaceState updated = service.upsertSubmission(
 			workspaceId, date, itemId, request, user.id(),
-			(workspace, session, member, current, next, commitMessage) -> submissionFileService.write(
-				accessToken, workspace, session, member, current, next, commitMessage
+			(workspace, session, item, member, current, next, commitMessage) -> submissionFileService.write(
+				accessToken, workspace, session, item, member, current, next, commitMessage
 			)
 		);
 		auditEventService.record(workspaceId, user, "SUBMISSION_UPSERTED", "SUBMISSION", date + ":" + itemId, Map.of());
@@ -666,8 +685,8 @@ public class WorkspaceController {
 		String accessToken = credentialResolver.resolve(user, service.get(workspaceId), servletRequest).accessToken();
 		WorkspaceState updated = service.deleteSubmission(
 			workspaceId, date, itemId, user.id(),
-			(workspace, session, member, current, next, commitMessage) -> submissionFileService.write(
-				accessToken, workspace, session, member, current, next, commitMessage
+			(workspace, session, item, member, current, next, commitMessage) -> submissionFileService.write(
+				accessToken, workspace, session, item, member, current, next, commitMessage
 			)
 		);
 		auditEventService.record(workspaceId, user, "SUBMISSION_DELETED", "SUBMISSION", date + ":" + itemId, Map.of());
@@ -711,8 +730,15 @@ public class WorkspaceController {
 		workspace.sessions().values().stream().sorted(Comparator.comparing(StudySession::date)).forEach(session -> {
 			files.add(WorkspaceRepositoryLayout.sessionPath(workspace, session));
 			workspace.members().forEach(member -> {
-				if (workspace.submissions().containsKey(session.folder() + "/" + member.id())) {
-					files.add(WorkspaceRepositoryLayout.submissionPath(workspace, session, member.fileName()));
+				MemberSubmissionFile submission = workspace.submissions().get(session.folder() + "/" + member.id());
+				if (submission != null) {
+					if (workspace.storageLayout() != null && workspace.storageLayout().usesItemFiles()) {
+						submission.submissions().forEach(entry -> java.util.stream.Stream.concat(session.items().stream(), session.archivedItems().stream())
+							.filter(item -> item.id().equals(entry.itemId())).findFirst()
+							.ifPresent(item -> files.add(WorkspaceRepositoryLayout.submissionPath(workspace, session, member, item))));
+					} else {
+						files.add(WorkspaceRepositoryLayout.submissionPath(workspace, session, member, null));
+					}
 				}
 			});
 		});

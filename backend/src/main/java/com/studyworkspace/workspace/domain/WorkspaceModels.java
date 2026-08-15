@@ -94,8 +94,21 @@ public final class WorkspaceModels {
 		List<SubmissionEntry> submissions,
 		String reflection,
 		String lastCommitId,
-		String lastCommitMessage
+		String lastCommitMessage,
+		Map<String, String> itemCommitIds
 	) {
+		public MemberSubmissionFile {
+			itemCommitIds = itemCommitIds == null ? Map.of() : Map.copyOf(itemCommitIds);
+		}
+
+		public MemberSubmissionFile(
+			int version, String memberId, long gitlabUserId, String username, String date,
+			int sessionRevision, String sessionType, String updatedAt, List<SubmissionEntry> submissions,
+			String reflection, String lastCommitId, String lastCommitMessage
+		) {
+			this(version, memberId, gitlabUserId, username, date, sessionRevision, sessionType, updatedAt,
+				submissions, reflection, lastCommitId, lastCommitMessage, Map.of());
+		}
 	}
 
 	public record Notifications(
@@ -172,8 +185,20 @@ public final class WorkspaceModels {
 		Map<String, StudySession> sessions,
 		Map<String, MemberSubmissionFile> submissions,
 		WorkspaceSettings settings,
-		RepositoryIdentity repository
+		RepositoryIdentity repository,
+		RepositoryStorageLayout storageLayout
 	) {
+		public WorkspaceState(
+			String id, String name, long gitlabProjectId, String gitlabProjectPath, String defaultBranch,
+			String repositoryBasePath, Integer repositorySchemaVersion, String importMode, String status,
+			String lastSyncedAt, List<StudyMember> members, Map<String, StudySession> sessions,
+			Map<String, MemberSubmissionFile> submissions, WorkspaceSettings settings, RepositoryIdentity repository
+		) {
+			this(id, name, gitlabProjectId, gitlabProjectPath, defaultBranch, repositoryBasePath,
+				repositorySchemaVersion, importMode, status, lastSyncedAt, members, sessions, submissions, settings,
+				repository, null);
+		}
+
 		public WorkspaceState(
 			String id, String name, long gitlabProjectId, String gitlabProjectPath, String defaultBranch,
 			String repositoryBasePath, Integer repositorySchemaVersion, String importMode,
@@ -232,8 +257,20 @@ public final class WorkspaceModels {
 		String repositoryWebUrl,
 		String repositoryVisibility,
 		String provider,
-		String externalRepositoryId
+		String externalRepositoryId,
+		RepositoryStorageLayout storageLayout
 	) {
+		public CreateWorkspaceRequest(
+			String name, long gitlabProjectId, String gitlabProjectPath, String defaultBranch, String timezone,
+			String repositoryBasePath, Integer repositorySchemaVersion, String importMode,
+			String expectedTreeFingerprint, String ownerRepositoryFileName, String repositoryWebUrl,
+			String repositoryVisibility, String provider, String externalRepositoryId
+		) {
+			this(name, gitlabProjectId, gitlabProjectPath, defaultBranch, timezone, repositoryBasePath,
+				repositorySchemaVersion, importMode, expectedTreeFingerprint, ownerRepositoryFileName,
+				repositoryWebUrl, repositoryVisibility, provider, externalRepositoryId, null);
+		}
+
 		public CreateWorkspaceRequest(
 			String name, long gitlabProjectId, String gitlabProjectPath, String defaultBranch, String timezone,
 			String repositoryBasePath, Integer repositorySchemaVersion, String importMode,

@@ -117,7 +117,7 @@ class WorkspaceServiceTests {
 				"link", "https://example.com/process", null, "commit-260723-member-a", "submit: process"
 			),
 			CURRENT_GITLAB_USER_ID,
-			(workspace, session, member, current, next, message) -> { throw new IllegalStateException("remote failed"); }
+			(workspace, session, item, member, current, next, message) -> { throw new IllegalStateException("remote failed"); }
 		)).isInstanceOf(IllegalStateException.class);
 
 		assertThat(service.get("workspace-evening").submissions().get("260723/member-a"))
@@ -132,7 +132,7 @@ class WorkspaceServiceTests {
 			"item-b712dd",
 			new SubmissionRequest("link", "https://example.com/process", null, "stale-sha", "submit: process"),
 			CURRENT_GITLAB_USER_ID,
-			(workspace, session, member, current, next, message) -> "should-not-write"
+			(workspace, session, item, member, current, next, message) -> "should-not-write"
 		))
 			.isInstanceOf(WorkspaceException.class)
 			.extracting("code")

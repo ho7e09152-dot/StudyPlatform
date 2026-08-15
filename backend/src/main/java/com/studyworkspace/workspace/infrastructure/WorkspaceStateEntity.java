@@ -108,7 +108,8 @@ public class WorkspaceStateEntity {
 			return new WorkspaceState(
 				state.id(), state.name(), state.gitlabProjectId(), state.gitlabProjectPath(), state.defaultBranch(),
 				state.repositoryBasePath(), state.repositorySchemaVersion(), state.importMode(), state.status(),
-				state.lastSyncedAt(), state.members(), state.sessions(), state.submissions(), state.settings()
+				state.lastSyncedAt(), state.members(), state.sessions(), state.submissions(), state.settings(), null,
+				state.storageLayout()
 			);
 		} catch (Exception exception) {
 			throw new IllegalStateException("DB의 Workspace 상태를 읽지 못했습니다: " + id, exception);
