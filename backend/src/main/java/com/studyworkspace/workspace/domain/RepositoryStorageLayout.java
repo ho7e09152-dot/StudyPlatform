@@ -33,13 +33,9 @@ public record RepositoryStorageLayout(
 
 	public static RepositoryStorageLayout recommended() {
 		return new RepositoryStorageLayout(
-			List.of("YEAR", "MONTH", "DAY"), List.of("NAME"),
-			"YYYY", "MM", "YYMMDD", "DD", "md"
+			List.of("MONTH", "DAY"), List.of("NAME"),
+			"YYYY", "YYYY-MM", "YYMMDD", "DD", "md"
 		);
-	}
-
-	public boolean usesItemFiles() {
-		return folderBlocks.contains("ITEM") || fileNameBlocks.contains("ITEM");
 	}
 
 	private static String valueOr(String value, String fallback) {

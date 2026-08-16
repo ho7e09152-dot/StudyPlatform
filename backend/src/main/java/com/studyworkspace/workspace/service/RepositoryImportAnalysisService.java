@@ -84,13 +84,17 @@ public class RepositoryImportAnalysisService {
 				WorkspaceRepositoryLayout.CURRENT_SCHEMA_VERSION
 			)
 		);
-		boolean hasWorkspaceMarker = files.stream().anyMatch(item -> WorkspaceRepositoryLayout.CONFIG_PATH.equals(item.path()));
+		List<String> markerPaths = files.stream().map(RepositoryDataPort.TreeEntry::path)
+			.filter(WorkspaceRepositoryLayout::isConfigPath).sorted().toList();
+		String markerPath = markerPaths.size() == 1 ? markerPaths.getFirst() : null;
+		boolean hasWorkspaceMarker = markerPath != null;
+		boolean markerInvalid = markerPaths.size() > 1;
 		Integer markerSchemaVersion = null;
 		String markerBasePath = null;
 		RepositoryStorageLayout markerLayout = null;
 		if (hasWorkspaceMarker) {
 			try {
-				RepositoryDataPort.RepositoryFile marker = port.getFile(accessToken, identity, WorkspaceRepositoryLayout.CONFIG_PATH, branch);
+				RepositoryDataPort.RepositoryFile marker = port.getFile(accessToken, identity, markerPath, branch);
 				var matcher = CONFIG_SCHEMA.matcher(marker.content());
 				if (marker.content().startsWith("version: 1\n") && matcher.find()) {
 					int parsed = Integer.parseInt(matcher.group(1));
@@ -100,19 +104,22 @@ public class RepositoryImportAnalysisService {
 						markerSchemaVersion = parsed;
 					}
 					if (parsed == WorkspaceRepositoryLayout.CUSTOM_SCHEMA_VERSION) {
-						markerBasePath = configValue(marker.content(), "repositoryBasePath");
+						markerBasePath = WorkspaceRepositoryPath.normalizeBasePath(configValue(marker.content(), "repositoryBasePath"));
 						markerLayout = parseLayout(marker.content());
+						if (!WorkspaceRepositoryLayout.customConfigPath(markerBasePath).equals(markerPath)) markerInvalid = true;
 					}
 				}
 			} catch (RuntimeException ignored) {
 				markerSchemaVersion = null;
+				markerInvalid = true;
 			}
 		}
 
 		int detectedLayouts = (rootV1 ? 1 : 0) + (nestedV1 ? 1 : 0) + (nestedV2 ? 1 : 0);
 		String basePath = markerSchemaVersion != null && markerSchemaVersion == WorkspaceRepositoryLayout.CUSTOM_SCHEMA_VERSION
-			? WorkspaceRepositoryPath.normalizeBasePath(markerBasePath)
-			: rootV1 && detectedLayouts == 1 ? "" : WorkspaceRepositoryLayout.MANAGED_BASE_PATH;
+			? markerBasePath
+			: rootV1 && detectedLayouts == 1 ? "" : detectedLayouts > 0
+				? WorkspaceRepositoryLayout.MANAGED_BASE_PATH : WorkspaceRepositoryLayout.DEFAULT_STORAGE_BASE_PATH;
 		int schemaVersion = markerSchemaVersion != null && markerSchemaVersion == WorkspaceRepositoryLayout.CUSTOM_SCHEMA_VERSION
 			? WorkspaceRepositoryLayout.CUSTOM_SCHEMA_VERSION
 			: nestedV2
@@ -125,25 +132,42 @@ public class RepositoryImportAnalysisService {
 
 		List<ImportIssue> issues = new ArrayList<>();
 		boolean hardConflict = false;
+		String markerIssuePath = markerPath == null
+			? WorkspaceRepositoryLayout.customConfigPath(WorkspaceRepositoryLayout.DEFAULT_STORAGE_BASE_PATH) : markerPath;
+		if (markerInvalid) {
+			hardConflict = true;
+			issues.add(new ImportIssue(markerIssuePath, "INVALID_WORKSPACE_CONFIG_LOCATION",
+				"Workspace 설정 파일은 학습 기록 위치의 .study-workspace 폴더에 하나만 있어야 합니다."));
+		}
 		if (detectedLayouts > 1) {
 			hardConflict = true;
 			issues.add(new ImportIssue(".study-workspace", "MIXED_REPOSITORY_LAYOUT", "V1과 V2 저장 경로가 함께 있어 자동으로 선택할 수 없습니다."));
 		}
 		if (markerSchemaVersion != null && detectedLayouts > 0 && markerSchemaVersion != schemaVersion) {
 			hardConflict = true;
-			issues.add(new ImportIssue(WorkspaceRepositoryLayout.CONFIG_PATH, "SCHEMA_MARKER_MISMATCH", "설정 파일의 스키마 버전과 실제 파일 경로가 다릅니다."));
+			issues.add(new ImportIssue(markerIssuePath, "SCHEMA_MARKER_MISMATCH", "설정 파일의 스키마 버전과 실제 파일 경로가 다릅니다."));
 		}
 		if (markerSchemaVersion != null && markerSchemaVersion == WorkspaceRepositoryLayout.CUSTOM_SCHEMA_VERSION
 			&& markerLayout == null) {
 			hardConflict = true;
-			issues.add(new ImportIssue(WorkspaceRepositoryLayout.CONFIG_PATH, "INVALID_STORAGE_LAYOUT_CONFIG",
+			issues.add(new ImportIssue(markerIssuePath, "INVALID_STORAGE_LAYOUT_CONFIG",
 				"Workspace 저장 구조 설정을 해석할 수 없습니다."));
 		}
 
-		List<RepositoryDataPort.TreeEntry> candidates = files.stream().filter(item -> {
+		RepositoryStorageLayout activeMarkerLayout = markerLayout;
+		List<RepositoryDataPort.TreeEntry> candidates = new ArrayList<>();
+		for (RepositoryDataPort.TreeEntry item : files) {
 			String relative = WorkspaceRepositoryPath.relative(basePath, item.path());
-			return WorkspaceRepositoryLayout.isSessionPath(relative, schemaVersion);
-		}).toList();
+			if (schemaVersion != WorkspaceRepositoryLayout.CUSTOM_SCHEMA_VERSION || activeMarkerLayout == null) {
+				if (WorkspaceRepositoryLayout.isSessionPath(relative, schemaVersion)) candidates.add(item);
+				continue;
+			}
+			try {
+				if (storageLayouts.matchSession(basePath, activeMarkerLayout, item.path()) != null) candidates.add(item);
+			} catch (WorkspaceException exception) {
+				issues.add(new ImportIssue(item.path(), "INVALID_SESSION_FILE", exception.getMessage()));
+			}
+		}
 		if (candidates.size() > MAX_ANALYZED_SESSION_FILES) {
 			throw new WorkspaceException("IMPORT_ANALYSIS_TOO_LARGE", "분석할 일정 파일이 500개를 초과합니다.", 413);
 		}
@@ -152,7 +176,12 @@ public class RepositoryImportAnalysisService {
 		for (RepositoryDataPort.TreeEntry item : candidates) {
 			try {
 				RepositoryDataPort.RepositoryFile file = port.getFile(accessToken, identity, item.path(), branch);
-				parser.parse(WorkspaceRepositoryPath.relative(basePath, item.path()), file.content(), file.version());
+				if (schemaVersion == WorkspaceRepositoryLayout.CUSTOM_SCHEMA_VERSION && activeMarkerLayout != null) {
+					var location = storageLayouts.matchSession(basePath, activeMarkerLayout, item.path());
+					parser.parseCustom(WorkspaceRepositoryPath.relative(basePath, item.path()), file.content(), file.version(), location.date());
+				} else {
+					parser.parse(WorkspaceRepositoryPath.relative(basePath, item.path()), file.content(), file.version());
+				}
 				validSessions++;
 			} catch (RuntimeException exception) {
 				String message = exception instanceof WorkspaceException workspaceException
@@ -160,19 +189,28 @@ public class RepositoryImportAnalysisService {
 				issues.add(new ImportIssue(item.path(), "INVALID_SESSION_FILE", message));
 			}
 		}
-		RepositoryStorageLayout activeMarkerLayout = markerLayout;
-		int validSubmissions = (int) files.stream().filter(item -> {
+		int validSubmissions = 0;
+		for (RepositoryDataPort.TreeEntry item : files) {
 			String relative = WorkspaceRepositoryPath.relative(basePath, item.path());
-			return schemaVersion == WorkspaceRepositoryLayout.CUSTOM_SCHEMA_VERSION && activeMarkerLayout != null
-				? storageLayouts.matchSubmission(basePath, activeMarkerLayout, item.path()) != null
-				: WorkspaceRepositoryLayout.isSubmissionPath(relative, schemaVersion);
-		}).count();
+			if (schemaVersion != WorkspaceRepositoryLayout.CUSTOM_SCHEMA_VERSION || activeMarkerLayout == null) {
+				if (WorkspaceRepositoryLayout.isSubmissionPath(relative, schemaVersion)) validSubmissions++;
+				continue;
+			}
+			try {
+				if (storageLayouts.matchSubmission(basePath, activeMarkerLayout, item.path()) != null) validSubmissions++;
+			} catch (WorkspaceException exception) {
+				issues.add(new ImportIssue(item.path(), "INVALID_SUBMISSION_FILE", exception.getMessage()));
+			}
+		}
 		boolean validWorkspaceMarker = markerSchemaVersion != null;
+		String defaultSystemPath = WorkspaceRepositoryLayout.customConfigPath(WorkspaceRepositoryLayout.DEFAULT_STORAGE_BASE_PATH);
+		String defaultSystemDirectory = defaultSystemPath.substring(0, defaultSystemPath.lastIndexOf('/'));
 		boolean reservedPathConflict = !rootV1 && !nestedV1 && !nestedV2 && !validWorkspaceMarker
-			&& files.stream().anyMatch(item -> item.path().equals(".study-workspace") || item.path().startsWith(".study-workspace/"));
+			&& files.stream().anyMatch(item -> item.path().equals(defaultSystemDirectory)
+				|| item.path().startsWith(defaultSystemDirectory + "/"));
 		if (reservedPathConflict) {
 			hardConflict = true;
-			issues.add(new ImportIssue(".study-workspace", "RESERVED_PATH_CONFLICT", "서비스 전용 경로가 이미 다른 용도로 사용되고 있습니다."));
+			issues.add(new ImportIssue(defaultSystemDirectory, "RESERVED_PATH_CONFLICT", "서비스 전용 경로가 이미 다른 용도로 사용되고 있습니다."));
 		}
 		if (nestedV2 && !validWorkspaceMarker) {
 			issues.add(new ImportIssue(WorkspaceRepositoryLayout.CONFIG_PATH, "MISSING_WORKSPACE_CONFIG", "V2 파일은 있지만 Workspace 설정 파일이 없습니다."));

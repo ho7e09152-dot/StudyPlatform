@@ -731,15 +731,7 @@ public class WorkspaceController {
 			files.add(WorkspaceRepositoryLayout.sessionPath(workspace, session));
 			workspace.members().forEach(member -> {
 				MemberSubmissionFile submission = workspace.submissions().get(session.folder() + "/" + member.id());
-				if (submission != null) {
-					if (workspace.storageLayout() != null && workspace.storageLayout().usesItemFiles()) {
-						submission.submissions().forEach(entry -> java.util.stream.Stream.concat(session.items().stream(), session.archivedItems().stream())
-							.filter(item -> item.id().equals(entry.itemId())).findFirst()
-							.ifPresent(item -> files.add(WorkspaceRepositoryLayout.submissionPath(workspace, session, member, item))));
-					} else {
-						files.add(WorkspaceRepositoryLayout.submissionPath(workspace, session, member, null));
-					}
-				}
+				if (submission != null) files.add(WorkspaceRepositoryLayout.submissionPath(workspace, session, member));
 			});
 		});
 		files.sort(String::compareTo);
@@ -767,21 +759,38 @@ public class WorkspaceController {
 			throw new WorkspaceException("FILE_PATH_NOT_ALLOWED", "허용되지 않은 저장소 경로입니다.", 400);
 		}
 		int schemaVersion = WorkspaceRepositoryLayout.schemaVersion(workspace.repositorySchemaVersion());
-		var sessionLocation = WorkspaceRepositoryLayout.matchSession(relativePath, schemaVersion).orElse(null);
-		var submissionLocation = WorkspaceRepositoryLayout.matchSubmission(relativePath, schemaVersion).orElse(null);
-		if (sessionLocation == null && submissionLocation == null) {
+		RepositoryStorageLayoutPolicy.SessionLocation customSession = null;
+		RepositoryStorageLayoutPolicy.SubmissionLocation customSubmission = null;
+		WorkspaceRepositoryLayout.SessionLocation sessionLocation = null;
+		WorkspaceRepositoryLayout.SubmissionLocation submissionLocation = null;
+		if (schemaVersion == WorkspaceRepositoryLayout.CUSTOM_SCHEMA_VERSION && workspace.storageLayout() != null) {
+			try {
+				customSession = storageLayoutPolicy.matchSession(workspace.repositoryBasePath(), workspace.storageLayout(), path);
+				customSubmission = storageLayoutPolicy.matchSubmission(workspace.repositoryBasePath(), workspace.storageLayout(), path);
+			} catch (WorkspaceException exception) {
+				throw new WorkspaceException("FILE_PATH_NOT_ALLOWED", "허용되지 않은 저장소 경로입니다.", 400);
+			}
+		} else {
+			sessionLocation = WorkspaceRepositoryLayout.matchSession(relativePath, schemaVersion).orElse(null);
+			submissionLocation = WorkspaceRepositoryLayout.matchSubmission(relativePath, schemaVersion).orElse(null);
+		}
+		if (sessionLocation == null && submissionLocation == null && customSession == null && customSubmission == null) {
 			throw new WorkspaceException("FILE_PATH_NOT_ALLOWED", "허용되지 않은 저장소 경로입니다.", 400);
 		}
-		String date = sessionLocation != null ? sessionLocation.date() : submissionLocation.date();
+		String date = customSession != null ? customSession.date()
+			: customSubmission != null ? customSubmission.date()
+			: sessionLocation != null ? sessionLocation.date() : submissionLocation.date();
 		StudySession session = workspace.sessions().values().stream().filter(candidate -> candidate.date().equals(date)).findFirst()
 			.orElseThrow(() -> new WorkspaceException("FILE_NOT_FOUND", "파일을 찾을 수 없습니다.", 404));
 		String content;
 		String commitId;
-		if (sessionLocation != null) {
+		if (sessionLocation != null || customSession != null) {
 			content = sessionYamlSerializer.serialize(session);
 			commitId = session.lastCommitId();
 		} else {
-			StudyMember member = workspace.members().stream().filter(candidate -> candidate.fileName().equals(submissionLocation.fileName())).findFirst()
+			String memberName = customSubmission == null ? submissionLocation.fileName() : customSubmission.blockValues().get("NAME");
+			StudyMember member = workspace.members().stream().filter(candidate -> candidate.fileName().equals(memberName)
+				|| candidate.fileName().equals(memberName + ".md")).findFirst()
 				.orElseThrow(() -> new WorkspaceException("FILE_NOT_FOUND", "파일을 찾을 수 없습니다.", 404));
 			MemberSubmissionFile submission = workspace.submissions().get(session.folder() + "/" + member.id());
 			if (submission == null) throw new WorkspaceException("FILE_NOT_FOUND", "파일을 찾을 수 없습니다.", 404);

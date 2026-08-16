@@ -3,6 +3,7 @@ package com.studyworkspace.gitlab.service;
 import java.util.Arrays;
 
 import com.studyworkspace.common.exception.InvalidRepositoryPathException;
+import com.studyworkspace.common.validation.RepositoryPathSafety;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 
@@ -19,7 +20,7 @@ public class RepositoryPathPolicy {
 		String normalized = path.trim();
 		boolean hasInvalidSegment = Arrays.stream(normalized.split("/"))
 			.anyMatch(segment -> segment.isBlank() || segment.equals(".") || segment.equals(".."));
-		boolean hasControlCharacter = normalized.chars().anyMatch(Character::isISOControl);
+		boolean hasControlCharacter = RepositoryPathSafety.containsDisallowedUnicode(normalized);
 
 		if (
 			normalized.length() > MAX_PATH_LENGTH

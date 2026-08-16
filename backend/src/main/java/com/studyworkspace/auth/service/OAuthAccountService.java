@@ -575,16 +575,15 @@ public class OAuthAccountService {
 
 	private static String normalizeRepositoryFileName(String value, String fallback) {
 		String source = StringUtils.hasText(value) ? value.trim() : fallback;
-		source = java.text.Normalizer.normalize(source, java.text.Normalizer.Form.NFKC);
-		if (source.toLowerCase().endsWith(".md")) source = source.substring(0, source.length() - 3);
-		String normalized = source.replaceAll("[\\s/\\\\]+", "-")
-			.replaceAll("[^\\p{L}\\p{N}._-]", "-")
-			.replaceAll("-+", "-")
-			.replaceAll("^[.-]+|[.-]+$", "");
-		if (!StringUtils.hasText(normalized) || normalized.length() > 80 || normalized.equals(".") || normalized.equals("..")) {
-			throw new WorkspaceException("INVALID_REPOSITORY_FILE_NAME", "GitLab 기록 이름은 문자와 숫자를 사용해 80자 이하로 입력해 주세요.", 400);
+		if (!StringUtils.hasText(source)) {
+			throw new WorkspaceException("INVALID_REPOSITORY_FILE_NAME", "학습 기록 이름이 필요합니다.", 400);
 		}
-		return normalized + ".md";
+		if (source.toLowerCase().endsWith(".md")) source = source.substring(0, source.length() - 3);
+		try {
+			return com.studyworkspace.workspace.service.RepositoryStorageLayoutPolicy.validateSegment(source, "학습 기록 이름") + ".md";
+		} catch (WorkspaceException exception) {
+			throw new WorkspaceException("INVALID_REPOSITORY_FILE_NAME", "학습 기록 이름에 사용할 수 없는 문자가 포함되어 있습니다.", 400);
+		}
 	}
 
 	private static String normalizeTimezone(String value) {

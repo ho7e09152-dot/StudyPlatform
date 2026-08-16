@@ -82,7 +82,6 @@ export interface MemberSubmissionFile {
   reflection?: string;
   lastCommitId: string;
   lastCommitMessage?: string;
-  itemCommitIds?: Record<string, string>;
 }
 
 export interface WorkspaceSettings {

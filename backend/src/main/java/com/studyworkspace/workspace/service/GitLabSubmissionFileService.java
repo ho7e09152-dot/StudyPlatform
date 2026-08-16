@@ -50,11 +50,7 @@ public class GitLabSubmissionFileService {
 		MemberSubmissionFile next,
 		String commitMessage
 	) {
-		String path = submissionPath(workspace, session, item, member);
-		if (WorkspaceRepositoryLayout.schemaVersion(workspace.repositorySchemaVersion()) == WorkspaceRepositoryLayout.CUSTOM_SCHEMA_VERSION
-			&& workspace.storageLayout() != null && workspace.storageLayout().usesItemFiles()) {
-			return writeItemFile(accessToken, workspace, session, item, member, current, next, commitMessage, path);
-		}
+		String path = submissionPath(workspace, session, member);
 		String content = codec.encode(next, session);
 		RepositoryDataPort repository = repositories.require(workspace.repository());
 		if (current == null) {
@@ -97,71 +93,9 @@ public class GitLabSubmissionFileService {
 		return write(accessToken, workspace, session, changed, member, current, next, commitMessage);
 	}
 
-	private String writeItemFile(String accessToken, WorkspaceState workspace, StudySession session, SessionItem item,
-		StudyMember member, MemberSubmissionFile current, MemberSubmissionFile next, String commitMessage, String path) {
-		SubmissionEntry currentEntry = entry(current, item.id());
-		SubmissionEntry nextEntry = entry(next, item.id());
-		RepositoryDataPort repository = repositories.require(workspace.repository());
-		if (currentEntry == null && nextEntry == null) return current == null ? null : current.lastCommitId();
-		if (currentEntry == null) {
-			MemberSubmissionFile shard = shard(next, nextEntry);
-			try {
-				return commitId(repository.createFile(
-					accessToken, workspace.repository(), path, workspace.defaultBranch(), codec.encode(shard, session),
-					commitMessage, member.displayName()
-				));
-			} catch (RepositoryProviderException exception) {
-				if (exception.upstreamStatus() == 400 || exception.upstreamStatus() == 409) {
-					throw conflict("저장소에 이미 같은 항목의 제출 파일이 있습니다. 먼저 동기화해 주세요.");
-				}
-				throw exception;
-			}
-		}
-
-		RepositoryDataPort.RepositoryFile remote = loadCurrent(repository, accessToken, workspace, path);
-		MemberSubmissionFile remoteFile = codec.decode(remote.content(), remote.version());
-		SubmissionEntry remoteEntry = entry(remoteFile, item.id());
-		if (!currentEntry.equals(remoteEntry)) {
-			throw conflict("저장소의 항목 제출 파일이 변경되었습니다. 최신 내용을 동기화해 주세요.");
-		}
-		if (nextEntry == null) {
-			try {
-				return repository.createCommit(
-					accessToken, workspace.repository(), workspace.defaultBranch(), commitMessage,
-					List.of(RepositoryDataPort.CommitAction.delete(path, remote.version())), member.displayName()
-				);
-			} catch (RepositoryProviderException exception) {
-				if (exception.upstreamStatus() == 400 || exception.upstreamStatus() == 409) {
-					throw conflict("항목 제출 파일 삭제가 다른 변경과 충돌했습니다. 최신 내용을 동기화해 주세요.");
-				}
-				throw exception;
-			}
-		}
-		MemberSubmissionFile shard = shard(next, nextEntry);
-		try {
-			return commitId(repository.updateFile(
-				accessToken, workspace.repository(), path, workspace.defaultBranch(), codec.encode(shard, session),
-				commitMessage, remote.version(), member.displayName()
-			));
-		} catch (RepositoryProviderException exception) {
-			if (exception.upstreamStatus() == 400 || exception.upstreamStatus() == 409) {
-				throw conflict("항목 제출 파일이 다른 변경과 충돌했습니다. 최신 내용을 동기화해 주세요.");
-			}
-			throw exception;
-		}
-	}
-
 	private static SubmissionEntry entry(MemberSubmissionFile file, String itemId) {
 		return file == null ? null : file.submissions().stream()
 			.filter(candidate -> candidate.itemId().equals(itemId)).findFirst().orElse(null);
-	}
-
-	private static MemberSubmissionFile shard(MemberSubmissionFile source, SubmissionEntry entry) {
-		return new MemberSubmissionFile(
-			source.version(), source.memberId(), source.gitlabUserId(), source.username(), source.date(),
-			source.sessionRevision(), source.sessionType(), source.updatedAt(), List.of(entry), source.reflection(),
-			source.lastCommitId(), source.lastCommitMessage(), source.itemCommitIds()
-		);
 	}
 
 	private RepositoryDataPort.RepositoryFile loadCurrent(RepositoryDataPort repository, String accessToken, WorkspaceState workspace, String path) {
@@ -175,12 +109,13 @@ public class GitLabSubmissionFileService {
 		}
 	}
 
-	private String submissionPath(WorkspaceState workspace, StudySession session, SessionItem item, StudyMember member) {
+	private String submissionPath(WorkspaceState workspace, StudySession session, StudyMember member) {
 		String fileName = member.fileName();
-		if (!StringUtils.hasText(fileName) || !fileName.matches("[\\p{L}\\p{N}._-]+\\.md") || fileName.contains("..")) {
+		if (!StringUtils.hasText(fileName) || !fileName.toLowerCase(java.util.Locale.ROOT).endsWith(".md")) {
 			throw new WorkspaceException("INVALID_SUBMISSION_PATH", "멤버 제출 파일명이 올바르지 않습니다.", 400);
 		}
-		return pathPolicy.validate(WorkspaceRepositoryLayout.submissionPath(workspace, session, member, item));
+		RepositoryStorageLayoutPolicy.validateSegment(fileName.substring(0, fileName.length() - 3), "학습 기록 이름");
+		return pathPolicy.validate(WorkspaceRepositoryLayout.submissionPath(workspace, session, member));
 	}
 
 	private static String commitId(RepositoryDataPort.RepositoryFile file) {

@@ -144,6 +144,21 @@ class OAuthAccountPersistenceTests {
 	}
 
 	@Test
+	void registrationRejectsUnicodeFormatCharactersInRepositoryRecordNameWithoutCreatingAccount() {
+		long gitLabUserId = 271828183L;
+		var pending = accountService.resolveGitLabLogin(new GitLabOAuthSession(
+			new GitLabUser(gitLabUserId, "format-character-user", "Format Character User", null, null),
+			"access", "refresh", Instant.now().plusSeconds(3600), "api"
+		)).pendingRegistration();
+
+		assertThatThrownBy(() -> accountService.completeRegistration(pending,
+			new OAuthAccountService.UpdateProfileRequest("정상 표시 이름", "김\u202E서연", "Asia/Seoul", true, true, true)))
+			.hasMessageContaining("사용할 수 없는 문자");
+		assertThat(jdbcClient.sql("SELECT COUNT(*) FROM user_accounts WHERE gitlab_user_id = :id")
+			.param("id", gitLabUserId).query(Long.class).single()).isZero();
+	}
+
+	@Test
 	void reportsReconsentWhenAnAcceptedDocumentVersionIsOutdated() {
 		long gitLabUserId = 161803398L;
 		completeGitLabRegistration(accountService, new GitLabOAuthSession(

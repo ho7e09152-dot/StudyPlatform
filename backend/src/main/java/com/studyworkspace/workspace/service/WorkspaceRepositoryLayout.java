@@ -8,7 +8,6 @@ import java.util.regex.Pattern;
 
 import com.studyworkspace.workspace.domain.WorkspaceException;
 import com.studyworkspace.workspace.domain.RepositoryStorageLayout;
-import com.studyworkspace.workspace.domain.WorkspaceModels.SessionItem;
 import com.studyworkspace.workspace.domain.WorkspaceModels.StudyMember;
 import com.studyworkspace.workspace.domain.WorkspaceModels.StudySession;
 import com.studyworkspace.workspace.domain.WorkspaceModels.WorkspaceState;
@@ -17,6 +16,7 @@ public final class WorkspaceRepositoryLayout {
 	public static final int LEGACY_SCHEMA_VERSION = 1;
 	public static final int CURRENT_SCHEMA_VERSION = 2;
 	public static final int CUSTOM_SCHEMA_VERSION = 3;
+	public static final String DEFAULT_STORAGE_BASE_PATH = "study";
 	public static final String MANAGED_BASE_PATH = ".study-workspace";
 	public static final String CONFIG_PATH = MANAGED_BASE_PATH + "/config.yml";
 
@@ -24,14 +24,23 @@ public final class WorkspaceRepositoryLayout {
 	private static final Pattern V1_SUBMISSION = Pattern.compile("^(\\d{6})/([^/]+\\.md)$");
 	private static final Pattern V2_SESSION = Pattern.compile("^sessions/(\\d{4})/(\\d{4}-\\d{2}-\\d{2})/session\\.yml$");
 	private static final Pattern V2_SUBMISSION = Pattern.compile("^sessions/(\\d{4})/(\\d{4}-\\d{2}-\\d{2})/submissions/([^/]+\\.md)$");
-	private static final Pattern V3_SESSION = Pattern.compile("^\\.study-ing/sessions/(\\d{4}-\\d{2}-\\d{2})\\.yml$");
 	private static final RepositoryStorageLayoutPolicy STORAGE_LAYOUTS = new RepositoryStorageLayoutPolicy();
 
 	private WorkspaceRepositoryLayout() { }
 
+	public static String customConfigPath(String basePath) {
+		return WorkspaceRepositoryPath.join(basePath, CONFIG_PATH);
+	}
+
+	public static boolean isConfigPath(String path) {
+		return CONFIG_PATH.equals(path) || path != null && path.endsWith("/" + CONFIG_PATH);
+	}
+
 	public static String sessionPath(WorkspaceState workspace, StudySession session) {
 		if (schemaVersion(workspace.repositorySchemaVersion()) == CUSTOM_SCHEMA_VERSION) {
-			return STORAGE_LAYOUTS.sessionPath(workspace.repositoryBasePath(), session);
+			RepositoryStorageLayout layout = workspace.storageLayout() == null
+				? RepositoryStorageLayout.recommended() : workspace.storageLayout();
+			return STORAGE_LAYOUTS.sessionPath(workspace.repositoryBasePath(), layout, session);
 		}
 		return WorkspaceRepositoryPath.join(
 			workspace.repositoryBasePath(),
@@ -46,13 +55,13 @@ public final class WorkspaceRepositoryLayout {
 		);
 	}
 
-	public static String submissionPath(WorkspaceState workspace, StudySession session, StudyMember member, SessionItem item) {
+	public static String submissionPath(WorkspaceState workspace, StudySession session, StudyMember member) {
 		if (schemaVersion(workspace.repositorySchemaVersion()) != CUSTOM_SCHEMA_VERSION) {
 			return submissionPath(workspace, session, member.fileName());
 		}
 		RepositoryStorageLayout layout = workspace.storageLayout() == null
 			? RepositoryStorageLayout.recommended() : workspace.storageLayout();
-		return STORAGE_LAYOUTS.submissionPath(workspace.repositoryBasePath(), layout, session, member, item);
+		return STORAGE_LAYOUTS.submissionPath(workspace.repositoryBasePath(), layout, session, member);
 	}
 
 	public static String relativeSessionPath(int schemaVersion, String date, String folder) {
@@ -74,16 +83,7 @@ public final class WorkspaceRepositoryLayout {
 				? Optional.of(new SessionLocation(folderDate(matcher.group(1)), matcher.group(1), relativePath))
 				: Optional.empty();
 		}
-		if (schemaVersion == CUSTOM_SCHEMA_VERSION) {
-			Matcher matcher = V3_SESSION.matcher(value(relativePath));
-			if (!matcher.matches()) return Optional.empty();
-			try {
-				String date = LocalDate.parse(matcher.group(1)).toString();
-				return Optional.of(new SessionLocation(date, dateFolder(date), relativePath));
-			} catch (DateTimeParseException exception) {
-				return Optional.empty();
-			}
-		}
+		if (schemaVersion == CUSTOM_SCHEMA_VERSION) return Optional.empty();
 		Matcher matcher = V2_SESSION.matcher(value(relativePath));
 		if (!matcher.matches() || !validYearAndDate(matcher.group(1), matcher.group(2))) return Optional.empty();
 		return Optional.of(new SessionLocation(matcher.group(2), dateFolder(matcher.group(2)), relativePath));

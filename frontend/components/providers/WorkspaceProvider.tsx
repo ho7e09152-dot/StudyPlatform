@@ -339,9 +339,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
           itemId,
           {
             ...draft,
-            expectedFileCommitId: workspace.storageLayout?.folderBlocks.includes("ITEM") || workspace.storageLayout?.fileNameBlocks.includes("ITEM")
-              ? previousFile?.itemCommitIds?.[itemId]
-              : previousFile?.lastCommitId,
+            expectedFileCommitId: previousFile?.lastCommitId,
             commitMessage,
           },
         );

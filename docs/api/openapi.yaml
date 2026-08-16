@@ -2202,7 +2202,7 @@ components:
         folderBlocks:
           type: array
           uniqueItems: true
-          items: { type: string, enum: [YEAR, MONTH, DATE, DAY, NAME, ITEM] }
+          items: { type: string, enum: [YEAR, MONTH, DATE, DAY, NAME] }
         fileNameBlocks:
           type: array
           minItems: 1
@@ -2210,8 +2210,8 @@ components:
           uniqueItems: true
           items: { type: string, enum: [DATE, NAME] }
         yearFormat: { type: string, enum: [YYYY, YY, YYYY_KO, YY_KO] }
-        monthFormat: { type: string, enum: [MM, M, YYYY-MM, YY-MM, MM_KO, M_KO, YYYY_MM_KO, YY_MM_KO] }
-        dateFormat: { type: string, enum: [YYYY-MM-DD, YYYYMMDD, YY-MM-DD, YYMMDD, YYYY_MM_DD_KO, YY_MM_DD_KO] }
+        monthFormat: { type: string, enum: [MM, M, YYYY-MM, YY-MM, YYYYMM, YYMM, MM_KO, M_KO, YYYY_MM_KO, YY_MM_KO] }
+        dateFormat: { type: string, enum: [YYYY-MM-DD, YYYYMMDD, YY-MM-DD, YYMMDD, YYYY_MM_DD_KO, YY_MM_DD_KO, YYYY_MM_DD_KO_SPACE, YY_MM_DD_KO_SPACE] }
         dayFormat: { type: string, enum: [DD, DD_KO] }
         extension: { type: string, enum: [md] }
 

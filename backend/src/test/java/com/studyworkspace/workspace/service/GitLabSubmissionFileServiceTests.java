@@ -57,7 +57,7 @@ class GitLabSubmissionFileServiceTests {
 	}
 
 	@Test
-	void createsOneFilePerItemWhenTheItemBlockIsConfigured() {
+	void customLayoutKeepsAllItemsInOneMemberFile() {
 		when(gitLab.createRepositoryFile(anyString(), anyLong(), anyString(), anyString(), anyString(), anyString(), anyString()))
 			.thenReturn(file("item-sha"));
 		StudySession session = SubmissionMarkdownCodecTests.session();
@@ -70,7 +70,7 @@ class GitLabSubmissionFileServiceTests {
 
 		assertThat(sha).isEqualTo("item-sha");
 		verify(gitLab).createRepositoryFile(
-			eq("token"), eq(42L), eq("study/2026-08-09/" + item.id() + "/owner.md"), eq("main"),
+			eq("token"), eq(42L), eq("study/2026-08-09/owner.md"), eq("main"),
 			contains("itemId: \"" + item.id() + "\""), eq("submit: item"), eq("Owner")
 		);
 	}
@@ -89,7 +89,7 @@ class GitLabSubmissionFileServiceTests {
 			List.of(member()), Map.of(), Map.of(),
 			new WorkspaceSettings("Asia/Seoul", true, new Notifications(true, true, true)),
 			new RepositoryIdentity("GITLAB", "42", "team/study", null, "private", "main", true, true, true, "40"),
-			new RepositoryStorageLayout(List.of("DATE", "ITEM"), List.of("NAME"), "YYYY", "MM", "YYYY-MM-DD", "DD", "md")
+			new RepositoryStorageLayout(List.of("DATE"), List.of("NAME"), "YYYY", "MM", "YYYY-MM-DD", "DD", "md")
 		);
 	}
 

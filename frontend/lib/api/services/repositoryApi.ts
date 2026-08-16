@@ -16,10 +16,25 @@ export interface RepositorySummaryDto {
   connectionState: string;
 }
 
+const REPOSITORY_PAGE_SIZE = 100;
+const MAX_REPOSITORY_PAGES = 100;
+
 export async function listRepositories(search = "", signal?: AbortSignal, provider: ProviderId = "GITLAB"): Promise<Repository[]> {
-  const params = new URLSearchParams({ perPage: "50", provider });
-  if (search.trim()) params.set("search", search.trim());
-  const repositories = await apiGet<RepositorySummaryDto[]>(`/api/v1/repositories?${params.toString()}`, signal);
+  const repositories: RepositorySummaryDto[] = [];
+  const seen = new Set<string>();
+  for (let page = 1; page <= MAX_REPOSITORY_PAGES; page += 1) {
+    const params = new URLSearchParams({ page: String(page), perPage: String(REPOSITORY_PAGE_SIZE), provider });
+    if (search.trim()) params.set("search", search.trim());
+    const current = await apiGet<RepositorySummaryDto[]>(`/api/v1/repositories?${params.toString()}`, signal);
+    for (const repository of current) {
+      const key = `${repository.provider}:${repository.externalId}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        repositories.push(repository);
+      }
+    }
+    if (current.length < REPOSITORY_PAGE_SIZE) break;
+  }
   return repositories.map((repository) => ({
     provider: repository.provider,
     externalId: repository.externalId,

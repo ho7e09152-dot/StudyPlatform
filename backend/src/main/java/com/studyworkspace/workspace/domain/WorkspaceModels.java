@@ -3,6 +3,8 @@ package com.studyworkspace.workspace.domain;
 import java.util.List;
 import java.util.Map;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 public final class WorkspaceModels {
 
 	private WorkspaceModels() {
@@ -82,6 +84,7 @@ public final class WorkspaceModels {
 	) {
 	}
 
+	@JsonIgnoreProperties(value = "itemCommitIds")
 	public record MemberSubmissionFile(
 		int version,
 		String memberId,
@@ -94,22 +97,8 @@ public final class WorkspaceModels {
 		List<SubmissionEntry> submissions,
 		String reflection,
 		String lastCommitId,
-		String lastCommitMessage,
-		Map<String, String> itemCommitIds
-	) {
-		public MemberSubmissionFile {
-			itemCommitIds = itemCommitIds == null ? Map.of() : Map.copyOf(itemCommitIds);
-		}
-
-		public MemberSubmissionFile(
-			int version, String memberId, long gitlabUserId, String username, String date,
-			int sessionRevision, String sessionType, String updatedAt, List<SubmissionEntry> submissions,
-			String reflection, String lastCommitId, String lastCommitMessage
-		) {
-			this(version, memberId, gitlabUserId, username, date, sessionRevision, sessionType, updatedAt,
-				submissions, reflection, lastCommitId, lastCommitMessage, Map.of());
-		}
-	}
+		String lastCommitMessage
+	) { }
 
 	public record Notifications(
 		boolean scheduleChanges,

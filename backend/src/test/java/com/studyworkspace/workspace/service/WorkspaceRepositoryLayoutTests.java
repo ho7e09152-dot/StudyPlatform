@@ -13,6 +13,14 @@ import org.junit.jupiter.api.Test;
 
 class WorkspaceRepositoryLayoutTests {
 	@Test
+	void placesCustomWorkspaceConfigInsideTheSelectedLearningRoot() {
+		assertThat(WorkspaceRepositoryLayout.customConfigPath("study"))
+			.isEqualTo("study/.study-workspace/config.yml");
+		assertThat(WorkspaceRepositoryLayout.isConfigPath("study/.study-workspace/config.yml")).isTrue();
+		assertThat(WorkspaceRepositoryLayout.isConfigPath(".study-workspace/config.yml")).isTrue();
+	}
+
+	@Test
 	void buildsAndParsesV2SessionAndSubmissionPaths() {
 		WorkspaceState workspace = new WorkspaceState(
 			"workspace", "Study", 42, "team/study", "main", ".study-workspace", 2, "EMPTY", "ACTIVE", null,

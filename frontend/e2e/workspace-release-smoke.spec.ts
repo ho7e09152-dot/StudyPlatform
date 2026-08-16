@@ -206,7 +206,12 @@ test.describe("Workspace release smoke", () => {
     await expect(page.getByText("ACTUAL_PRIVATE_REPOSITORY_SENTINEL")).toHaveCount(0);
 
     await page.getByRole("option", { name: /데모 알고리즘 연습/ }).click();
-    await expect(page.getByText("연결할 준비가 되었어요.")).toBeVisible();
+    await page.getByRole("button", { name: "계속" }).click();
+    await expect(page.getByText("연결할 수 있어요")).toBeVisible();
+    await page.getByRole("button", { name: "계속" }).click();
+    await expect(page.getByRole("heading", { name: "기본 정보" })).toBeVisible();
+    await page.getByRole("button", { name: "계속" }).click();
+    await expect(page.getByRole("heading", { name: "저장 방식" })).toBeVisible();
     await page.getByRole("button", { name: "Workspace 연결하기" }).click();
     await expect(page).toHaveURL(/\/today$/);
     await expect(page.getByText("데모 알고리즘 연습").first()).toBeVisible();
@@ -248,8 +253,14 @@ test.describe("Workspace release smoke", () => {
       await expect(dialog).toBeHidden();
     }
 
-    await expect(page.getByRole("heading", { name: "첫 Workspace를 연결해볼까요?" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Workspace", exact: true })).toBeVisible();
+    await page.getByRole("link", { name: "새 Workspace 연결" }).click();
+    await expect(page.getByRole("heading", { name: "새 Workspace 연결", exact: true })).toBeVisible();
     await page.getByRole("option", { name: /데모 알고리즘 연습/ }).click();
+    await page.getByRole("button", { name: "계속" }).click();
+    await expect(page.getByText("연결할 수 있어요")).toBeVisible();
+    await page.getByRole("button", { name: "계속" }).click();
+    await page.getByRole("button", { name: "계속" }).click();
     await page.getByRole("button", { name: "Workspace 연결하기" }).click();
     await page.goto("/settings/notifications");
     await page.getByRole("switch").first().click();

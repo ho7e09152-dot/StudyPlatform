@@ -28,16 +28,20 @@ public class RepositoryInitializationService {
 		if (!WorkspaceRepositoryLayout.MANAGED_BASE_PATH.equals(workspace.repositoryBasePath())
 			&& WorkspaceRepositoryLayout.schemaVersion(workspace.repositorySchemaVersion()) != WorkspaceRepositoryLayout.CUSTOM_SCHEMA_VERSION) return;
 		String content = configContent(workspace);
+		String configPath = WorkspaceRepositoryLayout.schemaVersion(workspace.repositorySchemaVersion())
+			== WorkspaceRepositoryLayout.CUSTOM_SCHEMA_VERSION
+			? WorkspaceRepositoryLayout.customConfigPath(workspace.repositoryBasePath())
+			: WorkspaceRepositoryLayout.CONFIG_PATH;
 		RepositoryDataPort repository = repositories.require(workspace.repository());
 		try {
 			repository.createFile(
-				accessToken, workspace.repository(), WorkspaceRepositoryLayout.CONFIG_PATH, workspace.defaultBranch(), content,
+				accessToken, workspace.repository(), configPath, workspace.defaultBranch(), content,
 				"study: initialize workspace", authorName
 			);
 		} catch (RepositoryProviderException exception) {
 			if (exception.upstreamStatus() != 400 && exception.upstreamStatus() != 409) throw exception;
 			RepositoryDataPort.RepositoryFile existing = repository.getFile(
-				accessToken, workspace.repository(), WorkspaceRepositoryLayout.CONFIG_PATH, workspace.defaultBranch()
+				accessToken, workspace.repository(), configPath, workspace.defaultBranch()
 			);
 			if (!existing.content().equals(content)) {
 				throw new WorkspaceException("REPOSITORY_PATH_CONFLICT", "서비스 전용 설정 파일이 다른 용도로 사용되고 있습니다.", 409);

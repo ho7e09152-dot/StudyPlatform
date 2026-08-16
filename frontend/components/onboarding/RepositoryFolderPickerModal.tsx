@@ -87,11 +87,14 @@ export function RepositoryFolderPickerModal({
   onClose: () => void;
   onSelect: (path: string, createdFolders: string[]) => void;
 }) {
-  const existingFolders = useMemo(() => new Set([
+  const repositoryFolders = useMemo(() => new Set([
     "",
     ...tree.filter((entry) => entry.type === "tree").map((entry) => normalizePath(entry.path)),
+  ]), [tree]);
+  const existingFolders = useMemo(() => new Set([
+    ...repositoryFolders,
     ...reservedFolders.map(normalizePath),
-  ]), [reservedFolders, tree]);
+  ]), [repositoryFolders, reservedFolders]);
   const normalizedValue = normalizePath(value);
   const initialPath = existingFolders.has(normalizedValue)
     ? normalizedValue
@@ -107,6 +110,9 @@ export function RepositoryFolderPickerModal({
   const folderTree = useMemo(() => buildFolderTree(allFolders), [allFolders]);
   const filePaths = useMemo(() => new Set(tree.filter((entry) => entry.type === "blob").map((entry) => normalizePath(entry.path))), [tree]);
   const inputPathMissing = Boolean(normalizedValue && !existingFolders.has(normalizedValue));
+  const pendingFolders = useMemo(() => new Set([...reservedFolders, ...createdFolders]
+    .map(normalizePath).filter((path) => !repositoryFolders.has(path))), [createdFolders, repositoryFolders, reservedFolders]);
+  const selectedPathPending = selectedPath != null && pendingFolders.has(selectedPath);
 
   const cancelCreation = useCallback(() => {
     setCreating(false);
@@ -256,6 +262,7 @@ export function RepositoryFolderPickerModal({
                 depth={0}
                 selectedPath={selectedPath}
                 expanded={expanded}
+                pendingFolders={pendingFolders}
                 onSelect={selectFolder}
                 onToggle={toggle}
                 creatingParentPath={creating ? selectedPath : null}
@@ -276,8 +283,9 @@ export function RepositoryFolderPickerModal({
         <footer className="repository-folder-picker__footer">
           <div className="repository-folder-picker__selection">
             <span>선택한 위치</span>
-            <code title={selectedPath || "저장소 최상위"}>{selectedPath || "저장소 최상위"}</code>
-            {inputPathMissing ? <small>입력한 경로가 아직 없어 가장 가까운 상위 폴더를 표시했습니다.</small> : null}
+            <div><code title={selectedPath || "저장소 최상위"}>{selectedPath || "저장소 최상위"}</code>{selectedPathPending ? <em>생성 예정</em> : null}</div>
+            {selectedPathPending ? <small>새 폴더는 Workspace 연결 시 설정 파일과 함께 생성됩니다.</small>
+              : inputPathMissing ? <small>입력한 경로와 가장 가까운 폴더를 표시했습니다.</small> : null}
           </div>
           <div className="repository-folder-picker__actions">
             <button className="button button--secondary" type="button" onClick={onClose}>취소</button>
@@ -294,11 +302,12 @@ export function RepositoryFolderPickerModal({
   );
 }
 
-function FolderTreeRow({ node, depth, selectedPath, expanded, onSelect, onToggle, creatingParentPath, creationRow }: {
+function FolderTreeRow({ node, depth, selectedPath, expanded, pendingFolders, onSelect, onToggle, creatingParentPath, creationRow }: {
   node: FolderNode;
   depth: number;
   selectedPath: string | null;
   expanded: Set<string>;
+  pendingFolders: Set<string>;
   onSelect: (path: string) => void;
   onToggle: (path: string) => void;
   creatingParentPath: string | null;
@@ -332,12 +341,12 @@ function FolderTreeRow({ node, depth, selectedPath, expanded, onSelect, onToggle
           </button>
         ) : <span className="repository-folder-picker__toggle" aria-hidden="true" />}
         {open ? <FolderOpen size={17} aria-hidden="true" /> : <Folder size={17} aria-hidden="true" />}
-        <span>{node.name}</span>
+        <span>{node.name}</span>{pendingFolders.has(node.path) ? <em>생성 예정</em> : null}
       </div>
       {hasChildren && open ? (
         <div role="group">
           {node.children.map((child) => (
-            <FolderTreeRow key={child.path} node={child} depth={depth + 1} selectedPath={selectedPath} expanded={expanded} onSelect={onSelect} onToggle={onToggle} creatingParentPath={creatingParentPath} creationRow={creationRow} />
+            <FolderTreeRow key={child.path} node={child} depth={depth + 1} selectedPath={selectedPath} expanded={expanded} pendingFolders={pendingFolders} onSelect={onSelect} onToggle={onToggle} creatingParentPath={creatingParentPath} creationRow={creationRow} />
           ))}
         </div>
       ) : null}

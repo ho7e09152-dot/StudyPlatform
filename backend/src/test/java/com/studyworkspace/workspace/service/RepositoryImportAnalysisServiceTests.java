@@ -26,7 +26,7 @@ class RepositoryImportAnalysisServiceTests {
 		var result = new RepositoryImportAnalysisService(gitLab, new SessionYamlParser()).analyze("token", 12);
 
 		assertThat(result.classification()).isEqualTo("LEGACY");
-		assertThat(result.repositoryBasePath()).isEqualTo(".study-workspace");
+		assertThat(result.repositoryBasePath()).isEqualTo("study");
 		assertThat(result.repositorySchemaVersion()).isEqualTo(2);
 		assertThat(result.totalFiles()).isEqualTo(2);
 		assertThat(result.ignoredFiles()).isEqualTo(2);
@@ -95,6 +95,47 @@ class RepositoryImportAnalysisServiceTests {
 		assertThat(result.detectedLayout().fileNameBlocks()).containsExactly("NAME");
 		assertThat(result.detectedRecords()).isEqualTo(2);
 		assertThat(result.layoutConfidence()).isEqualTo(1.0);
+	}
+
+	@Test
+	void isolatesAnUnsafeCustomSubmissionPathInsteadOfFailingTheWholeAnalysis() {
+		GitLabOAuthProjectService gitLab = mock(GitLabOAuthProjectService.class);
+		when(gitLab.getProject("token", 12)).thenReturn(project());
+		String sessionPath = "study/2026/08/09/session.yml";
+		String unsafeSubmissionPath = "study/2026/08/09/김\u202E서연.md";
+		when(gitLab.getAllRepositoryTree("token", 12, "main")).thenReturn(List.of(
+			new GitLabTreeItem("config", "config.yml", "blob", "study/.study-workspace/config.yml", "100644"),
+			new GitLabTreeItem("session", "session.yml", "blob", sessionPath, "100644"),
+			new GitLabTreeItem("unsafe", "김\u202E서연.md", "blob", unsafeSubmissionPath, "100644")
+		));
+		String config = """
+			version: 1
+			repositorySchemaVersion: 3
+			workspaceId: "workspace-1"
+			repositoryBasePath: "study"
+			storageFolderBlocks: "YEAR,MONTH,DAY"
+			storageFileNameBlocks: "NAME"
+			storageYearFormat: "YYYY"
+			storageMonthFormat: "MM"
+			storageDateFormat: "YYMMDD"
+			storageDayFormat: "DD"
+			storageExtension: "md"
+			""";
+		when(gitLab.getRepositoryFile("token", 12, "study/.study-workspace/config.yml", "main"))
+			.thenReturn(new GitLabFileContent("config.yml", "study/.study-workspace/config.yml", config.length(), config, "main", "config", "sha", "sha"));
+		String session = new SessionYamlSerializer(new ObjectMapper()).serialize(SessionYamlParserTests.validSession());
+		when(gitLab.getRepositoryFile("token", 12, sessionPath, "main"))
+			.thenReturn(new GitLabFileContent("session.yml", sessionPath, session.length(), session, "main", "session", "sha", "sha"));
+
+		var result = new RepositoryImportAnalysisService(gitLab, new SessionYamlParser()).analyze("token", 12);
+
+		assertThat(result.classification()).isEqualTo("PARTIALLY_COMPATIBLE");
+		assertThat(result.compatibleSessions()).isEqualTo(1);
+		assertThat(result.compatibleSubmissions()).isZero();
+		assertThat(result.issues()).anySatisfy(issue -> {
+			assertThat(issue.path()).isEqualTo(unsafeSubmissionPath);
+			assertThat(issue.code()).isEqualTo("INVALID_SUBMISSION_FILE");
+		});
 	}
 
 	private static GitLabProject project() {

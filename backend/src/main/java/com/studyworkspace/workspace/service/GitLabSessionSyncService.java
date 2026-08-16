@@ -67,14 +67,28 @@ public class GitLabSessionSyncService {
 		for (RepositoryDataPort.TreeEntry item : tree) {
 			String relativePath = WorkspaceRepositoryPath.relative(current.repositoryBasePath(), item.path());
 			if (!"blob".equals(item.type())) continue;
-			var location = WorkspaceRepositoryLayout.matchSession(relativePath, schemaVersion).orElse(null);
-			if (location == null) continue;
-			String date = location.date();
+			String date;
+			try {
+				if (schemaVersion == WorkspaceRepositoryLayout.CUSTOM_SCHEMA_VERSION && current.storageLayout() != null) {
+					var location = storageLayouts.matchSession(current.repositoryBasePath(), current.storageLayout(), item.path());
+					if (location == null) continue;
+					date = location.date();
+				} else {
+					var location = WorkspaceRepositoryLayout.matchSession(relativePath, schemaVersion).orElse(null);
+					if (location == null) continue;
+					date = location.date();
+				}
+			} catch (WorkspaceException exception) {
+				failures.add(new SyncFailure(item.path(), exception.code(), exception.getMessage()));
+				continue;
+			}
 			try {
 				RepositoryDataPort.RepositoryFile file = repository.getFile(
 					accessToken, current.repository(), item.path(), current.defaultBranch()
 				);
-				StudySession session = parser.parse(relativePath, file.content(), file.version());
+				StudySession session = schemaVersion == WorkspaceRepositoryLayout.CUSTOM_SCHEMA_VERSION
+					? parser.parseCustom(relativePath, file.content(), file.version(), date)
+					: parser.parse(relativePath, file.content(), file.version());
 				imported.put(session.date(), session);
 				validSessionCount++;
 			} catch (WorkspaceException exception) {
@@ -112,15 +126,20 @@ public class GitLabSessionSyncService {
 			String locationDate;
 			String legacyFileName = null;
 			RepositoryStorageLayoutPolicy.SubmissionLocation customLocation = null;
-			if (schemaVersion == WorkspaceRepositoryLayout.CUSTOM_SCHEMA_VERSION && current.storageLayout() != null) {
-				customLocation = storageLayouts.matchSubmission(current.repositoryBasePath(), current.storageLayout(), item.path());
-				if (customLocation == null) continue;
-				locationDate = customLocation.date();
-			} else {
-				var location = WorkspaceRepositoryLayout.matchSubmission(relativePath, schemaVersion).orElse(null);
-				if (location == null) continue;
-				locationDate = location.date();
-				legacyFileName = location.fileName();
+			try {
+				if (schemaVersion == WorkspaceRepositoryLayout.CUSTOM_SCHEMA_VERSION && current.storageLayout() != null) {
+					customLocation = storageLayouts.matchSubmission(current.repositoryBasePath(), current.storageLayout(), item.path());
+					if (customLocation == null) continue;
+					locationDate = customLocation.date();
+				} else {
+					var location = WorkspaceRepositoryLayout.matchSubmission(relativePath, schemaVersion).orElse(null);
+					if (location == null) continue;
+					locationDate = location.date();
+					legacyFileName = location.fileName();
+				}
+			} catch (WorkspaceException exception) {
+				failures.add(new SyncFailure(item.path(), exception.code(), exception.getMessage()));
+				continue;
 			}
 			StudySession session = imported.get(locationDate);
 			if (session == null) {
@@ -147,12 +166,7 @@ public class GitLabSessionSyncService {
 				if (member == null) continue;
 				key = session.folder() + "/" + member.id();
 				validateSubmissionFile(submission, session, member);
-				if (schemaVersion == WorkspaceRepositoryLayout.CUSTOM_SCHEMA_VERSION
-					&& current.storageLayout() != null && current.storageLayout().usesItemFiles()) {
-					importedSubmissions.put(key, mergeItemFile(importedSubmissions.get(key), submission, file.version()));
-				} else {
-					importedSubmissions.put(key, submission);
-				}
+				importedSubmissions.put(key, submission);
 				validSubmissionCount++;
 			} catch (WorkspaceException exception) {
 				if (key != null) failedSubmissionKeys.add(key);
@@ -214,26 +228,6 @@ public class GitLabSessionSyncService {
 				? member.fileName().substring(0, member.fileName().length() - 3) : member.fileName();
 			return name.equals(fileStem) || name.equals(member.displayName()) || name.equals(member.username());
 		}).findFirst().orElse(null);
-	}
-
-	private static MemberSubmissionFile mergeItemFile(MemberSubmissionFile current, MemberSubmissionFile shard, String commitId) {
-		Map<String, com.studyworkspace.workspace.domain.WorkspaceModels.SubmissionEntry> entries = new LinkedHashMap<>();
-		Map<String, String> commits = new LinkedHashMap<>();
-		if (current != null) {
-			current.submissions().forEach(entry -> entries.put(entry.itemId(), entry));
-			commits.putAll(current.itemCommitIds());
-		}
-		shard.submissions().forEach(entry -> {
-			entries.put(entry.itemId(), entry);
-			commits.put(entry.itemId(), commitId);
-		});
-		List<com.studyworkspace.workspace.domain.WorkspaceModels.SubmissionEntry> merged = entries.values().stream()
-			.sorted(java.util.Comparator.comparing(com.studyworkspace.workspace.domain.WorkspaceModels.SubmissionEntry::itemId)).toList();
-		return new MemberSubmissionFile(
-			shard.version(), shard.memberId(), shard.gitlabUserId(), shard.username(), shard.date(),
-			shard.sessionRevision(), shard.sessionType(), shard.updatedAt(), merged, shard.reflection(),
-			commitId, shard.lastCommitMessage(), Map.copyOf(commits)
-		);
 	}
 
 	private static void validateSubmissionFile(MemberSubmissionFile file, StudySession session, StudyMember member) {

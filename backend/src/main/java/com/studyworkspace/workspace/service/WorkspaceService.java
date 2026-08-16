@@ -191,6 +191,9 @@ public class WorkspaceService {
 			? WorkspaceRepositoryLayout.schemaVersion(request.repositorySchemaVersion())
 			: WorkspaceRepositoryLayout.CUSTOM_SCHEMA_VERSION;
 		String basePath = WorkspaceRepositoryPath.normalizeBasePath(request.repositoryBasePath());
+		if (storageLayout != null) {
+			new RepositoryStorageLayoutPolicy().validateMemberNames(storageLayout, basePath, java.time.LocalDate.now(), List.of(owner));
+		}
 		WorkspaceState workspace = new WorkspaceState(
 			id, request.name().trim(), legacyGitLabProjectId, repository.fullName(), branch,
 			basePath,
@@ -258,6 +261,11 @@ public class WorkspaceService {
 					: member).collect(Collectors.toCollection(ArrayList::new));
 			}
 			WorkspaceState updated = copyMembers(current, List.copyOf(members));
+			if (updated.storageLayout() != null) {
+				new RepositoryStorageLayoutPolicy().validateMemberNames(
+					updated.storageLayout(), updated.repositoryBasePath(), java.time.LocalDate.now(), updated.members()
+				);
+			}
 			if (stateRepository == null) {
 				store(updated);
 				persist();
@@ -353,7 +361,15 @@ public class WorkspaceService {
 				));
 				changed = true;
 			}
-			if (changed) store(copyMembers(workspace, List.copyOf(members)));
+			if (changed) {
+				WorkspaceState updated = copyMembers(workspace, List.copyOf(members));
+				if (updated.storageLayout() != null) {
+					new RepositoryStorageLayoutPolicy().validateMemberNames(
+						updated.storageLayout(), updated.repositoryBasePath(), java.time.LocalDate.now(), updated.members()
+					);
+				}
+				store(updated);
+			}
 		}
 		persist();
 	}
@@ -709,10 +725,10 @@ public class WorkspaceService {
 		MemberSubmissionFile candidate = new MemberSubmissionFile(
 			1, member.id(), member.gitlabUserId(), member.displayName(), session.folder(), session.revision(), session.type(), timestamp,
 			List.copyOf(entries), current == null ? null : current.reflection(),
-			null, request.commitMessage().trim(), current == null ? Map.of() : current.itemCommitIds()
+			null, request.commitMessage().trim()
 		);
 		String commitId = requireCommitId(writer.write(workspace, session, item, member, current, candidate, request.commitMessage().trim()));
-		MemberSubmissionFile saved = withSubmissionCommitId(candidate, itemId, commitId);
+		MemberSubmissionFile saved = withSubmissionCommitId(candidate, commitId);
 		Map<String, MemberSubmissionFile> submissions = new LinkedHashMap<>(workspace.submissions());
 		submissions.put(key, saved);
 		WorkspaceState updated = copy(workspace, workspace.sessions(), submissions, workspace.settings(), workspace.lastSyncedAt());
@@ -747,14 +763,13 @@ public class WorkspaceService {
 		String commitMessage = "study: remove submission " + itemId;
 		MemberSubmissionFile candidate = new MemberSubmissionFile(
 			current.version(), current.memberId(), current.gitlabUserId(), current.username(), current.date(), session.revision(), current.sessionType(),
-			now(), entries, current.reflection(), null, commitMessage, current.itemCommitIds()
+			now(), entries, current.reflection(), null, commitMessage
 		);
 		SessionItem item = java.util.stream.Stream.concat(session.items().stream(), session.archivedItems().stream())
 			.filter(candidateItem -> candidateItem.id().equals(itemId)).findFirst()
 			.orElseThrow(() -> error("ITEM_NOT_FOUND", "삭제할 학습 항목을 찾을 수 없습니다.", 404));
 		MemberSubmissionFile saved = withSubmissionCommitId(
 			candidate,
-			itemId,
 			requireCommitId(writer.write(workspace, session, item, member, current, candidate, commitMessage))
 		);
 		Map<String, MemberSubmissionFile> submissions = new LinkedHashMap<>(workspace.submissions());
@@ -905,9 +920,7 @@ public class WorkspaceService {
 
 	private static void validateExpectedSubmissionCommit(WorkspaceState workspace, MemberSubmissionFile current,
 		String itemId, String expectedCommitId) {
-		boolean itemFiles = workspace.storageLayout() != null && workspace.storageLayout().usesItemFiles();
-		String currentCommitId = current == null ? null
-			: itemFiles ? current.itemCommitIds().get(itemId) : current.lastCommitId();
+		String currentCommitId = current == null ? null : current.lastCommitId();
 		if (!StringUtils.hasText(currentCommitId)) {
 			if (StringUtils.hasText(expectedCommitId)) {
 				throw error("SUBMISSION_CONFLICT", "제출 파일 상태가 변경되었습니다. 최신 내용을 다시 확인해 주세요.", 409);
@@ -932,28 +945,16 @@ public class WorkspaceService {
 
 	private static String safeMemberFileName(String requested, String fallback) {
 		String source = StringUtils.hasText(requested) ? requested.trim() : fallback;
+		if (!StringUtils.hasText(source)) throw error("INVALID_REPOSITORY_FILE_NAME", "학습 기록 이름이 필요합니다.", 400);
 		if (source.toLowerCase().endsWith(".md")) source = source.substring(0, source.length() - 3);
-		String normalized = java.text.Normalizer.normalize(source, java.text.Normalizer.Form.NFKC)
-			.replaceAll("[\\s/\\\\]+", "-")
-			.replaceAll("[^\\p{L}\\p{N}._-]", "-")
-			.replaceAll("-+", "-")
-			.replaceAll("^[.-]+|[.-]+$", "");
-		if (!StringUtils.hasText(normalized)) normalized = "member";
-		return normalized.substring(0, Math.min(normalized.length(), 80)) + ".md";
+		return RepositoryStorageLayoutPolicy.validateSegment(source, "학습 기록 이름") + ".md";
 	}
 
 	private static String uniqueMemberFileName(List<StudyMember> members, String currentMemberId, String requested) {
 		if (members.stream().noneMatch(member -> !member.id().equals(currentMemberId) && member.fileName().equalsIgnoreCase(requested))) {
 			return requested;
 		}
-		String base = requested.substring(0, requested.length() - 3);
-		for (int suffix = 2; suffix <= 999; suffix++) {
-			String candidate = base + "-" + suffix + ".md";
-			if (members.stream().noneMatch(member -> !member.id().equals(currentMemberId) && member.fileName().equalsIgnoreCase(candidate))) {
-				return candidate;
-			}
-		}
-		throw error("MEMBER_FILE_NAME_CONFLICT", "같은 GitLab 기록 이름을 사용하는 멤버가 너무 많습니다.", 409);
+		throw error("MEMBER_FILE_NAME_CONFLICT", "같은 학습 기록 이름을 사용하는 Workspace 멤버가 있습니다.", 409);
 	}
 
 	private static boolean hasSubmissions(WorkspaceState workspace, StudySession session) {
@@ -1012,13 +1013,10 @@ public class WorkspaceService {
 		);
 	}
 
-	private static MemberSubmissionFile withSubmissionCommitId(MemberSubmissionFile file, String itemId, String commitId) {
-		Map<String, String> itemCommitIds = new LinkedHashMap<>(file.itemCommitIds());
-		if (file.submissions().stream().anyMatch(entry -> entry.itemId().equals(itemId))) itemCommitIds.put(itemId, commitId);
-		else itemCommitIds.remove(itemId);
+	private static MemberSubmissionFile withSubmissionCommitId(MemberSubmissionFile file, String commitId) {
 		return new MemberSubmissionFile(
 			file.version(), file.memberId(), file.gitlabUserId(), file.username(), file.date(), file.sessionRevision(), file.sessionType(),
-			file.updatedAt(), file.submissions(), file.reflection(), commitId, file.lastCommitMessage(), Map.copyOf(itemCommitIds)
+			file.updatedAt(), file.submissions(), file.reflection(), commitId, file.lastCommitMessage()
 		);
 	}
 

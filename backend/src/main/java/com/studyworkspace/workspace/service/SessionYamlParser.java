@@ -32,8 +32,15 @@ public class SessionYamlParser {
 		WorkspaceRepositoryLayout.SessionLocation location = WorkspaceRepositoryLayout
 			.matchSession(path, WorkspaceRepositoryLayout.LEGACY_SCHEMA_VERSION)
 			.or(() -> WorkspaceRepositoryLayout.matchSession(path, WorkspaceRepositoryLayout.CURRENT_SCHEMA_VERSION))
-			.or(() -> WorkspaceRepositoryLayout.matchSession(path, WorkspaceRepositoryLayout.CUSTOM_SCHEMA_VERSION))
 			.orElseThrow(() -> invalid("일정 파일 경로 형식이 올바르지 않습니다."));
+		return parse(path, content, lastCommitId, location.date(), location.folder());
+	}
+
+	public StudySession parseCustom(String path, String content, String lastCommitId, String expectedDate) {
+		return parse(path, content, lastCommitId, expectedDate, WorkspaceRepositoryLayout.dateFolder(expectedDate));
+	}
+
+	private StudySession parse(String path, String content, String lastCommitId, String expectedDate, String folder) {
 		if (!StringUtils.hasText(content)) {
 			throw invalid("session.yml 파일이 비어 있습니다.");
 		}
@@ -44,8 +51,6 @@ public class SessionYamlParser {
 		int revision = integer(root, "revision", true);
 		if (revision < 1) throw invalid("revision은 1 이상이어야 합니다.");
 
-		String folder = location.folder();
-		String expectedDate = location.date();
 		String date = text(root, "date", true);
 		try {
 			if (!LocalDate.parse(date).equals(LocalDate.parse(expectedDate))) {

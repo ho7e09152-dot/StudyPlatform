@@ -1,7 +1,6 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useState } from "react";
 import { Plus } from "lucide-react";
 import { WorkspaceConnectionFlow } from "@/components/onboarding/WorkspaceOnboarding";
 import { DiscoverableWorkspaceSection } from "@/components/workspaces/DiscoverableWorkspaceSection";
@@ -16,17 +15,7 @@ export function WorkspaceEntryGate({
   forceConnection?: boolean;
   onWorkspaceReady: (workspace: Workspace) => void;
 }) {
-  const [discovery, setDiscovery] = useState<{ resolved: boolean; count: number; error: boolean }>({
-    resolved: false,
-    count: 0,
-    error: false,
-  });
-
-  const handleResolved = useCallback((result: { count: number; error: boolean }) => {
-    setDiscovery({ resolved: true, ...result });
-  }, []);
-
-  if (forceConnection || discovery.resolved && discovery.count === 0 && !discovery.error) {
+  if (forceConnection) {
     return <WorkspaceConnectionFlow existingWorkspaces={[]} onCreated={onWorkspaceReady} />;
   }
 
@@ -39,7 +28,6 @@ export function WorkspaceEntryGate({
         </header>
         <DiscoverableWorkspaceSection
           hideWhenEmpty={false}
-          onResolved={handleResolved}
           onJoin={async (workspaceId) => {
             const result = await joinWorkspaceApi(workspaceId);
             onWorkspaceReady(result.workspace);

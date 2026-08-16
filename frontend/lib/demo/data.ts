@@ -3,7 +3,7 @@ import { initialWorkspaces } from "@/lib/data/seed";
 import type { Repository } from "@/lib/domain/repository";
 import type { Workspace } from "@/lib/domain/types";
 import type { ProviderId } from "@/lib/providers/provider-descriptors";
-import { RECOMMENDED_STORAGE_LAYOUT } from "@/lib/domain/repository-storage-layout";
+import { DEFAULT_STORAGE_BASE_PATH, RECOMMENDED_STORAGE_LAYOUT } from "@/lib/domain/repository-storage-layout";
 
 const demoRepositories: Repository[] = [
   {
@@ -46,7 +46,7 @@ export function getDemoRepositoryAnalysis(repository: Repository): RepositoryImp
     projectPath: repository.path,
     defaultBranch: repository.defaultBranch ?? "main",
     classification: "EMPTY",
-    repositoryBasePath: ".study-workspace/sessions",
+    repositoryBasePath: DEFAULT_STORAGE_BASE_PATH,
     repositorySchemaVersion: 3,
     treeFingerprint: `demo-${repository.externalId}`,
     totalFiles: 0,
@@ -69,6 +69,7 @@ export function createDemoWorkspace(repository: Repository, name: string): Works
     gitlabProjectId: repository.id,
     gitlabProjectPath: repository.path,
     defaultBranch: repository.defaultBranch ?? "main",
+    repositoryBasePath: DEFAULT_STORAGE_BASE_PATH,
     importMode: "EMPTY",
     lastSyncedAt: new Date().toISOString(),
     sessions: {},
