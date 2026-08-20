@@ -37,10 +37,12 @@ export function serializeSession(session: StudySession) {
       (item) => `  - id: ${item.id}
     order: ${item.order}
     title: ${yamlString(item.title)}
+    kind: ${item.kind ?? "submission"}
     type: ${item.type}
-${item.source ? `    source: ${item.source}\n` : ""}${item.url ? `    url: ${item.url}\n` : ""}    submitType: ${item.submitType}
+${item.description ? `    description: ${yamlString(item.description)}\n` : ""}${item.source ? `    source: ${item.source}\n` : ""}${item.url ? `    url: ${item.url}\n` : ""}    submitType: ${item.submitType}
     required: ${item.required}
-    status: ${item.status}`,
+    status: ${item.status}
+${item.deadline ? `    deadline: ${item.deadline}\n` : ""}${item.secondaryDeadline ? `    secondaryDeadline: ${item.secondaryDeadline}\n` : ""}${item.startTime ? `    startTime: ${item.startTime}\n` : ""}${item.endTime ? `    endTime: ${item.endTime}\n` : ""}`.trimEnd(),
     )
     .join("\n\n");
 
@@ -83,12 +85,13 @@ ${entry.language ? `    language: ${entry.language}\n` : ""}    value: ${yamlStr
     .join("\n\n");
 
   const body = session.items
-    .filter((item) => item.status === "active")
+    .filter((item) => item.status === "active" && (item.kind ?? "submission") !== "event")
     .map((item) => {
       const entry = file.submissions.find(
         (submission) => submission.itemId === item.id,
       );
-      return `## ${item.title}\n\n${entry ? markdownSubmissionValue(entry) : "(미제출)"}`;
+      const value = entry?.type === "check" ? "완료" : entry ? markdownSubmissionValue(entry) : "(미제출)";
+      return `## ${item.title}\n\n${value}`;
     })
     .join("\n\n");
 

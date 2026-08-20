@@ -6,6 +6,11 @@ export interface LoginNoticeState {
   description: string;
   actionLabel: string;
 }
+
+export function shouldAutoResumeAuthenticatedSession(code: string | null) {
+  return code !== "session_expired" && code !== "reconnect_required";
+}
+
 export function getLoginNoticeState(code: string | null, provider: "GITLAB" | "GITHUB" = "GITLAB"): LoginNoticeState | null {
   if (!code) return null;
 

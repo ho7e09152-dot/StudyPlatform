@@ -53,7 +53,7 @@ export function SubmissionDialog({
   ) => Promise<void>;
   onClose: () => void;
 }) {
-  const items = session.items.filter((item) => item.status === "active");
+  const items = session.items.filter((item) => item.status === "active" && (item.kind ?? "submission") === "submission");
   const submissionFile =
     workspace.submissions[getSubmissionKey(session.folder, currentUserId)];
   const me = workspace.members.find((member) => member.id === currentUserId)!;
@@ -71,7 +71,7 @@ export function SubmissionDialog({
       date: session.date,
       item: item.title,
       itemId: item.id,
-      session: session.title,
+      session: session.date,
     });
   const [value, setValue] = useState(existing?.value ?? "");
   const [language, setLanguage] = useState(existing?.language ?? "typescript");

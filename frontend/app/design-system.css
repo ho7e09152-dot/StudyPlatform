@@ -4147,11 +4147,23 @@ button.repository-folder-picker__toggle:hover { background: var(--surface-soft);
 }
 
 .app-frame .schedule-calendar__events a span {
-  width: 5px;
-  height: 5px;
-  flex: 0 0 5px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--primary) 45%, var(--ink-faint));
+  display: inline-flex;
+  width: 13px;
+  height: 13px;
+  flex: 0 0 13px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--primary-soft) 58%, var(--surface));
+  color: var(--primary);
+}
+
+.app-frame .schedule-calendar__events .schedule-calendar-item--check span {
+  color: var(--success);
+}
+
+.app-frame .schedule-calendar__events .schedule-calendar-item--event span {
+  color: var(--ink-soft);
 }
 
 .app-frame .schedule-calendar__mobile-dots,
@@ -4448,6 +4460,32 @@ button.repository-folder-picker__toggle:hover { background: var(--surface-soft);
   background: transparent;
   box-shadow: none;
 }
+
+.app-frame .schedule-editor-page .editor-card__helper {
+  margin: var(--ds-space-3) 0 0;
+  color: var(--ink-faint);
+  font-size: var(--ds-font-metadata);
+}
+
+.app-frame .schedule-editor-page .editor-item-add-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--ds-space-2);
+}
+
+.app-frame .schedule-editor-page .item-kind-chip {
+  padding: 3px 7px;
+  border-radius: var(--ds-radius-round);
+  background: var(--surface-secondary);
+  color: var(--ink-soft);
+  font-size: var(--ds-font-caption);
+  font-style: normal;
+  font-weight: 800;
+}
+
+.app-frame .schedule-editor-page .item-kind-chip--submission { color: var(--primary); }
+.app-frame .schedule-editor-page .item-kind-chip--check { color: var(--success); }
 
 .app-frame .schedule-editor-page .secondary-deadline.is-enabled {
   border-color: var(--border);

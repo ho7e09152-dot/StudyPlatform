@@ -1,7 +1,10 @@
 "use client";
 
+import { useEffect } from "react";
 import { CheckCircle2, X } from "lucide-react";
 import { useExitTransition } from "@/lib/motion/useExitTransition";
+
+const TOAST_AUTO_DISMISS_MS = 7_000;
 
 export function Toast({
   title,
@@ -13,6 +16,11 @@ export function Toast({
   onClose: () => void;
 }) {
   const { motionState, requestClose } = useExitTransition(onClose);
+
+  useEffect(() => {
+    const timer = window.setTimeout(requestClose, TOAST_AUTO_DISMISS_MS);
+    return () => window.clearTimeout(timer);
+  }, [requestClose]);
 
   return (
     <div className="toast" role="status" data-motion-state={motionState}>

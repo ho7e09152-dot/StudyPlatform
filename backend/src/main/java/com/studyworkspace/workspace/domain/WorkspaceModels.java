@@ -40,13 +40,32 @@ public final class WorkspaceModels {
 		boolean required,
 		String status,
 		String replaces,
-		String replacedBy
+		String replacedBy,
+		String kind,
+		String description,
+		String deadline,
+		String secondaryDeadline,
+		String startTime,
+		String endTime
 	) {
+		public SessionItem {
+			kind = kind == null || kind.isBlank() ? "submission" : kind.trim().toLowerCase(java.util.Locale.ROOT);
+		}
+
+		public SessionItem(
+			String id, int order, String title, String type, String source, String url, String submitType,
+			boolean required, String status, String replaces, String replacedBy
+		) {
+			this(id, order, title, type, source, url, submitType, required, status, replaces, replacedBy,
+				"submission", null, null, null, null, null);
+		}
+
 		public SessionItem(
 			String id, int order, String title, String source, String url, String submitType,
 			boolean required, String status, String replaces, String replacedBy
 		) {
-			this(id, order, title, "algorithm", source, url, submitType, required, status, replaces, replacedBy);
+			this(id, order, title, "algorithm", source, url, submitType, required, status, replaces, replacedBy,
+				"submission", null, null, null, null, null);
 		}
 	}
 
@@ -232,9 +251,12 @@ public final class WorkspaceModels {
 	) {
 	}
 
+	public record CompletionRequest(String expectedFileCommitId) {
+	}
+
 	public record CreateWorkspaceRequest(
 		String name,
-		long gitlabProjectId,
+		Long gitlabProjectId,
 		String gitlabProjectPath,
 		String defaultBranch,
 		String timezone,

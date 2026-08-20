@@ -394,6 +394,19 @@ export function upsertSubmission(
   );
 }
 
+export function setChecklistCompletion(
+  workspaceId: string,
+  date: string,
+  itemId: string,
+  completed: boolean,
+  expectedFileCommitId?: string,
+) {
+  const path = `${workspacePath(workspaceId)}/sessions/${encodeURIComponent(date)}/items/${encodeURIComponent(itemId)}/completion`;
+  return apiRequest<Workspace>(path, completed
+    ? { method: "PUT", body: { expectedFileCommitId } }
+    : { method: "DELETE", body: { expectedFileCommitId } });
+}
+
 function submissionReviewPath(workspaceId: string, date: string, memberId: string) {
   return `${workspacePath(workspaceId)}/sessions/${encodeURIComponent(date)}/members/${encodeURIComponent(memberId)}/reviews`;
 }

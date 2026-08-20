@@ -27,6 +27,7 @@ public class SessionYamlParser {
 	private static final Set<String> SESSION_STATUSES = Set.of("active", "cancelled");
 	private static final Set<String> ITEM_STATUSES = Set.of("active", "cancelled", "replaced");
 	private static final Set<String> SUBMISSION_TYPES = Set.of("link", "text", "code", "mixed");
+	private static final Set<String> ITEM_KINDS = Set.of("submission", "check", "event");
 
 	public StudySession parse(String path, String content, String lastCommitId) {
 		WorkspaceRepositoryLayout.SessionLocation location = WorkspaceRepositoryLayout
@@ -114,8 +115,12 @@ public class SessionYamlParser {
 		for (Object entry : list) {
 			if (!(entry instanceof Map<?, ?> raw)) throw invalid(field + "의 각 항목은 객체여야 합니다.");
 			Map<String, Object> item = stringMap(raw, field);
-			String submitType = text(item, "submitType", true);
-			if (!SUBMISSION_TYPES.contains(submitType)) throw invalid("지원하지 않는 제출 방식입니다.");
+			String kind = text(item, "kind", false);
+			if (kind == null) kind = "submission";
+			if (!ITEM_KINDS.contains(kind)) throw invalid("지원하지 않는 항목 유형입니다.");
+			String submitType = text(item, "submitType", false);
+			if (submitType == null) submitType = "text";
+			if ("submission".equals(kind) && !SUBMISSION_TYPES.contains(submitType)) throw invalid("지원하지 않는 제출 방식입니다.");
 			String itemType = text(item, "type", false);
 			if (itemType == null) itemType = fallbackType;
 			if (!SESSION_TYPES.contains(itemType)) throw invalid("지원하지 않는 학습 유형입니다.");
@@ -123,13 +128,32 @@ public class SessionYamlParser {
 			if (!ITEM_STATUSES.contains(status)) throw invalid("지원하지 않는 학습 항목 상태입니다.");
 			int order = integer(item, "order", true);
 			if (order < 1 || !orders.add(order)) throw invalid(field + "의 order는 중복 없는 양수여야 합니다.");
+			String deadline = timestamp(item, "deadline", false);
+			String secondaryDeadline = timestamp(item, "secondaryDeadline", false);
+			if (secondaryDeadline != null && (deadline == null || !OffsetDateTime.parse(secondaryDeadline).isAfter(OffsetDateTime.parse(deadline)))) {
+				throw invalid("항목의 2차 마감은 1차 마감보다 늦어야 합니다.");
+			}
+			String startTime = text(item, "startTime", false);
+			String endTime = text(item, "endTime", false);
+			if ("event".equals(kind)) validateEventTimes(startTime, endTime);
 			result.add(new SessionItem(
 				text(item, "id", true), order, text(item, "title", true), itemType, text(item, "source", false),
-				text(item, "url", false), submitType, bool(item, "required"), status,
-				text(item, "replaces", false), text(item, "replacedBy", false)
+				text(item, "url", false), submitType, !"event".equals(kind) && bool(item, "required"), status,
+				text(item, "replaces", false), text(item, "replacedBy", false), kind,
+				text(item, "description", false), deadline, secondaryDeadline, startTime, endTime
 			));
 		}
 		return result;
+	}
+
+	private static void validateEventTimes(String startTime, String endTime) {
+		try {
+			java.time.LocalTime start = java.time.LocalTime.parse(requiredText(startTime, "startTime"));
+			java.time.LocalTime end = java.time.LocalTime.parse(requiredText(endTime, "endTime"));
+			if (!end.isAfter(start)) throw invalid("시간형 항목의 종료 시간은 시작 시간보다 늦어야 합니다.");
+		} catch (DateTimeParseException exception) {
+			throw invalid("시간형 항목의 시간은 HH:mm 형식이어야 합니다.");
+		}
 	}
 
 	private static SessionChange change(Object value) {

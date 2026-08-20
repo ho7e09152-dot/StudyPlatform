@@ -170,6 +170,63 @@ class WorkspaceServiceTests {
 	}
 
 	@Test
+	void checklistCompletionUsesTheMemberFileWhileTimedItemsRemainNonCompletable() {
+		SessionDraft draft = new SessionDraft(
+			"2026-08-09", "free", "2026-08-09 계획", "", "2026-08-09T23:59:00+09:00", null, "",
+			java.util.List.of(
+				new SessionItem("check-1", 1, "교재 읽기", "cs", null, null, "text", true,
+					"active", null, null, "check", null, null, null, null, null),
+				new SessionItem("event-1", 2, "주간 회의", "free", null, null, "text", false,
+					"active", null, null, "event", null, null, null, "19:00", "20:00")
+			),
+			null
+		);
+		service.saveSession("workspace-evening", null, draft, "gitlab-user-a");
+
+		WorkspaceState updated = service.upsertSubmission(
+			"workspace-evening", draft.date(), "check-1",
+			new SubmissionRequest("check", "completed", null, null, "study: complete checklist item"),
+			CURRENT_GITLAB_USER_ID
+		);
+
+		assertThat(updated.submissions().get("260809/member-a").submissions())
+			.extracting("itemId", "type", "value")
+			.containsExactly(org.assertj.core.groups.Tuple.tuple("check-1", "check", "completed"));
+		assertThatThrownBy(() -> service.deleteSubmission(
+			"workspace-evening", draft.date(), "check-1", CURRENT_GITLAB_USER_ID, "stale-sha",
+			(workspace, session, item, member, current, next, message) -> "should-not-write"
+		))
+			.isInstanceOf(WorkspaceException.class)
+			.extracting("code")
+			.isEqualTo("SUBMISSION_CONFLICT");
+		String currentCommitId = updated.submissions().get("260809/member-a").lastCommitId();
+		WorkspaceState reopened = service.deleteSubmission(
+			"workspace-evening", draft.date(), "check-1", CURRENT_GITLAB_USER_ID, currentCommitId,
+			(workspace, session, item, member, current, next, message) -> "reopen-sha"
+		);
+		assertThat(reopened.submissions().get("260809/member-a").submissions()).isEmpty();
+
+		updated = service.upsertSubmission(
+			"workspace-evening", draft.date(), "check-1",
+			new SubmissionRequest("check", "completed", null, "reopen-sha", "study: complete checklist item"),
+			CURRENT_GITLAB_USER_ID
+		);
+		assertThatThrownBy(() -> service.upsertSubmission(
+			"workspace-evening", draft.date(), "event-1",
+			new SubmissionRequest("text", "완료", null, null, "study: complete event"),
+			CURRENT_GITLAB_USER_ID
+		))
+			.isInstanceOf(WorkspaceException.class)
+			.extracting("code")
+			.isEqualTo("ITEM_NOT_COMPLETABLE");
+
+		@SuppressWarnings("unchecked")
+		var metrics = (java.util.Map<String, Object>) service.dashboard("workspace-evening", draft.date()).get("metrics");
+		assertThat(metrics.get("submittedItems")).isEqualTo(1);
+		assertThat(metrics.get("totalRequiredSubmissions")).isEqualTo(3);
+	}
+
+	@Test
 	void keepsAtLeastOneActiveOwnerWhenRolesChange() {
 		WorkspaceState workspace = service.get("workspace-evening");
 		String ownerId = workspace.members().stream().filter(member -> "OWNER".equals(member.role())).findFirst().orElseThrow().id();

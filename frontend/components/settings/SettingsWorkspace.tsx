@@ -544,7 +544,7 @@ export function SettingsWorkspace({ section = "general" }: { section?: SettingsS
       date: "2026-08-13",
       item: "그래프 탐색 문제 풀이",
       itemId: "item-a1b2c3d4",
-      session: "그래프 집중 학습",
+      session: "2026-08-20",
     });
     useUnsavedChanges(editable && dirty && !saving);
 

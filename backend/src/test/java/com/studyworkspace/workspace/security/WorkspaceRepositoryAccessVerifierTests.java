@@ -16,13 +16,17 @@ import java.time.ZoneOffset;
 import java.util.List;
 
 import com.studyworkspace.auth.dto.GitLabOAuthSession;
+import com.studyworkspace.auth.security.StudyIngPrincipal;
 import com.studyworkspace.common.exception.GitLabApiException;
+import com.studyworkspace.common.exception.RepositoryProviderException;
 import com.studyworkspace.gitlab.dto.GitLabUser;
 import com.studyworkspace.workspace.domain.RepositoryMembership;
 import com.studyworkspace.workspace.domain.RepositoryProvider;
 import com.studyworkspace.workspace.domain.WorkspaceException;
 import com.studyworkspace.workspace.port.RepositoryMembershipPort;
+import com.studyworkspace.workspace.service.RepositoryCredentialResolver;
 import com.studyworkspace.workspace.service.WorkspaceService;
+import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -134,6 +138,49 @@ class WorkspaceRepositoryAccessVerifierTests {
 			.isInstanceOf(WorkspaceException.class)
 			.extracting("code")
 			.isEqualTo("REPOSITORY_ACCESS_REVOKED");
+	}
+
+	@Test
+	void unavailableGitHubCredentialDoesNotExpireAnAccessibleGitLabWorkspaceSession() {
+		RepositoryMembershipPort gitHubMemberships = mock(RepositoryMembershipPort.class);
+		when(gitHubMemberships.provider()).thenReturn(RepositoryProvider.GITHUB);
+		RepositoryCredentialResolver credentials = mock(RepositoryCredentialResolver.class);
+		HttpServletRequest request = mock(HttpServletRequest.class);
+		StudyIngPrincipal principal = new StudyIngPrincipal(
+			"study-user", "gitlab-account", RepositoryProvider.GITLAB, Long.toString(USER_ID),
+			"owner", "Owner", null, null
+		);
+		var gitLabWorkspace = workspaces.list(USER_ID).getFirst();
+		var gitHubWorkspace = new com.studyworkspace.workspace.domain.WorkspaceModels.WorkspaceState(
+			"github-workspace", "GitHub Workspace", 0, "github/study", "main",
+			gitLabWorkspace.repositoryBasePath(), gitLabWorkspace.repositorySchemaVersion(), gitLabWorkspace.importMode(),
+			gitLabWorkspace.status(), gitLabWorkspace.lastSyncedAt(), gitLabWorkspace.members(), gitLabWorkspace.sessions(),
+			gitLabWorkspace.submissions(), gitLabWorkspace.settings(),
+			new com.studyworkspace.workspace.domain.WorkspaceModels.RepositoryIdentity(
+				"GITHUB", "github-repository", "github/study", null, "private", "main", true, true, false, "WRITE"
+			)
+		);
+		when(credentials.resolve(principal, RepositoryProvider.GITLAB, request)).thenReturn(
+			new RepositoryCredentialResolver.ResolvedCredential(RepositoryProvider.GITLAB, "gitlab-account", "gitlab-token")
+		);
+		when(credentials.resolve(principal, RepositoryProvider.GITHUB, request)).thenReturn(
+			new RepositoryCredentialResolver.ResolvedCredential(RepositoryProvider.GITHUB, "github-account", "github-token")
+		);
+		when(gitHubMemberships.listAccessibleRepositories("github-token")).thenThrow(
+			new RepositoryProviderException(
+				RepositoryProvider.GITHUB, "GITHUB_REAUTH_REQUIRED", "GitHub 계정을 다시 승인해 주세요.", 401
+			)
+		);
+		when(memberships.listAccessibleRepositories("gitlab-token")).thenReturn(List.of(
+			new RepositoryMembership(RepositoryProvider.GITLAB, gitLabWorkspace.repository().externalRepositoryId(),
+				gitLabWorkspace.name(), gitLabWorkspace.repository().fullName(), "main", 20)
+		));
+		WorkspaceRepositoryAccessVerifier multiProviderVerifier = new WorkspaceRepositoryAccessVerifier(
+			workspaces, List.of(memberships, gitHubMemberships), Duration.ofMinutes(5), clock, credentials
+		);
+
+		assertThat(multiProviderVerifier.verifyAtLogin(List.of(gitLabWorkspace, gitHubWorkspace), principal, request))
+			.containsExactly(gitLabWorkspace);
 	}
 
 	@Test

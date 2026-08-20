@@ -8,13 +8,14 @@ import {
   AlertTriangle,
   CalendarDays,
   Check,
+  Clock3,
   ChevronDown,
   Code2,
   GitCommitHorizontal,
+  FileUp,
   Languages,
   ListChecks,
   Monitor,
-  Plus,
   Save,
   Tag,
   Trash2,
@@ -31,28 +32,26 @@ import { getMemberProgress } from "@/lib/domain/metrics";
 import type {
   SessionDraft,
   SessionItem,
+  SessionItemKind,
   SessionType,
   StudySession,
   Workspace,
 } from "@/lib/domain/types";
 
-function emptyItem(type: SessionType = "algorithm"): SessionItem {
+function emptyItem(kind: SessionItemKind = "submission", type: SessionType = "algorithm", date = ""): SessionItem {
   return {
     id: newStableItemId(),
     order: 1,
     title: "",
+    kind,
     type,
-    submitType: "link",
-    required: true,
+    submitType: kind === "submission" ? "link" : "text",
+    required: kind !== "event",
+    deadline: kind === "submission" && date ? `${date}T23:59` : undefined,
+    startTime: kind === "event" ? "19:00" : undefined,
+    endTime: kind === "event" ? "20:00" : undefined,
     status: "active",
   };
-}
-
-function nextDayDeadline(deadline: string) {
-  if (!deadline) return "";
-  const date = new Date(`${deadline.slice(0, 10)}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + 1);
-  return `${date.toISOString().slice(0, 10)}T23:59`;
 }
 
 function withTimezone(deadline: string) {
@@ -71,18 +70,24 @@ function makeDraft(session: StudySession | undefined, referenceDate: string): Se
       changeReason: "",
       items: session.items
         .filter((item) => item.status === "active")
-        .map((item) => ({ ...item, type: item.type ?? session.type })),
+        .map((item) => ({
+          ...item,
+          kind: item.kind ?? "submission",
+          type: item.type ?? session.type,
+          deadline: item.deadline ?? ((item.kind ?? "submission") === "submission" ? session.deadline.slice(0, 16) : undefined),
+          secondaryDeadline: item.secondaryDeadline ?? ((item.kind ?? "submission") === "submission" ? session.secondaryDeadline?.slice(0, 16) : undefined),
+        })),
     };
   }
   return {
     date: referenceDate,
     type: "algorithm",
-    title: "",
+    title: `${referenceDate} 계획`,
     description: "",
     deadline: `${referenceDate}T23:59`,
     secondaryDeadline: undefined,
     changeReason: "",
-    items: [emptyItem()],
+    items: [emptyItem("submission", "algorithm", referenceDate)],
   };
 }
 
@@ -90,17 +95,21 @@ export function SessionEditorPage({
   workspace,
   session,
   referenceDate,
+  initialStep = 1,
+  onExistingDateSelected,
   onSave,
   onClose,
 }: {
   workspace: Workspace;
   session?: StudySession;
   referenceDate: string;
+  initialStep?: 1 | 2;
+  onExistingDateSelected?: (date: string) => boolean;
   onSave: (draft: SessionDraft, expectedRevision?: number) => Promise<void>;
   onClose: () => void;
 }) {
   const [draft, setDraft] = useState(() => makeDraft(session, referenceDate));
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<1 | 2>(initialStep);
   const [expandedItemIds, setExpandedItemIds] = useState<Set<string>>(
     () => new Set(draft.items[0]?.id ? [draft.items[0].id] : []),
   );
@@ -144,9 +153,9 @@ export function SessionEditorPage({
     setError("");
   }
 
-  function addItem() {
+  function addItem(kind: SessionItemKind = "submission") {
     const item = {
-      ...emptyItem(draft.items.at(-1)?.type ?? "algorithm"),
+      ...emptyItem(kind, draft.items.at(-1)?.type ?? "algorithm", draft.date),
       order: draft.items.length + 1,
     };
     setDraft((current) => ({ ...current, items: [...current.items, item] }));
@@ -169,8 +178,8 @@ export function SessionEditorPage({
 
   async function save() {
     setShowValidation(true);
-    if (!draft.date || !draft.deadline || !draft.title.trim()) {
-      setError("일정 제목, 날짜와 1차 마감을 입력해 주세요.");
+    if (!draft.date) {
+      setError("날짜를 입력해 주세요.");
       setStep(1);
       return;
     }
@@ -183,11 +192,22 @@ export function SessionEditorPage({
       }
       return;
     }
-    if (
-      draft.secondaryDeadline &&
-      draft.secondaryDeadline <= draft.deadline
-    ) {
-      setError("2차 마감일은 1차 마감일보다 늦게 설정해 주세요.");
+    const invalidSubmission = draft.items.find((item) => (item.kind ?? "submission") === "submission" && !item.deadline);
+    if (invalidSubmission) {
+      setError("제출형 항목의 마감 시간을 입력해 주세요.");
+      setExpandedItemIds((current) => new Set(current).add(invalidSubmission.id));
+      return;
+    }
+    const invalidDeadline = draft.items.find((item) => item.secondaryDeadline && (!item.deadline || item.secondaryDeadline <= item.deadline));
+    if (invalidDeadline) {
+      setError("항목의 2차 마감은 1차 마감보다 늦게 설정해 주세요.");
+      setExpandedItemIds((current) => new Set(current).add(invalidDeadline.id));
+      return;
+    }
+    const invalidEvent = draft.items.find((item) => (item.kind ?? "submission") === "event" && (!item.startTime || !item.endTime || item.endTime <= item.startTime));
+    if (invalidEvent) {
+      setError("시간형 항목의 종료 시간은 시작 시간보다 늦어야 합니다.");
+      setExpandedItemIds((current) => new Set(current).add(invalidEvent.id));
       return;
     }
     if (session && submissionCount > 0 && !draft.changeReason.trim()) {
@@ -196,14 +216,22 @@ export function SessionEditorPage({
     }
     setSaving(true);
     try {
+      const normalizedItems = draft.items.map((item) => ({
+        ...item,
+        deadline: item.deadline ? withTimezone(item.deadline) : undefined,
+        secondaryDeadline: item.secondaryDeadline ? withTimezone(item.secondaryDeadline) : undefined,
+      }));
+      const representative = normalizedItems.find((item) => (item.kind ?? "submission") === "submission") ?? normalizedItems[0];
+      const legacyDeadline = representative?.deadline ?? `${draft.date}T23:59:00+09:00`;
       await onSave(
         {
           ...draft,
-          type: draft.items[0]?.type ?? draft.type,
-          deadline: withTimezone(draft.deadline),
-          secondaryDeadline: draft.secondaryDeadline
-            ? withTimezone(draft.secondaryDeadline)
-            : undefined,
+          title: representative?.title.trim() || `${draft.date} 계획`,
+          description: "",
+          type: representative?.type ?? draft.type,
+          deadline: legacyDeadline,
+          secondaryDeadline: representative?.secondaryDeadline,
+          items: normalizedItems,
         },
         session?.revision,
       );
@@ -236,14 +264,11 @@ export function SessionEditorPage({
 
   function goToItems() {
     setShowValidation(true);
-    if (!draft.date || !draft.deadline || !draft.title.trim()) {
-      setError("일정 제목, 날짜와 1차 마감을 입력해 주세요.");
+    if (!draft.date) {
+      setError("날짜를 입력해 주세요.");
       return;
     }
-    if (draft.secondaryDeadline && draft.secondaryDeadline <= draft.deadline) {
-      setError("2차 마감일은 1차 마감일보다 늦게 설정해 주세요.");
-      return;
-    }
+    if (onExistingDateSelected?.(draft.date)) return;
     setError("");
     setShowValidation(false);
     setStep(2);
@@ -269,8 +294,8 @@ export function SessionEditorPage({
       <div className="schedule-editor-heading">
         <div>
           <p className="eyebrow">{session ? formatDate(session.date, true) : "새로운 학습 계획"}</p>
-          <h1>{session ? "학습 일정 편집" : "새 학습 일정"}</h1>
-          <p>{session ? "변경 내용을 정리해 팀의 학습 계획을 업데이트하세요." : "기본 정보와 학습 항목을 순서대로 설정하세요."}</p>
+          <h1>{session ? "하루 계획 편집" : "항목 추가"}</h1>
+          <p>{session ? "이 날짜에 필요한 항목을 추가하거나 정리하세요." : "날짜를 선택하고 제출, 체크 또는 시간 항목을 추가하세요."}</p>
         </div>
       </div>
       <section className="surface session-editor session-editor--wizard" aria-label={session ? "학습 일정 편집 양식" : "새 학습 일정 양식"}>
@@ -282,12 +307,12 @@ export function SessionEditorPage({
             onClick={() => setStep(1)}
           >
             <span>{step === 2 ? <Check size={15} /> : "1"}</span>
-            기본 정보
+            날짜
           </button>
           <i className={step === 2 ? "is-complete" : undefined} aria-hidden="true" />
           <button type="button" className={step === 2 ? "is-active" : "is-upcoming"} aria-current={step === 2 ? "step" : undefined} onClick={goToItems}>
             <span>2</span>
-            학습 항목
+            항목
           </button>
         </nav>
 
@@ -308,96 +333,40 @@ export function SessionEditorPage({
                 <header className="editor-step__heading">
                   <span><CalendarDays size={18} /></span>
                   <div>
-                    <strong id="basic-section-title">기본 정보</strong>
-                    <small>일정 이름과 기간을 먼저 정리하세요.</small>
+                    <strong id="basic-section-title">날짜 선택</strong>
+                    <small>항목을 등록할 날짜를 선택하세요.</small>
                   </div>
                 </header>
 
-                <div className="editor-card editor-card--basic">
-                  <label className="field field--with-count">
-                    <span>일정 제목 <b>*</b></span>
-                    <input
-                      value={draft.title}
-                      maxLength={50}
-                      aria-invalid={showValidation && !draft.title.trim()}
-                      onChange={(event) => patchDraft({ title: event.target.value })}
-                      placeholder="예: 큐와 배열 집중 학습"
-                    />
-                    <small>{draft.title.length}/50</small>
-                  </label>
-                </div>
-
                 <div className="editor-card editor-card--period">
-                  <strong className="editor-card__title">일정 기간</strong>
-                  <div className="form-grid">
+                  <strong className="editor-card__title">계획 날짜</strong>
+                  <div>
                     <label className="field">
-                      <span>학습 날짜 <b>*</b></span>
+                      <span>날짜 <b>*</b></span>
                       <input
                         type="date"
                         lang="ko-KR"
                         value={draft.date}
                         disabled={Boolean(session)}
                         aria-invalid={showValidation && !draft.date}
-                        onChange={(event) => patchDraft({ date: event.target.value })}
-                      />
-                    </label>
-                    <label className="field">
-                      <span>1차 마감 <b>*</b></span>
-                      <input
-                        type="datetime-local"
-                        lang="ko-KR"
-                        value={draft.deadline.slice(0, 16)}
-                        aria-invalid={showValidation && !draft.deadline}
-                        onChange={(event) => patchDraft({ deadline: event.target.value })}
+                        onChange={(event) => {
+                          const date = event.target.value;
+                          setDraft((current) => ({
+                            ...current,
+                            date,
+                            title: `${date} 계획`,
+                            deadline: `${date}T23:59`,
+                            items: current.items.map((item) => ({
+                              ...item,
+                              deadline: (item.kind ?? "submission") === "submission" ? `${date}T23:59` : item.deadline,
+                            })),
+                          }));
+                          setError("");
+                        }}
                       />
                     </label>
                   </div>
-                </div>
-
-                <div className={`editor-card secondary-deadline ${draft.secondaryDeadline ? "is-enabled" : ""}`}>
-                  <label className="secondary-deadline__toggle">
-                    <span>
-                      <strong>2차 마감 사용 <small>(선택)</small></strong>
-                      <small>추가 마감 시간을 설정하고 싶다면 켜주세요.</small>
-                    </span>
-                    <input
-                      type="checkbox"
-                      checked={Boolean(draft.secondaryDeadline)}
-                      onChange={(event) =>
-                        patchDraft({
-                          secondaryDeadline: event.target.checked
-                            ? nextDayDeadline(draft.deadline)
-                            : undefined,
-                        })
-                      }
-                    />
-                    <i aria-hidden="true" />
-                  </label>
-                  {draft.secondaryDeadline ? (
-                    <label className="field secondary-deadline__field">
-                      <span>2차 마감</span>
-                      <input
-                        type="datetime-local"
-                        lang="ko-KR"
-                        value={draft.secondaryDeadline.slice(0, 16)}
-                        aria-invalid={showValidation && draft.secondaryDeadline <= draft.deadline}
-                        onChange={(event) => patchDraft({ secondaryDeadline: event.target.value })}
-                      />
-                    </label>
-                  ) : null}
-                </div>
-
-                <div className="editor-card">
-                  <label className="field field--with-count">
-                    <span>설명 <small>(선택)</small></span>
-                    <textarea
-                      value={draft.description}
-                      maxLength={300}
-                      onChange={(event) => patchDraft({ description: event.target.value })}
-                      placeholder="이번 일정의 학습 목표나 안내 사항을 입력하세요."
-                    />
-                    <small>{draft.description.length}/300</small>
-                  </label>
+                  <p className="editor-card__helper">제목과 설명, 마감 또는 시간은 각 항목에서 설정합니다.</p>
                 </div>
               </section>
             ) : (
@@ -406,19 +375,22 @@ export function SessionEditorPage({
                   <div className="editor-step__heading">
                     <span><ListChecks size={18} /></span>
                     <div>
-                      <strong id="editor-items-title">학습 항목</strong>
-                      <small>제출해야 할 학습 내용을 항목별로 설정하세요.</small>
+                      <strong id="editor-items-title">항목</strong>
+                      <small>제출, 체크, 시간 항목을 한 날짜에 함께 등록할 수 있습니다.</small>
                     </div>
                   </div>
-                  <button type="button" className="button button--secondary button--small" onClick={addItem}>
-                    <Plus size={16} /> 항목 추가
-                  </button>
+                  <div className="editor-item-add-actions" role="group" aria-label="추가할 항목 유형">
+                    <button type="button" className="button button--secondary button--small" onClick={() => addItem("submission")}><FileUp size={15} /> 제출</button>
+                    <button type="button" className="button button--secondary button--small" onClick={() => addItem("check")}><ListChecks size={15} /> 체크</button>
+                    <button type="button" className="button button--secondary button--small" onClick={() => addItem("event")}><Clock3 size={15} /> 시간</button>
+                  </div>
                 </div>
 
                 <div className="editor-item-list">
                   {draft.items.map((item, index) => {
                     const expanded = expandedItemIds.has(item.id);
-                    const meta = SESSION_TYPE_META[item.type];
+                    const kind = item.kind ?? "submission";
+                    const kindLabel = kind === "submission" ? "제출" : kind === "check" ? "체크" : "시간";
                     return (
                       <article className={`editor-item ${expanded ? "editor-item--expanded" : ""}`} key={item.id}>
                         <header className="editor-item__header">
@@ -437,13 +409,15 @@ export function SessionEditorPage({
                           >
                             <span className="step-number">{index + 1}</span>
                             <span className="editor-item__summary">
-                              <strong>{item.title.trim() || `새 학습 항목 ${index + 1}`}</strong>
+                              <strong>{item.title.trim() || `새 ${kindLabel} 항목 ${index + 1}`}</strong>
                               <small>
-                                <em className={`type-chip type-chip--${meta.tone}`}>{meta.short}</em>
-                                {item.required ? <em className="required-chip">필수</em> : null}
+                                <em className={`item-kind-chip item-kind-chip--${kind}`}>{kindLabel}</em>
+                                {kind !== "event" && item.required ? <em className="required-chip">필수</em> : null}
                               </small>
                             </span>
-                            <span className="editor-item__submission">{SUBMISSION_TYPE_LABEL[item.submitType]}</span>
+                            <span className="editor-item__submission">
+                              {kind === "submission" ? SUBMISSION_TYPE_LABEL[item.submitType] : kind === "event" ? `${item.startTime ?? "--:--"}–${item.endTime ?? "--:--"}` : "완료 체크"}
+                            </span>
                             <ChevronDown size={18} aria-hidden="true" />
                           </button>
                           <button
@@ -472,41 +446,58 @@ export function SessionEditorPage({
                                 <small>{item.title.length}/50</small>
                               </label>
                               <label className="field">
-                                <span>제출 방식 <b>*</b></span>
+                                <span>항목 유형 <b>*</b></span>
                                 <select
-                                  value={item.submitType}
+                                  value={kind}
                                   onChange={(event) =>
-                                    patchItem(item.id, { submitType: event.target.value as SessionItem["submitType"] })
+                                    patchItem(item.id, {
+                                      kind: event.target.value as SessionItemKind,
+                                      required: event.target.value !== "event",
+                                      submitType: event.target.value === "submission" ? item.submitType : "text",
+                                      deadline: event.target.value === "submission" ? (item.deadline ?? `${draft.date}T23:59`) : undefined,
+                                      secondaryDeadline: event.target.value === "submission" ? item.secondaryDeadline : undefined,
+                                      startTime: event.target.value === "event" ? (item.startTime ?? "19:00") : undefined,
+                                      endTime: event.target.value === "event" ? (item.endTime ?? "20:00") : undefined,
+                                    })
                                   }
                                 >
-                                  {Object.entries(SUBMISSION_TYPE_LABEL).map(([value, label]) => (
-                                    <option key={value} value={value}>{label}</option>
-                                  ))}
+                                  <option value="submission">제출형</option>
+                                  <option value="check">체크형</option>
+                                  <option value="event">시간형</option>
                                 </select>
                               </label>
                             </div>
 
-                            <div className="form-grid form-grid--item-secondary">
-                              <label className="field">
-                                <span>출처 <small>(선택)</small></span>
-                                <input
-                                  value={item.source ?? ""}
-                                  onChange={(event) => patchItem(item.id, { source: event.target.value })}
-                                  placeholder="예: Programmers"
-                                />
-                              </label>
-                              <label className="field">
-                                <span>자료 URL <small>(선택)</small></span>
-                                <input
-                                  type="url"
-                                  value={item.url ?? ""}
-                                  onChange={(event) => patchItem(item.id, { url: event.target.value })}
-                                  placeholder="https://"
-                                />
-                              </label>
-                            </div>
+                            <label className="field field--with-count">
+                              <span>설명 <small>(선택)</small></span>
+                              <textarea value={item.description ?? ""} maxLength={300} onChange={(event) => patchItem(item.id, { description: event.target.value })} placeholder="항목에 필요한 안내를 입력하세요." />
+                              <small>{item.description?.length ?? 0}/300</small>
+                            </label>
 
-                            <fieldset className="item-type-options">
+                            {kind === "submission" ? <>
+                              <div className="form-grid form-grid--item">
+                                <label className="field"><span>제출 방식 <b>*</b></span><select value={item.submitType} onChange={(event) => patchItem(item.id, { submitType: event.target.value as SessionItem["submitType"] })}>{Object.entries(SUBMISSION_TYPE_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+                                <label className="field"><span>마감 <b>*</b></span><input type="datetime-local" lang="ko-KR" value={item.deadline?.slice(0, 16) ?? ""} onChange={(event) => patchItem(item.id, { deadline: event.target.value })} /></label>
+                              </div>
+                              <label className="field"><span>2차 마감 <small>(선택)</small></span><input type="datetime-local" lang="ko-KR" value={item.secondaryDeadline?.slice(0, 16) ?? ""} min={item.deadline?.slice(0, 16)} onChange={(event) => patchItem(item.id, { secondaryDeadline: event.target.value || undefined })} /></label>
+                              <div className="form-grid form-grid--item-secondary">
+                                <label className="field"><span>출처 <small>(선택)</small></span><input value={item.source ?? ""} onChange={(event) => patchItem(item.id, { source: event.target.value })} placeholder="예: Programmers" /></label>
+                                <label className="field"><span>자료 URL <small>(선택)</small></span><input type="url" value={item.url ?? ""} onChange={(event) => patchItem(item.id, { url: event.target.value })} placeholder="https://" /></label>
+                              </div>
+                            </> : null}
+
+                            {kind === "check" ? (
+                              <label className="field"><span>마감 <small>(선택)</small></span><input type="datetime-local" lang="ko-KR" value={item.deadline?.slice(0, 16) ?? ""} onChange={(event) => patchItem(item.id, { deadline: event.target.value || undefined })} /></label>
+                            ) : null}
+
+                            {kind === "event" ? (
+                              <div className="form-grid form-grid--item">
+                                <label className="field"><span>시작 시간 <b>*</b></span><input type="time" value={item.startTime ?? ""} onChange={(event) => patchItem(item.id, { startTime: event.target.value })} /></label>
+                                <label className="field"><span>종료 시간 <b>*</b></span><input type="time" value={item.endTime ?? ""} onChange={(event) => patchItem(item.id, { endTime: event.target.value })} /></label>
+                              </div>
+                            ) : null}
+
+                            {kind !== "event" ? <fieldset className="item-type-options">
                               <legend>학습 유형 <b>*</b></legend>
                               <div>
                                 {Object.entries(SESSION_TYPE_META).map(([type, typeMeta]) => {
@@ -529,9 +520,9 @@ export function SessionEditorPage({
                                   );
                                 })}
                               </div>
-                            </fieldset>
+                            </fieldset> : null}
 
-                            <div className="editor-item__meta">
+                            {kind !== "event" ? <div className="editor-item__meta">
                               <label className="check-field check-field--switch">
                                 <input
                                   type="checkbox"
@@ -544,7 +535,7 @@ export function SessionEditorPage({
                                   <small>완료하지 않으면 일정이 완료되지 않습니다.</small>
                                 </span>
                               </label>
-                            </div>
+                            </div> : null}
                           </div>
                         ) : null}
                       </article>
@@ -595,7 +586,7 @@ export function SessionEditorPage({
               {step === 1 ? (
                 <>다음 단계 <ArrowRight size={15} /></>
               ) : (
-                <><Save size={15} /> {saving ? "저장 중…" : session ? "일정 저장" : "일정 만들기"}</>
+                <><Save size={15} /> {saving ? "저장 중…" : "항목 저장"}</>
               )}
             </button>
           </div>

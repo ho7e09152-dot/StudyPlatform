@@ -201,7 +201,8 @@ public class WorkspaceController {
 			? RepositoryProvider.GITLAB : parseProvider(request.provider());
 		String externalRepositoryId = request == null ? null : StringUtils.hasText(request.externalRepositoryId())
 			? request.externalRepositoryId().trim()
-			: request.gitlabProjectId() > 0 ? Long.toString(request.gitlabProjectId()) : null;
+			: request.gitlabProjectId() != null && request.gitlabProjectId() > 0
+				? Long.toString(request.gitlabProjectId()) : null;
 		if (request == null || !StringUtils.hasText(externalRepositoryId) || !StringUtils.hasText(request.name())) {
 			throw new WorkspaceException("INVALID_REQUEST", "Workspace 이름과 저장소가 필요합니다.", 400);
 		}
@@ -666,8 +667,8 @@ public class WorkspaceController {
 		String accessToken = credentialResolver.resolve(user, service.get(workspaceId), servletRequest).accessToken();
 		WorkspaceState updated = service.upsertSubmission(
 			workspaceId, date, itemId, request, user.id(),
-			(workspace, session, item, member, current, next, commitMessage) -> submissionFileService.write(
-				accessToken, workspace, session, item, member, current, next, commitMessage
+			(workspace, targetSession, targetItem, member, current, next, commitMessage) -> submissionFileService.write(
+				accessToken, workspace, targetSession, targetItem, member, current, next, commitMessage
 			)
 		);
 		auditEventService.record(workspaceId, user, "SUBMISSION_UPSERTED", "SUBMISSION", date + ":" + itemId, Map.of());
@@ -685,12 +686,70 @@ public class WorkspaceController {
 		String accessToken = credentialResolver.resolve(user, service.get(workspaceId), servletRequest).accessToken();
 		WorkspaceState updated = service.deleteSubmission(
 			workspaceId, date, itemId, user.id(),
-			(workspace, session, item, member, current, next, commitMessage) -> submissionFileService.write(
-				accessToken, workspace, session, item, member, current, next, commitMessage
+			(workspace, targetSession, targetItem, member, current, next, commitMessage) -> submissionFileService.write(
+				accessToken, workspace, targetSession, targetItem, member, current, next, commitMessage
 			)
 		);
 		auditEventService.record(workspaceId, user, "SUBMISSION_DELETED", "SUBMISSION", date + ":" + itemId, Map.of());
 		return updated;
+	}
+
+	@PutMapping("/{workspaceId}/sessions/{date}/items/{itemId}/completion")
+	public WorkspaceState completeItem(
+		@PathVariable String workspaceId,
+		@PathVariable String date,
+		@PathVariable String itemId,
+		@RequestBody(required = false) CompletionRequest request,
+		@AuthenticationPrincipal StudyIngPrincipal user,
+		HttpServletRequest servletRequest
+	) {
+		WorkspaceState workspaceState = service.get(workspaceId);
+		requireChecklistItem(workspaceState, date, itemId);
+		String accessToken = credentialResolver.resolve(user, workspaceState, servletRequest).accessToken();
+		WorkspaceState updated = service.upsertSubmission(
+			workspaceId, date, itemId,
+			new SubmissionRequest("check", "completed", null,
+				request == null ? null : request.expectedFileCommitId(), "study: complete checklist item"),
+			user.id(),
+			(workspace, session, item, member, current, next, commitMessage) -> submissionFileService.write(
+				accessToken, workspace, session, item, member, current, next, commitMessage
+			)
+		);
+		auditEventService.record(workspaceId, user, "CHECKLIST_ITEM_COMPLETED", "SESSION_ITEM", date + ":" + itemId, Map.of());
+		return updated;
+	}
+
+	@DeleteMapping("/{workspaceId}/sessions/{date}/items/{itemId}/completion")
+	public WorkspaceState uncompleteItem(
+		@PathVariable String workspaceId,
+		@PathVariable String date,
+		@PathVariable String itemId,
+		@RequestBody(required = false) CompletionRequest request,
+		@AuthenticationPrincipal StudyIngPrincipal user,
+		HttpServletRequest servletRequest
+	) {
+		WorkspaceState workspaceState = service.get(workspaceId);
+		requireChecklistItem(workspaceState, date, itemId);
+		String accessToken = credentialResolver.resolve(user, workspaceState, servletRequest).accessToken();
+		WorkspaceState updated = service.deleteSubmission(
+			workspaceId, date, itemId, user.id(), request == null ? null : request.expectedFileCommitId(),
+			(workspace, targetSession, targetItem, member, current, next, commitMessage) -> submissionFileService.write(
+				accessToken, workspace, targetSession, targetItem, member, current, next, commitMessage
+			)
+		);
+		auditEventService.record(workspaceId, user, "CHECKLIST_ITEM_REOPENED", "SESSION_ITEM", date + ":" + itemId, Map.of());
+		return updated;
+	}
+
+	private static SessionItem requireChecklistItem(WorkspaceState workspace, String date, String itemId) {
+		StudySession session = workspace.sessions().get(date);
+		SessionItem item = session == null ? null : session.items().stream()
+			.filter(candidate -> candidate.id().equals(itemId) && "active".equals(candidate.status()))
+			.findFirst().orElse(null);
+		if (item == null || !"check".equals(item.kind())) {
+			throw new WorkspaceException("ITEM_NOT_COMPLETABLE", "체크 항목만 완료 상태를 변경할 수 있습니다.", 400);
+		}
+		return item;
 	}
 
 	@GetMapping("/{workspaceId}/dashboard")

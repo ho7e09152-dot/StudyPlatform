@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { getLoginNoticeState } from "../lib/auth/loginState.ts";
+import { getLoginNoticeState, shouldAutoResumeAuthenticatedSession } from "../lib/auth/loginState.ts";
 import { safeAppReturnUrl } from "../lib/auth/redirects.ts";
 import { getDemoEntryUrl } from "../lib/demo/session.ts";
 import { orderLoginProviders } from "../lib/providers/provider-descriptors.ts";
@@ -32,6 +32,13 @@ test("OAuth errors keep cancellation separate from authentication failure", () =
   assert.equal(getLoginNoticeState("oauth_failed")?.tone, "danger");
   assert.equal(getLoginNoticeState("access_denied", "GITHUB")?.title, "GitHub 로그인이 취소되었습니다.");
   assert.equal(getLoginNoticeState("session_expired", "GITHUB")?.actionLabel, "GitHub로 다시 로그인");
+});
+
+test("expired or reconnect-required sessions stay on the login recovery screen", () => {
+  assert.equal(shouldAutoResumeAuthenticatedSession("session_expired"), false);
+  assert.equal(shouldAutoResumeAuthenticatedSession("reconnect_required"), false);
+  assert.equal(shouldAutoResumeAuthenticatedSession(null), true);
+  assert.equal(shouldAutoResumeAuthenticatedSession("oauth_cancelled"), true);
 });
 
 test("login and callback UI are capability-driven and provider-aware", async () => {

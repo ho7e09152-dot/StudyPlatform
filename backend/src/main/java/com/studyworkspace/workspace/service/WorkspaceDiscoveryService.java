@@ -73,7 +73,10 @@ public class WorkspaceDiscoveryService {
 					.collect(Collectors.toMap(RepositoryMembership::repositoryId, Function.identity(), (left, right) -> left));
 				accessibleByProvider.put(provider, accessible);
 			} catch (WorkspaceException exception) {
-				if (!"PROVIDER_ACCOUNT_REQUIRED".equals(exception.code())) throw exception;
+				if (!RepositoryCredentialResolver.isCredentialUnavailable(exception.code())) throw exception;
+			} catch (RepositoryProviderException exception) {
+				if (exception.upstreamStatus() != 401
+					|| !RepositoryCredentialResolver.isCredentialUnavailable(exception.code())) throw exception;
 			}
 		}
 		return workspaces.listActiveRepositoryWorkspaces().stream()

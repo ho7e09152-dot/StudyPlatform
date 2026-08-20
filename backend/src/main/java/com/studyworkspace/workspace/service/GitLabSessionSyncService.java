@@ -241,7 +241,9 @@ public class GitLabSessionSyncService {
 		for (var entry : file.submissions()) {
 			SessionItem item = java.util.stream.Stream.concat(session.items().stream(), session.archivedItems().stream())
 				.filter(candidate -> candidate.id().equals(entry.itemId())).findFirst().orElse(null);
-			if (item == null || !item.submitType().equals(entry.type())) {
+			String expectedType = item == null || "event".equals(item.kind())
+				? null : "check".equals(item.kind()) ? "check" : item.submitType();
+			if (expectedType == null || !expectedType.equals(entry.type())) {
 				throw invalidSubmission("제출 항목이 session.yml 정의와 일치하지 않습니다: " + entry.itemId());
 			}
 		}

@@ -16,6 +16,14 @@ import org.springframework.stereotype.Service;
 public class RepositoryCredentialResolver {
 	public record ResolvedCredential(RepositoryProvider provider, String providerAccountId, String accessToken) { }
 
+	public static boolean isCredentialUnavailable(String code) {
+		return "PROVIDER_ACCOUNT_REQUIRED".equals(code)
+			|| "PROVIDER_REAUTH_REQUIRED".equals(code)
+			|| "GITHUB_REAUTH_REQUIRED".equals(code)
+			|| "GITLAB_RECONNECT_REQUIRED".equals(code)
+			|| "GITLAB_AUTHENTICATION_FAILED".equals(code);
+	}
+
 	private final GitLabOAuthTokenProvider gitLabTokens;
 	private final ProviderCapabilities capabilities;
 	private final OAuthAccountService accounts;

@@ -1302,6 +1302,58 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
+  /workspaces/{workspaceId}/sessions/{date}/items/{itemId}/completion:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/SessionDate"
+      - $ref: "#/components/parameters/ItemId"
+    put:
+      tags: [Submissions]
+      summary: 내 체크형 항목 완료
+      operationId: completeChecklistItem
+      x-implementation-status: implemented
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                expectedFileCommitId:
+                  type: [string, "null"]
+      responses:
+        "200":
+          description: 체크 상태가 반영된 Workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspace"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Submissions]
+      summary: 내 체크형 항목 완료 해제
+      operationId: reopenChecklistItem
+      x-implementation-status: implemented
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                expectedFileCommitId:
+                  type: [string, "null"]
+      responses:
+        "200":
+          description: 체크 상태가 해제된 Workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspace"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
   /workspaces/{workspaceId}/sessions/{date}/members/{memberId}/submission:
     get:
       tags: [Submissions]
@@ -2327,7 +2379,7 @@ components:
       properties:
         submissionTemplate:
           type: string
-          description: "지원 변수: {action}, {name}, {date}, {item}, {itemId}, {session}. 적용 결과는 최대 200자입니다."
+          description: "지원 변수: {action}, {name}, {date}, {item}, {itemId}, {session}. {session}은 계획 날짜를 사용하며 적용 결과는 최대 200자입니다."
           example: "{action}: {name} · {date} · {item}"
         submissionGuidance:
           type: string
@@ -2343,7 +2395,7 @@ components:
           minLength: 2
           maxLength: 80
         gitlabProjectId:
-          type: integer
+          type: [integer, "null"]
           format: int64
           deprecated: true
         provider:
@@ -2558,9 +2610,12 @@ components:
     SubmitType:
       type: string
       enum: [link, text, code, mixed]
+    SessionItemKind:
+      type: string
+      enum: [submission, check, event]
     StudyItem:
       type: object
-      required: [id, order, title, type, submitType, required, status]
+      required: [id, order, title, kind, type, submitType, required, status]
       properties:
         id:
           type: string
@@ -2570,6 +2625,10 @@ components:
           minimum: 1
         title:
           type: string
+        kind:
+          $ref: "#/components/schemas/SessionItemKind"
+        description:
+          type: [string, "null"]
         type:
           $ref: "#/components/schemas/SessionType"
         source:
@@ -2581,6 +2640,18 @@ components:
           $ref: "#/components/schemas/SubmitType"
         required:
           type: boolean
+        deadline:
+          type: [string, "null"]
+          format: date-time
+        secondaryDeadline:
+          type: [string, "null"]
+          format: date-time
+        startTime:
+          type: [string, "null"]
+          pattern: ^\d{2}:\d{2}$
+        endTime:
+          type: [string, "null"]
+          pattern: ^\d{2}:\d{2}$
         status:
           type: string
           enum: [active, cancelled]
@@ -2626,7 +2697,7 @@ components:
           $ref: "#/components/schemas/StudySession"
     SessionItemDraft:
       type: object
-      required: [title, type, submitType, required]
+      required: [title, type, required]
       properties:
         id:
           type: string
@@ -2635,6 +2706,12 @@ components:
           type: string
           minLength: 1
           maxLength: 120
+        kind:
+          $ref: "#/components/schemas/SessionItemKind"
+          description: 생략하면 legacy submission 항목으로 처리
+        description:
+          type: string
+          maxLength: 500
         type:
           $ref: "#/components/schemas/SessionType"
         source:
@@ -2647,6 +2724,18 @@ components:
           $ref: "#/components/schemas/SubmitType"
         required:
           type: boolean
+        deadline:
+          type: [string, "null"]
+          format: date-time
+        secondaryDeadline:
+          type: [string, "null"]
+          format: date-time
+        startTime:
+          type: [string, "null"]
+          pattern: ^\d{2}:\d{2}$
+        endTime:
+          type: [string, "null"]
+          pattern: ^\d{2}:\d{2}$
     CreateSessionRequest:
       type: object
       required: [date, type, title, description, deadline, items]
@@ -2746,7 +2835,8 @@ components:
         itemId:
           type: string
         type:
-          $ref: "#/components/schemas/SubmitType"
+          type: string
+          enum: [link, text, code, mixed, check]
         value:
           type: string
         language:

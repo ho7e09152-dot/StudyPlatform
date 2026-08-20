@@ -39,6 +39,13 @@ test("shared overlays retain an exit state before unmount", async () => {
   assert.match(hook, /setTimeout/);
 });
 
+test("toast automatically dismisses after seven seconds", async () => {
+  const toast = await readFile(new URL("../components/ui/Toast.tsx", import.meta.url), "utf8");
+  assert.match(toast, /TOAST_AUTO_DISMISS_MS\s*=\s*7_000/);
+  assert.match(toast, /window\.setTimeout\(requestClose, TOAST_AUTO_DISMISS_MS\)/);
+  assert.match(toast, /window\.clearTimeout\(timer\)/);
+});
+
 test("settings applies content motion only to the changing section", async () => {
   const source = await readFile(new URL("../components/settings/SettingsWorkspace.tsx", import.meta.url), "utf8");
   assert.match(source, /<main key=\{section\} className="settings-content motion-content-swap"/);

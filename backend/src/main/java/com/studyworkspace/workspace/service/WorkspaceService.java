@@ -47,6 +47,7 @@ public class WorkspaceService {
 
 	private static final Set<String> SESSION_TYPES = Set.of("algorithm", "english", "cs", "free");
 	private static final Set<String> SUBMISSION_TYPES = Set.of("link", "text", "code", "mixed");
+	private static final Set<String> ITEM_KINDS = Set.of("submission", "check", "event");
 	private final Map<String, WorkspaceState> workspaces = new ConcurrentHashMap<>();
 	private final Set<String> dirtyWorkspaceIds = ConcurrentHashMap.newKeySet();
 	private final ObjectMapper objectMapper;
@@ -172,7 +173,8 @@ public class WorkspaceService {
 				&& repository.externalRepositoryId().equals(workspace.repository().externalRepositoryId()))
 			|| repositoryConnectionRepository != null && repositoryConnectionRepository
 				.existsByProviderAndExternalRepositoryId(repository.provider(), repository.externalRepositoryId())
-			|| "GITLAB".equals(repository.provider()) && stateRepository != null && stateRepository.existsByGitLabProjectId(request.gitlabProjectId())) {
+			|| "GITLAB".equals(repository.provider()) && stateRepository != null
+				&& stateRepository.existsByGitLabProjectId(legacyGitLabProjectId(request))) {
 			throw error("WORKSPACE_PROJECT_ALREADY_CONNECTED", "이미 연결되었거나 복원 가능한 저장소입니다. 삭제 목록을 확인해 주세요.", 409);
 		}
 		String id = "workspace-" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
@@ -215,9 +217,13 @@ public class WorkspaceService {
 
 	private static RepositoryIdentity gitLabIdentity(CreateWorkspaceRequest request, int repositoryAccessLevel) {
 		if (request == null) return null;
-		return new RepositoryIdentity("GITLAB", Long.toString(request.gitlabProjectId()), request.gitlabProjectPath(),
+		return new RepositoryIdentity("GITLAB", Long.toString(legacyGitLabProjectId(request)), request.gitlabProjectPath(),
 			request.repositoryWebUrl(), request.repositoryVisibility(), request.defaultBranch(), true,
 			repositoryAccessLevel >= 30, repositoryAccessLevel >= 40, Integer.toString(repositoryAccessLevel));
+	}
+
+	private static long legacyGitLabProjectId(CreateWorkspaceRequest request) {
+		return request.gitlabProjectId() == null ? 0 : request.gitlabProjectId();
 	}
 
 	public synchronized WorkspaceState joinMember(String workspaceId, StudyMember candidate) {
@@ -633,7 +639,9 @@ public class WorkspaceService {
 			Set<String> nextIds = activeItems.stream().map(SessionItem::id).collect(Collectors.toSet());
 			current.items().stream()
 				.filter(item -> !nextIds.contains(item.id()))
-				.map(item -> new SessionItem(item.id(), item.order(), item.title(), item.type(), item.source(), item.url(), item.submitType(), item.required(), "cancelled", item.replaces(), item.replacedBy()))
+				.map(item -> new SessionItem(item.id(), item.order(), item.title(), item.type(), item.source(), item.url(),
+					item.submitType(), item.required(), "cancelled", item.replaces(), item.replacedBy(), item.kind(),
+					item.description(), item.deadline(), item.secondaryDeadline(), item.startTime(), item.endTime()))
 				.forEach(archived::add);
 		}
 
@@ -751,11 +759,35 @@ public class WorkspaceService {
 		long gitLabUserId,
 		SubmissionWriter writer
 	) {
+		return deleteSubmission(workspaceId, date, itemId, gitLabUserId, null, false, writer);
+	}
+
+	public synchronized WorkspaceState deleteSubmission(
+		String workspaceId,
+		String date,
+		String itemId,
+		long gitLabUserId,
+		String expectedFileCommitId,
+		SubmissionWriter writer
+	) {
+		return deleteSubmission(workspaceId, date, itemId, gitLabUserId, expectedFileCommitId, true, writer);
+	}
+
+	private WorkspaceState deleteSubmission(
+		String workspaceId,
+		String date,
+		String itemId,
+		long gitLabUserId,
+		String expectedFileCommitId,
+		boolean validateCommit,
+		SubmissionWriter writer
+	) {
 		WorkspaceState workspace = get(workspaceId);
 		StudySession session = requiredSession(workspace, date);
 		StudyMember member = currentMember(workspace, gitLabUserId);
 		String key = session.folder() + "/" + member.id();
 		MemberSubmissionFile current = workspace.submissions().get(key);
+		if (validateCommit) validateExpectedSubmissionCommit(workspace, current, itemId, expectedFileCommitId);
 		if (current == null) {
 			return workspace;
 		}
@@ -825,10 +857,12 @@ public class WorkspaceService {
 			int missed = 0;
 			for (StudySession session : sessions) {
 				MemberSubmissionFile file = workspace.submissions().get(session.folder() + "/" + member.id());
-				for (SessionItem item : activeRequired(session)) {
+				for (SessionItem item : activeRequired(session).stream().filter(candidate -> "submission".equals(candidate.kind())).toList()) {
 					maxPoints += 10;
 					SubmissionEntry entry = find(file, item.id());
-					int itemPoints = entry == null ? 0 : points(entry.submittedAt(), session.deadline(), session.secondaryDeadline());
+					String deadline = StringUtils.hasText(item.deadline()) ? item.deadline() : session.deadline();
+					String secondaryDeadline = StringUtils.hasText(item.secondaryDeadline()) ? item.secondaryDeadline() : session.secondaryDeadline();
+					int itemPoints = entry == null ? 0 : points(entry.submittedAt(), deadline, secondaryDeadline);
 					points += itemPoints;
 					if (itemPoints == 10) primary++; else if (itemPoints == 6) secondary++; else missed++;
 				}
@@ -872,9 +906,17 @@ public class WorkspaceService {
 		}
 		Set<String> ids = new java.util.HashSet<>();
 		for (SessionItem item : draft.items()) {
-			if (!StringUtils.hasText(item.title()) || !SESSION_TYPES.contains(item.type()) || !SUBMISSION_TYPES.contains(item.submitType())) {
-				throw error("INVALID_REQUEST", "학습 항목 제목, 학습 유형과 제출 방식을 확인해 주세요.", 400);
+			String kind = item.kind();
+			if (!StringUtils.hasText(item.title()) || !ITEM_KINDS.contains(kind) || !SESSION_TYPES.contains(item.type())) {
+				throw error("INVALID_REQUEST", "항목 제목과 유형을 확인해 주세요.", 400);
 			}
+			if ("submission".equals(kind) && !SUBMISSION_TYPES.contains(item.submitType())) {
+				throw error("INVALID_REQUEST", "제출 항목의 제출 방식을 확인해 주세요.", 400);
+			}
+			if (StringUtils.hasText(item.deadline()) || StringUtils.hasText(item.secondaryDeadline())) {
+				validateItemDeadlines(item.deadline(), item.secondaryDeadline());
+			}
+			if ("event".equals(kind)) validateEventTimes(item.startTime(), item.endTime());
 			if (StringUtils.hasText(item.id()) && !ids.add(item.id())) {
 				throw error("INVALID_REQUEST", "학습 항목 ID가 중복되었습니다.", 400);
 			}
@@ -886,14 +928,48 @@ public class WorkspaceService {
 		for (int index = 0; index < items.size(); index++) {
 			SessionItem item = items.get(index);
 			String id = StringUtils.hasText(item.id()) ? item.id() : "item-" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
-			normalized.add(new SessionItem(id, index + 1, item.title().trim(), item.type(), blankToNull(item.source()), blankToNull(item.url()), item.submitType(), item.required(), "active", item.replaces(), item.replacedBy()));
+			normalized.add(new SessionItem(id, index + 1, item.title().trim(), item.type(), blankToNull(item.source()),
+				blankToNull(item.url()), item.submitType(), !"event".equals(item.kind()) && item.required(), "active",
+				item.replaces(), item.replacedBy(), item.kind(), blankToNull(item.description()), blankToNull(item.deadline()),
+				blankToNull(item.secondaryDeadline()), blankToNull(item.startTime()), blankToNull(item.endTime())));
 		}
 		return List.copyOf(normalized);
 	}
 
+	private static void validateItemDeadlines(String deadline, String secondaryDeadline) {
+		if (!StringUtils.hasText(deadline)) {
+			throw error("INVALID_REQUEST", "항목의 2차 마감을 사용하려면 1차 마감이 필요합니다.", 400);
+		}
+		try {
+			OffsetDateTime primary = OffsetDateTime.parse(deadline);
+			if (StringUtils.hasText(secondaryDeadline) && !OffsetDateTime.parse(secondaryDeadline).isAfter(primary)) {
+				throw error("INVALID_REQUEST", "항목의 2차 마감은 1차 마감보다 늦어야 합니다.", 400);
+			}
+		} catch (java.time.format.DateTimeParseException exception) {
+			throw error("INVALID_REQUEST", "항목 마감은 시간대가 포함된 ISO 8601 형식이어야 합니다.", 400);
+		}
+	}
+
+	private static void validateEventTimes(String startTime, String endTime) {
+		try {
+			java.time.LocalTime start = java.time.LocalTime.parse(startTime);
+			java.time.LocalTime end = java.time.LocalTime.parse(endTime);
+			if (!end.isAfter(start)) throw error("INVALID_REQUEST", "시간형 항목의 종료 시간은 시작 시간보다 늦어야 합니다.", 400);
+		} catch (java.time.format.DateTimeParseException | NullPointerException exception) {
+			throw error("INVALID_REQUEST", "시간형 항목의 시작과 종료 시간을 확인해 주세요.", 400);
+		}
+	}
+
 	private static void validateSubmission(SessionItem item, SubmissionRequest request) {
-		if (request == null || !item.submitType().equals(request.type())) {
+		if ("event".equals(item.kind())) {
+			throw error("ITEM_NOT_COMPLETABLE", "시간형 항목은 완료 상태를 기록하지 않습니다.", 400);
+		}
+		String expectedType = "check".equals(item.kind()) ? "check" : item.submitType();
+		if (request == null || !expectedType.equals(request.type())) {
 			throw error("SUBMISSION_TYPE_MISMATCH", "일정에 정의된 제출 방식과 일치하지 않습니다.", 400);
+		}
+		if ("check".equals(request.type()) && !"completed".equals(request.value())) {
+			throw error("INVALID_SUBMISSION", "체크 항목의 완료 상태를 확인해 주세요.", 400);
 		}
 		if (!StringUtils.hasText(request.value()) || request.value().length() > 100_000) {
 			throw error("INVALID_SUBMISSION", "제출 내용은 1자 이상 100,000자 이하여야 합니다.", 400);
@@ -966,7 +1042,9 @@ public class WorkspaceService {
 	}
 
 	private static List<SessionItem> activeRequired(StudySession session) {
-		return session.items().stream().filter(item -> item.required() && "active".equals(item.status())).toList();
+		return session.items().stream()
+			.filter(item -> item.required() && !"event".equals(item.kind()) && "active".equals(item.status()))
+			.toList();
 	}
 
 	private static boolean contains(MemberSubmissionFile file, String itemId) {

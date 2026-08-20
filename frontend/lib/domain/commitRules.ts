@@ -12,7 +12,7 @@ export const COMMIT_RULE_VARIABLES = [
   { key: "date", token: "{date}", label: "학습 날짜" },
   { key: "item", token: "{item}", label: "항목 이름" },
   { key: "itemId", token: "{itemId}", label: "항목 ID" },
-  { key: "session", token: "{session}", label: "일정 이름" },
+  { key: "session", token: "{session}", label: "계획 날짜" },
 ] as const;
 
 export type CommitRuleContext = Record<(typeof COMMIT_RULE_VARIABLES)[number]["key"], string>;

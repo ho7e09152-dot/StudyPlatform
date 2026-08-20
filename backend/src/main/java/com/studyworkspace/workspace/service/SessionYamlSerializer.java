@@ -52,12 +52,18 @@ public class SessionYamlSerializer {
 			yaml.append("  - id: ").append(quoted(item.id())).append('\n')
 				.append("    order: ").append(item.order()).append('\n')
 				.append("    title: ").append(quoted(item.title())).append('\n')
+				.append("    kind: ").append(quoted(item.kind())).append('\n')
 				.append("    type: ").append(quoted(item.type())).append('\n');
+			appendOptional(yaml, "description", item.description());
 			appendOptional(yaml, "source", item.source());
 			appendOptional(yaml, "url", item.url());
 			yaml.append("    submitType: ").append(quoted(item.submitType())).append('\n')
 				.append("    required: ").append(item.required()).append('\n')
 				.append("    status: ").append(quoted(item.status())).append('\n');
+			appendOptional(yaml, "deadline", item.deadline());
+			appendOptional(yaml, "secondaryDeadline", item.secondaryDeadline());
+			appendOptional(yaml, "startTime", item.startTime());
+			appendOptional(yaml, "endTime", item.endTime());
 			appendOptional(yaml, "replaces", item.replaces());
 			appendOptional(yaml, "replacedBy", item.replacedBy());
 		}

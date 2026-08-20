@@ -102,7 +102,7 @@ class AuthControllerTests {
 
 		assertThat(session.getAttribute(AuthSessionAttributes.STUDY_ING_USER)).isNull();
 		assertThat(session.getAttribute(AuthSessionAttributes.PENDING_REGISTRATION)).isEqualTo(pending);
-		assertThat(controller.me(request).getBody()).containsEntry("authenticated", true).containsEntry("accountCreated", false);
+		assertThat(controller.me(null, request).getBody()).containsEntry("authenticated", true).containsEntry("accountCreated", false);
 		verify(accountSessionService).clear(session);
 		verify(accountSessionService, never()).register(session, "study-user-id");
 	}

@@ -24,15 +24,16 @@ export function MemberDetailDialog({
 }) {
   const file = workspace.submissions[getSubmissionKey(session.folder, member.id)];
   const required = session.items.filter(
-    (item) => item.required && item.status === "active",
+    (item) => item.required && (item.kind ?? "submission") !== "event" && item.status === "active",
   );
   const done = required.filter((item) =>
     file?.submissions.some((entry) => entry.itemId === item.id),
   ).length;
+  const hasReviewableSubmission = file?.submissions.some((entry) => entry.type !== "check") ?? false;
   return (
     <Modal
-      title={`${member.displayName}의 제출`}
-      description={file ? `${formatDateTime(file.updatedAt)} 제출` : "아직 제출한 학습 항목이 없습니다."}
+      title={`${member.displayName}의 항목 현황`}
+      description={file ? `${formatDateTime(file.updatedAt)} 업데이트` : "아직 완료하거나 제출한 항목이 없습니다."}
       onClose={onClose}
       size="large"
     >
@@ -45,9 +46,9 @@ export function MemberDetailDialog({
           </div>
         </div>
 
-        <div className="member-submission-list" aria-label={`${member.displayName}의 학습 제출 내용`}>
+        <div className="member-submission-list" aria-label={`${member.displayName}의 항목 완료 및 제출 내용`}>
           {session.items
-            .filter((item) => item.status === "active")
+            .filter((item) => item.status === "active" && (item.kind ?? "submission") !== "event")
             .map((item) => {
               const entry = file?.submissions.find(
                 (submission) => submission.itemId === item.id,
@@ -61,7 +62,9 @@ export function MemberDetailDialog({
                       {entry ? "완료" : "미제출"}
                     </span>
                   </header>
-                  {entry ? (
+                  {entry?.type === "check" ? (
+                    <p>체크 완료</p>
+                  ) : entry ? (
                     isLink ? (
                       <a href={entry.value} target="_blank" rel="noreferrer">
                         {entry.value} <ExternalLink size={14} aria-hidden="true" />
@@ -99,7 +102,7 @@ export function MemberDetailDialog({
           </div>
         ) : null}
 
-        {file ? (
+        {file && hasReviewableSubmission ? (
           <SubmissionReviewPanel
             key={member.id}
             workspaceId={workspace.id}
