@@ -80,3 +80,17 @@ test("Workspace connection state is reset and scoped to the selected repository"
   assert.match(shell, /REPOSITORY_ACCESS_REVOKED/);
   assert.match(workspaceProvider, /setLastSyncFailures\(\[\]\)/);
 });
+
+test("Repository discovery loads every provider page instead of truncating old repositories", async () => {
+  const repositoryApi = await readFile(new URL("../lib/api/services/repositoryApi.ts", import.meta.url), "utf8");
+  assert.match(repositoryApi, /REPOSITORY_PAGE_SIZE = 100/);
+  assert.match(repositoryApi, /page <= MAX_REPOSITORY_PAGES/);
+  assert.match(repositoryApi, /current\.length < REPOSITORY_PAGE_SIZE/);
+  assert.match(repositoryApi, /repository\.provider}:\$\{repository\.externalId/);
+});
+
+test("Workspace switcher keeps every joined workspace available", async () => {
+  const switcher = await readFile(new URL("../components/shell/WorkspaceSwitcher.tsx", import.meta.url), "utf8");
+  assert.doesNotMatch(switcher, /slice\(0,\s*5\)/);
+  assert.match(switcher, /workspace-menu__list/);
+});

@@ -1,3 +1,5 @@
+import type { RepositoryStorageLayout } from "./repository-storage-layout";
+
 export type SessionType = "algorithm" | "english" | "cs" | "free";
 
 export type SubmissionType = "link" | "text" | "code" | "mixed";
@@ -5,6 +7,7 @@ export type SubmissionType = "link" | "text" | "code" | "mixed";
 export type SessionStatus = "active" | "cancelled";
 
 export type ItemStatus = "active" | "cancelled" | "replaced";
+export type SessionItemKind = "submission" | "check" | "event";
 
 export interface StudyMember {
   id: string;
@@ -24,11 +27,17 @@ export interface SessionItem {
   id: string;
   order: number;
   title: string;
+  kind?: SessionItemKind;
+  description?: string;
   type: SessionType;
   source?: string;
   url?: string;
   submitType: SubmissionType;
   required: boolean;
+  deadline?: string;
+  secondaryDeadline?: string;
+  startTime?: string;
+  endTime?: string;
   status: ItemStatus;
   replaces?: string;
   replacedBy?: string;
@@ -60,7 +69,7 @@ export interface StudySession {
 
 export interface SubmissionEntry {
   itemId: string;
-  type: SubmissionType;
+  type: SubmissionType | "check";
   value: string;
   language?: string;
   submittedAt: string;
@@ -106,7 +115,7 @@ export interface Workspace {
   defaultBranch: string;
   repositoryBasePath: string;
   repositorySchemaVersion: number;
-  importMode: "EMPTY" | "COMPATIBLE" | "LEGACY" | "PARTIALLY_COMPATIBLE";
+  importMode: "EMPTY" | "COMPATIBLE" | "LEGACY" | "DETECTED" | "PARTIALLY_COMPATIBLE";
   status: "ACTIVE" | "SOFT_DELETED";
   lastSyncedAt: string;
   members: StudyMember[];
@@ -125,6 +134,7 @@ export interface Workspace {
     canManage: boolean;
     providerPermission?: string | null;
   } | null;
+  storageLayout?: RepositoryStorageLayout | null;
 }
 
 export interface DashboardMetrics {
@@ -149,6 +159,7 @@ export interface SessionDraft {
   date: string;
   /** 첫 번째 항목 유형에서 파생되는 하위 호환용 대표 유형 */
   type: SessionType;
+  /** Repository V1 compatibility metadata; the editor derives these values from items. */
   title: string;
   description: string;
   deadline: string;

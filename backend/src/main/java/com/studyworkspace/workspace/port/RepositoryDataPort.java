@@ -30,6 +30,7 @@ public interface RepositoryDataPort {
 		public static CommitAction move(String source, String target) { return new CommitAction("MOVE", source, target, null, null); }
 		public static CommitAction create(String path, String content) { return new CommitAction("CREATE", null, path, content, null); }
 		public static CommitAction update(String path, String content, String version) { return new CommitAction("UPDATE", null, path, content, version); }
+		public static CommitAction delete(String path, String version) { return new CommitAction("DELETE", null, path, null, version); }
 	}
 	record CommitComment(String id, String body, String authorExternalId, String authorUsername,
 		String authorName, String authorAvatarUrl, String createdAt) { }

@@ -7,6 +7,7 @@ import type {
   StudyMember,
 } from "@/lib/domain/types";
 import type { ProviderId } from "@/lib/providers/provider-descriptors";
+import type { RepositoryStorageLayout } from "@/lib/domain/repository-storage-layout";
 
 function workspacePath(workspaceId: string) {
   return `/api/v1/workspaces/${encodeURIComponent(workspaceId)}`;
@@ -261,6 +262,7 @@ export interface CreateWorkspaceInput {
   repositorySchemaVersion: number;
   importMode: string;
   expectedTreeFingerprint: string;
+  storageLayout?: RepositoryStorageLayout;
 }
 
 export interface WorkspaceSyncResult {
@@ -390,6 +392,19 @@ export function upsertSubmission(
     `${workspacePath(workspaceId)}/sessions/${encodeURIComponent(date)}/items/${encodeURIComponent(itemId)}/submission`,
     { method: "PUT", body: draft },
   );
+}
+
+export function setChecklistCompletion(
+  workspaceId: string,
+  date: string,
+  itemId: string,
+  completed: boolean,
+  expectedFileCommitId?: string,
+) {
+  const path = `${workspacePath(workspaceId)}/sessions/${encodeURIComponent(date)}/items/${encodeURIComponent(itemId)}/completion`;
+  return apiRequest<Workspace>(path, completed
+    ? { method: "PUT", body: { expectedFileCommitId } }
+    : { method: "DELETE", body: { expectedFileCommitId } });
 }
 
 function submissionReviewPath(workspaceId: string, date: string, memberId: string) {

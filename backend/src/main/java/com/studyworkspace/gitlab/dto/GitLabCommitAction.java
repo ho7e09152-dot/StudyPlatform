@@ -22,4 +22,8 @@ public record GitLabCommitAction(
 	public static GitLabCommitAction update(String filePath, String content, String lastCommitId) {
 		return new GitLabCommitAction("update", filePath, null, content, lastCommitId);
 	}
+
+	public static GitLabCommitAction delete(String filePath, String lastCommitId) {
+		return new GitLabCommitAction("delete", filePath, null, null, lastCommitId);
+	}
 }

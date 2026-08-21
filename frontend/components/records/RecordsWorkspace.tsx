@@ -213,7 +213,7 @@ function SelectedDateSummary({ workspace, session, selectedDate, currentUserId }
   const meta = SESSION_TYPE_META[session.type];
   return (
     <section className="records-panel records-date-summary" aria-labelledby="records-date-title">
-      <header><div><span className={`type-chip type-chip--${meta.tone}`}>{meta.label}</span><p>{formatDate(session.date, true)}</p><h2 id="records-date-title">{session.title}</h2></div></header>
+      <header><div><span className={`type-chip type-chip--${meta.tone}`}>{meta.label}</span><p>{formatDate(session.date, true)}</p><h2 id="records-date-title">{activeItems.map((item) => item.title).slice(0, 3).join(" · ") || "등록된 항목 없음"}</h2></div></header>
       <dl className="records-date-metrics">
         <div><dt>완료율</dt><dd>{metrics.submissionRate}%</dd></div>
         <div><dt>내 완료</dt><dd>{mine?.completedItems ?? 0} / {mine?.requiredItems ?? 0}</dd></div>

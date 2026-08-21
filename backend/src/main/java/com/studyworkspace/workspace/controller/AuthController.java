@@ -23,6 +23,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -68,8 +69,13 @@ public class AuthController {
 	}
 
 	@GetMapping("/me")
-	public ResponseEntity<Map<String, Object>> me(HttpServletRequest request) {
-		StudyIngPrincipal user = getPrincipal(request);
+	public ResponseEntity<Map<String, Object>> me(
+		@AuthenticationPrincipal GitLabUser authenticatedUser,
+		HttpServletRequest request
+	) {
+		StudyIngPrincipal user = authenticatedUser instanceof StudyIngPrincipal principal
+			? principal
+			: authenticatedUser == null ? null : getPrincipal(request);
 		if (user == null) {
 			OAuthAccountService.PendingRegistration pending = getPendingRegistration(request);
 			if (pending != null) {

@@ -26,6 +26,7 @@ import {
   getActivityTodos,
   getTodoActionCount,
 } from "@/lib/domain/activity";
+import { formatDate } from "@/lib/domain/format";
 
 type InboxTab = "todo" | "news";
 const ACTIVITY_NOTIFICATION_UPDATED = "study:activity-notification-updated";
@@ -206,12 +207,12 @@ export function ActivityInbox({ variant = "sidebar" }: { variant?: "sidebar" | "
                   key={item.session.date}
                   className="activity-inbox-item"
                   href={item.href}
-                  aria-label={`${item.session.title}, ${item.missingCount}개 남음, ${item.deadlineLabel}`}
+                  aria-label={`${formatDate(item.session.date, true)}, ${item.missingCount}개 남음, ${item.deadlineLabel}`}
                   onClick={close}
                 >
                   <span className="activity-inbox-icon"><CalendarClock size={18} /></span>
                   <span>
-                    <strong>{item.session.title}</strong>
+                    <strong>{formatDate(item.session.date, true)}</strong>
                     <p>{item.missingTitles.join(", ")} · {item.missingCount}개 남음</p>
                     <small className={`activity-inbox-deadline is-${item.deadlineTone}`}>{item.deadlineLabel}</small>
                   </span>

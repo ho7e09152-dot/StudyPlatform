@@ -127,6 +127,8 @@ public class GitHubRepositoryService implements RepositoryDataPort {
 				GitHubContentResponse source = loadContent(token, repository, action.sourcePath(), branch);
 				entries.add(treeEntry(action.targetPath(), source.sha(), null));
 				entries.add(treeEntry(action.sourcePath(), null, null));
+			} else if ("DELETE".equals(action.action())) {
+				entries.add(treeEntry(action.targetPath(), null, null));
 			} else {
 				entries.add(treeEntry(action.targetPath(), null, Objects.toString(action.content(), "")));
 			}

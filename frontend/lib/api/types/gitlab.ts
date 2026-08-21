@@ -49,7 +49,7 @@ export interface RepositoryImportAnalysis {
   projectId: number;
   projectPath: string;
   defaultBranch: string;
-  classification: "EMPTY" | "COMPATIBLE" | "LEGACY" | "PARTIALLY_COMPATIBLE" | "CONFLICTED";
+  classification: "EMPTY" | "COMPATIBLE" | "LEGACY" | "DETECTED" | "PARTIALLY_COMPATIBLE" | "CONFLICTED";
   repositoryBasePath: string;
   repositorySchemaVersion: number;
   treeFingerprint: string;
@@ -58,4 +58,7 @@ export interface RepositoryImportAnalysis {
   compatibleSubmissions: number;
   ignoredFiles: number;
   issues: Array<{ path: string; code: string; message: string }>;
+  detectedLayout: import("@/lib/domain/repository-storage-layout").RepositoryStorageLayout | null;
+  layoutConfidence: number;
+  detectedRecords: number;
 }

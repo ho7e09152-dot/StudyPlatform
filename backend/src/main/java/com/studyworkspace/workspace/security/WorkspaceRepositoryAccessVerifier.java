@@ -85,9 +85,14 @@ public class WorkspaceRepositoryAccessVerifier {
 				accessible.put(provider, requirePort(provider).listAccessibleRepositories(token).stream()
 					.collect(Collectors.toMap(RepositoryMembership::repositoryId, Function.identity(), (left, right) -> left)));
 			} catch (WorkspaceException exception) {
-				if (!"PROVIDER_ACCOUNT_REQUIRED".equals(exception.code())) throw exception;
+				if (!RepositoryCredentialResolver.isCredentialUnavailable(exception.code())) throw exception;
 				accessible.put(provider, Map.of());
 			} catch (RepositoryProviderException exception) {
+				if (exception.upstreamStatus() == 401
+					&& RepositoryCredentialResolver.isCredentialUnavailable(exception.code())) {
+					accessible.put(provider, Map.of());
+					continue;
+				}
 				throw providerFailure(exception);
 			}
 		}

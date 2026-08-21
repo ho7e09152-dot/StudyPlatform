@@ -8,6 +8,8 @@ import com.studyworkspace.gitlab.service.GitLabRepositoryDataAdapter;
 import com.studyworkspace.gitlab.service.RepositoryPathPolicy;
 import com.studyworkspace.workspace.domain.WorkspaceException;
 import com.studyworkspace.workspace.domain.WorkspaceModels.MemberSubmissionFile;
+import com.studyworkspace.workspace.domain.WorkspaceModels.SessionItem;
+import com.studyworkspace.workspace.domain.WorkspaceModels.SubmissionEntry;
 import com.studyworkspace.workspace.domain.WorkspaceModels.StudyMember;
 import com.studyworkspace.workspace.domain.WorkspaceModels.StudySession;
 import com.studyworkspace.workspace.domain.WorkspaceModels.WorkspaceState;
@@ -42,6 +44,7 @@ public class GitLabSubmissionFileService {
 		String accessToken,
 		WorkspaceState workspace,
 		StudySession session,
+		SessionItem item,
 		StudyMember member,
 		MemberSubmissionFile current,
 		MemberSubmissionFile next,
@@ -79,6 +82,22 @@ public class GitLabSubmissionFileService {
 		}
 	}
 
+	/** Backward-compatible aggregate writer used by fixed V1/V2 layout tests. */
+	public String write(String accessToken, WorkspaceState workspace, StudySession session, StudyMember member,
+		MemberSubmissionFile current, MemberSubmissionFile next, String commitMessage) {
+		SessionItem changed = session.items().stream().filter(item -> {
+			SubmissionEntry before = entry(current, item.id());
+			SubmissionEntry after = entry(next, item.id());
+			return !java.util.Objects.equals(before, after);
+		}).findFirst().orElse(session.items().getFirst());
+		return write(accessToken, workspace, session, changed, member, current, next, commitMessage);
+	}
+
+	private static SubmissionEntry entry(MemberSubmissionFile file, String itemId) {
+		return file == null ? null : file.submissions().stream()
+			.filter(candidate -> candidate.itemId().equals(itemId)).findFirst().orElse(null);
+	}
+
 	private RepositoryDataPort.RepositoryFile loadCurrent(RepositoryDataPort repository, String accessToken, WorkspaceState workspace, String path) {
 		try {
 			return repository.getFile(accessToken, workspace.repository(), path, workspace.defaultBranch());
@@ -92,10 +111,11 @@ public class GitLabSubmissionFileService {
 
 	private String submissionPath(WorkspaceState workspace, StudySession session, StudyMember member) {
 		String fileName = member.fileName();
-		if (!StringUtils.hasText(fileName) || !fileName.matches("[\\p{L}\\p{N}._-]+\\.md") || fileName.contains("..")) {
+		if (!StringUtils.hasText(fileName) || !fileName.toLowerCase(java.util.Locale.ROOT).endsWith(".md")) {
 			throw new WorkspaceException("INVALID_SUBMISSION_PATH", "멤버 제출 파일명이 올바르지 않습니다.", 400);
 		}
-		return pathPolicy.validate(WorkspaceRepositoryLayout.submissionPath(workspace, session, fileName));
+		RepositoryStorageLayoutPolicy.validateSegment(fileName.substring(0, fileName.length() - 3), "학습 기록 이름");
+		return pathPolicy.validate(WorkspaceRepositoryLayout.submissionPath(workspace, session, member));
 	}
 
 	private static String commitId(RepositoryDataPort.RepositoryFile file) {

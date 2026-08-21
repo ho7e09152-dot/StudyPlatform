@@ -24,4 +24,13 @@ class RepositoryPathPolicyTests {
 		assertThatThrownBy(() -> policy.validate("folder//file.md"))
 			.isInstanceOf(InvalidRepositoryPathException.class);
 	}
+
+	@Test
+	void rejectsUnicodeFormatCharactersAndPreservesNormalUnicode() {
+		assertThat(policy.validate("학습/김서연😀.md")).isEqualTo("학습/김서연😀.md");
+		for (String formatCharacter : java.util.List.of("\u202E", "\u2066", "\u2069", "\u200B")) {
+			assertThatThrownBy(() -> policy.validate("study/김" + formatCharacter + "서연.md"))
+				.isInstanceOf(InvalidRepositoryPathException.class);
+		}
+	}
 }

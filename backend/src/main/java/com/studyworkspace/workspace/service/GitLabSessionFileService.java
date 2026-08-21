@@ -42,7 +42,10 @@ public class GitLabSessionFileService {
 		String content = serializer.serialize(next);
 		String commitMessage = commitMessage(current, next);
 		RepositoryDataPort repository = repositories.require(workspace.repository());
-		if (current == null) {
+		boolean detectedWithoutSessionFile = current != null
+			&& WorkspaceRepositoryLayout.schemaVersion(workspace.repositorySchemaVersion()) == WorkspaceRepositoryLayout.CUSTOM_SCHEMA_VERSION
+			&& "DETECTED".equals(workspace.importMode()) && !StringUtils.hasText(current.lastCommitId());
+		if (current == null || detectedWithoutSessionFile) {
 			try {
 				return commitId(repository.createFile(
 					accessToken,

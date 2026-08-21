@@ -33,7 +33,7 @@ export function LibraryWorkspace() {
       const submissionText = workspace.members.flatMap((member) =>
         workspace.submissions[getSubmissionKey(session.folder, member.id)]?.submissions.map((entry) => entry.value) ?? [],
       );
-      return [session.title, session.description, ...session.items.map((item) => item.title), ...submissionText]
+      return [session.date, ...session.items.flatMap((item) => [item.title, item.description ?? ""]), ...submissionText]
         .join(" ").toLocaleLowerCase("ko").includes(normalized);
     });
   }, [query, sessions, type, workspace]);
@@ -69,8 +69,8 @@ export function LibraryWorkspace() {
                     <span className="library-session-date"><strong>{new Date(`${session.date}T00:00:00`).getDate()}</strong><small>{formatDate(session.date, true).replace(/\s*\(.+\)$/, "")}</small></span>
                     <span className="library-session-main">
                       <span><em className={`type-chip type-chip--${meta.tone}`}>{meta.label}</em></span>
-                      <strong>{session.title}</strong>
-                      <p>{session.description || activeItems.map((item) => item.title).join(" · ")}</p>
+                      <strong>{formatDate(session.date, true)}</strong>
+                      <p>{activeItems.map((item) => item.title).join(" · ")}</p>
                     </span>
                     <span className="library-session-meta">
                       <span><BookOpen size={14} /> {activeItems.length}개 학습 항목</span>

@@ -35,7 +35,7 @@ BACKEND_BASE_URL=https://api.study.example.com \
 - [ ] GitLab로 로그인하고 이름·필수 프로필을 입력한다.
 - [ ] 빈 프로젝트를 선택하면 `EMPTY`로 분류된다.
 - [ ] 최종 확인 전에는 GitLab commit이 생성되지 않는다.
-- [ ] Workspace 생성 후 `.study-workspace/config.yml`과 초기 구조를 확인한다.
+- [ ] Workspace 생성 후 `{학습 기록 위치}/.study-workspace/config.yml`을 확인한다. 기본 위치는 `study/.study-workspace/config.yml`이다.
 - [ ] 일정을 만들고 GitLab의 `session.yml` commit SHA를 기록한다.
 - [ ] 링크 또는 코드 항목을 제출하고 사용자 지정 이름이 commit 작성자와 제출 파일명에 사용되는지 확인한다.
 - [ ] 제출 성공 화면의 SHA와 GitLab commit 링크가 실제 commit과 일치하는지 확인한다.

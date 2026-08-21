@@ -38,6 +38,10 @@ interface CsrfResponse {
 
 let csrfTokenPromise: Promise<CsrfResponse> | null = null;
 
+export function shouldRedirectToLoginForUnauthorized(code?: string) {
+	return code === "AUTH_REQUIRED";
+}
+
 export function resetCsrfToken() {
 	csrfTokenPromise = null;
 }
@@ -104,11 +108,12 @@ async function apiRequestAttempt<T>(
     if (
       response.status === 401 &&
       typeof window !== "undefined" &&
-      !path.startsWith("/api/v1/auth/")
+      !path.startsWith("/api/v1/auth/") &&
+      shouldRedirectToLoginForUnauthorized(body?.code)
     ) {
       const returnUrl = `${window.location.pathname}${window.location.search}`;
       window.location.replace(
-        `/login?oauthError=${body?.code === "GITLAB_RECONNECT_REQUIRED" ? "reconnect_required" : "session_expired"}&returnUrl=${encodeURIComponent(returnUrl)}`,
+        `/login?oauthError=session_expired&returnUrl=${encodeURIComponent(returnUrl)}`,
       );
     }
     throw new ApiError(

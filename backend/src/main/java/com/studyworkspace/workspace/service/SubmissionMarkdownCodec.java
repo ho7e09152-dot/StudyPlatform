@@ -23,7 +23,7 @@ import tools.jackson.databind.ObjectMapper;
 @Component
 public class SubmissionMarkdownCodec {
 	private static final Set<String> SESSION_TYPES = Set.of("algorithm", "english", "cs", "free");
-	private static final Set<String> SUBMISSION_TYPES = Set.of("link", "text", "code", "mixed");
+	private static final Set<String> SUBMISSION_TYPES = Set.of("link", "text", "code", "mixed", "check");
 
 	private final ObjectMapper objectMapper;
 
@@ -90,12 +90,15 @@ public class SubmissionMarkdownCodec {
 			}
 		}
 		markdown.append("---\n\n# ").append(heading(session.title())).append('\n');
-		for (SessionItem item : session.items().stream().filter(candidate -> "active".equals(candidate.status())).toList()) {
+		for (SessionItem item : session.items().stream()
+			.filter(candidate -> "active".equals(candidate.status()) && !"event".equals(candidate.kind())).toList()) {
 			SubmissionEntry entry = file.submissions().stream()
 				.filter(candidate -> candidate.itemId().equals(item.id())).findFirst().orElse(null);
 			markdown.append("\n## ").append(heading(item.title())).append("\n\n");
 			if (entry == null) {
 				markdown.append("(미제출)");
+			} else if ("check".equals(entry.type())) {
+				markdown.append("완료");
 			} else if ("code".equals(entry.type())) {
 				appendCodeBlock(markdown, entry.value(), entry.language());
 			} else {

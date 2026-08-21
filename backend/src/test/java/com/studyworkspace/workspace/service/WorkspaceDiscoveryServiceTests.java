@@ -12,13 +12,17 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.Executors;
 
 import com.studyworkspace.auth.dto.GitLabOAuthSession;
+import com.studyworkspace.auth.security.StudyIngPrincipal;
 import com.studyworkspace.auth.service.OAuthAccountService;
 import com.studyworkspace.common.exception.GitLabApiException;
+import com.studyworkspace.common.exception.RepositoryProviderException;
 import com.studyworkspace.gitlab.dto.GitLabUser;
+import com.studyworkspace.provider.ProviderCapabilities;
 import com.studyworkspace.workspace.domain.RepositoryMembership;
 import com.studyworkspace.workspace.domain.RepositoryProvider;
 import com.studyworkspace.workspace.domain.WorkspaceException;
 import com.studyworkspace.workspace.port.RepositoryMembershipPort;
+import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
@@ -85,6 +89,39 @@ class WorkspaceDiscoveryServiceTests {
 			.isInstanceOf(WorkspaceException.class)
 			.extracting("code")
 			.isEqualTo("WORKSPACE_NOT_DISCOVERABLE");
+	}
+
+	@Test
+	void unavailableGitHubCredentialDoesNotBlockGitLabDiscovery() {
+		RepositoryMembershipPort gitHubMemberships = mock(RepositoryMembershipPort.class);
+		when(gitHubMemberships.provider()).thenReturn(RepositoryProvider.GITHUB);
+		RepositoryCredentialResolver credentials = mock(RepositoryCredentialResolver.class);
+		ProviderCapabilities capabilities = mock(ProviderCapabilities.class);
+		HttpServletRequest request = mock(HttpServletRequest.class);
+		StudyIngPrincipal principal = new StudyIngPrincipal(
+			"study-user", "gitlab-account", RepositoryProvider.GITLAB, Long.toString(JOINING_USER_ID),
+			"joining-user", "새 멤버", null, null
+		);
+		when(capabilities.repositoryProviders()).thenReturn(List.of(RepositoryProvider.GITLAB, RepositoryProvider.GITHUB));
+		when(credentials.resolve(principal, RepositoryProvider.GITLAB, request)).thenReturn(
+			new RepositoryCredentialResolver.ResolvedCredential(RepositoryProvider.GITLAB, "gitlab-account", "gitlab-token")
+		);
+		when(credentials.resolve(principal, RepositoryProvider.GITHUB, request)).thenReturn(
+			new RepositoryCredentialResolver.ResolvedCredential(RepositoryProvider.GITHUB, "github-account", "github-token")
+		);
+		when(memberships.listAccessibleRepositories("gitlab-token")).thenReturn(List.of(repository(30)));
+		when(gitHubMemberships.listAccessibleRepositories("github-token")).thenThrow(
+			new RepositoryProviderException(
+				RepositoryProvider.GITHUB, "GITHUB_REAUTH_REQUIRED", "GitHub 계정을 다시 승인해 주세요.", 401
+			)
+		);
+		WorkspaceDiscoveryService multiProviderDiscovery = new WorkspaceDiscoveryService(
+			workspaces, accounts, List.of(memberships, gitHubMemberships), credentials, capabilities
+		);
+
+		assertThat(multiProviderDiscovery.discover(principal, request))
+			.extracting("workspaceId")
+			.containsExactly(WORKSPACE_ID);
 	}
 
 	@Test

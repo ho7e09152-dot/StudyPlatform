@@ -120,3 +120,4 @@ backups/
 # ==============================
 output/playwright/
 artifacts/
+docs/qa/*.local.md

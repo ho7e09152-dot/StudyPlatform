@@ -206,7 +206,12 @@ test.describe("Workspace release smoke", () => {
     await expect(page.getByText("ACTUAL_PRIVATE_REPOSITORY_SENTINEL")).toHaveCount(0);
 
     await page.getByRole("option", { name: /데모 알고리즘 연습/ }).click();
-    await expect(page.getByText("연결할 준비가 되었어요.")).toBeVisible();
+    await page.getByRole("button", { name: "계속" }).click();
+    await expect(page.getByText("연결할 수 있어요")).toBeVisible();
+    await page.getByRole("button", { name: "계속" }).click();
+    await expect(page.getByRole("heading", { name: "기본 정보" })).toBeVisible();
+    await page.getByRole("button", { name: "계속" }).click();
+    await expect(page.getByRole("heading", { name: "저장 방식", exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Workspace 연결하기" }).click();
     await expect(page).toHaveURL(/\/today$/);
     await expect(page.getByText("데모 알고리즘 연습").first()).toBeVisible();
@@ -246,10 +251,17 @@ test.describe("Workspace release smoke", () => {
       const dialog = page.getByRole("dialog", { name: "Workspace를 삭제할까요?" });
       await dialog.getByRole("button", { name: "Workspace 삭제" }).click();
       await expect(dialog).toBeHidden();
+      if (index < initialWorkspaces.length - 1) await page.goto("/settings/danger");
     }
 
-    await expect(page.getByRole("heading", { name: "첫 Workspace를 연결해볼까요?" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Workspace", exact: true })).toBeVisible();
+    await page.getByRole("link", { name: "새 Workspace 연결" }).click();
+    await expect(page.getByRole("heading", { name: "새 Workspace 연결", exact: true })).toBeVisible();
     await page.getByRole("option", { name: /데모 알고리즘 연습/ }).click();
+    await page.getByRole("button", { name: "계속" }).click();
+    await expect(page.getByText("연결할 수 있어요")).toBeVisible();
+    await page.getByRole("button", { name: "계속" }).click();
+    await page.getByRole("button", { name: "계속" }).click();
     await page.getByRole("button", { name: "Workspace 연결하기" }).click();
     await page.goto("/settings/notifications");
     await page.getByRole("switch").first().click();
@@ -317,9 +329,9 @@ test.describe("Workspace release smoke", () => {
   test("일정 검색과 설정 화면은 외부 API 오류 없이 동작한다", async ({ page }) => {
     const errors = captureUnexpectedErrors(page);
     await openWorkspacePage(page, "/schedule");
-    await page.getByRole("searchbox", { name: "일정 또는 학습 항목 검색" }).fill("영어");
-    await expect(page.getByText("영어 표현과 듣기", { exact: true })).toBeVisible();
-    await expect(page.getByText("큐와 배열 집중 학습", { exact: true })).toHaveCount(0);
+    await page.getByRole("searchbox", { name: "항목 검색" }).fill("영어");
+    await expect(page.getByText("영어 영상 15분 듣기", { exact: true })).toBeVisible();
+    await expect(page.getByText("행렬 테두리 회전하기", { exact: true })).toHaveCount(0);
 
     await openWorkspacePage(page, "/settings");
     await expect(page.getByRole("heading", { name: "Workspace 일반" })).toBeVisible();
@@ -371,8 +383,8 @@ test.describe("Workspace release smoke", () => {
     await expect(agenda.getByRole("heading", { name: "7월 23일 (목)" })).toBeVisible();
     await expect(agenda.getByText("오늘", { exact: true })).toHaveCount(1);
 
-    const row = agenda.locator(".schedule-list-row").filter({ hasText: "큐와 배열 집중 학습" });
-    await expect(row.locator(".schedule-list-row__primary > strong")).toHaveText("큐와 배열 집중 학습");
+    const row = agenda.locator(".schedule-list-row").filter({ hasText: "행렬 테두리 회전하기" });
+    await expect(row.locator(".schedule-list-row__primary > strong")).toHaveText("행렬 테두리 회전하기");
     await expect(row.locator(".schedule-list-row__progress")).toContainText("내 진행");
     await expect(row.locator(".schedule-list-row__change")).toHaveText("변경됨");
     await expect(row.locator(".schedule-list-row__chevron")).toBeVisible();
@@ -387,6 +399,41 @@ test.describe("Workspace release smoke", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     const bodyWidth = await page.evaluate(() => document.documentElement.scrollWidth);
     expect(bodyWidth).toBeLessThanOrEqual(390);
+    expect(errors).toEqual([]);
+  });
+
+  test("월 달력은 같은 날짜의 항목을 각각 표시하고 편집기는 체크·시간 항목을 추가한다", async ({ page }) => {
+    const errors = captureUnexpectedErrors(page);
+    await openWorkspacePage(page, "/schedule");
+
+    await expect(page.getByTitle("제출: 오늘의 표현 10개")).toBeVisible();
+    await expect(page.getByTitle("제출: 영어 영상 15분 듣기")).toBeVisible();
+    await expect(page.getByTitle("제출: 한 문단 요약")).toBeVisible();
+
+    await openWorkspacePage(page, "/schedule/2026-07-23/edit");
+    await expect(page.getByLabel("일정 제목")).toHaveCount(0);
+    await page.getByRole("button", { name: /다음 단계/ }).click();
+    await page.getByRole("button", { name: "체크", exact: true }).click();
+    await page.getByRole("button", { name: "시간", exact: true }).click();
+
+    await expect(page.getByRole("option", { name: "체크형" }).last()).toBeAttached();
+    await expect(page.getByRole("option", { name: "시간형" }).last()).toBeAttached();
+    await expect(page.getByLabel("시작 시간")).toHaveValue("19:00");
+    await expect(page.getByLabel("종료 시간")).toHaveValue("20:00");
+    expect(errors).toEqual([]);
+  });
+
+  test("항목 추가에서 기존 일정 날짜를 선택하면 신규 생성 대신 해당 날짜 편집으로 전환한다", async ({ page }) => {
+    const errors = captureUnexpectedErrors(page);
+    await openWorkspacePage(page, "/schedule/new");
+
+    await page.locator('input[type="date"]').fill("2026-07-23");
+    await page.getByRole("button", { name: /다음 단계/ }).click();
+
+    await expect(page).toHaveURL(/\/schedule\/2026-07-23\/edit\?step=items$/);
+    await expect(page.getByRole("heading", { name: "하루 계획 편집" })).toBeVisible();
+    await expect(page.locator("#editor-items-title")).toBeVisible();
+    await expect(page.getByText("행렬 테두리 회전하기", { exact: true }).first()).toBeVisible();
     expect(errors).toEqual([]);
   });
 
@@ -478,7 +525,7 @@ test.describe("Workspace release smoke", () => {
     const warning = page.getByRole("dialog", { name: "아직 내 학습을 완료하지 않았어요" });
     await expect(warning).toBeVisible();
     await warning.getByRole("button", { name: "그래도 보기" }).click();
-    await expect(page.getByRole("dialog", { name: /이준호.*제출/ })).toBeVisible();
+    await expect(page.getByRole("dialog", { name: /이준호.*항목 현황/ })).toBeVisible();
     expect(errors).toEqual([]);
   });
 

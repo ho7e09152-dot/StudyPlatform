@@ -34,6 +34,8 @@ docs/
 │   ├── production.md
 │   ├── launch-checklist.md
 │   └── incident-response.md
+├── todo/
+│   └── storage-followups.md
 └── legal/
 ```
 
@@ -56,6 +58,10 @@ docs/
 ## 협업
 
 - [Git 협업 가이드](collaboration/git-workflow.md)는 브랜치 전략, commit 규칙과 AI 에이전트 병행 작업 시 지키는 절차를 다룹니다.
+
+## 후속 작업
+
+- [Storage Follow-ups](todo/storage-followups.md)는 freeze된 Storage Layout 계약을 바꾸지 않고 별도 설계가 필요한 유지보수·운영 항목만 추적합니다.
 
 ## 개발 계약
 

@@ -1,11 +1,22 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import { shouldRedirectToLoginForUnauthorized } from "../lib/api/client/http.ts";
 
 test("OAuth session rotation clears the cached CSRF token", async () => {
   const authApi = await readFile(new URL("../lib/api/services/authApi.ts", import.meta.url), "utf8");
 
   assert.match(authApi, /completeGitLabLogin[\s\S]*resetCsrfToken\(\)/);
+});
+
+test("only a Study-ing authentication failure redirects to login", () => {
+  assert.equal(shouldRedirectToLoginForUnauthorized("AUTH_REQUIRED"), true);
+  assert.equal(shouldRedirectToLoginForUnauthorized(undefined), false);
+  assert.equal(shouldRedirectToLoginForUnauthorized("PROVIDER_ACCOUNT_REQUIRED"), false);
+  assert.equal(shouldRedirectToLoginForUnauthorized("PROVIDER_REAUTH_REQUIRED"), false);
+  assert.equal(shouldRedirectToLoginForUnauthorized("GITHUB_REAUTH_REQUIRED"), false);
+  assert.equal(shouldRedirectToLoginForUnauthorized("GITLAB_RECONNECT_REQUIRED"), false);
+  assert.equal(shouldRedirectToLoginForUnauthorized("GITLAB_AUTHENTICATION_FAILED"), false);
 });
 
 test("a stale CSRF denial refreshes once without retrying unrelated 403 errors", async () => {

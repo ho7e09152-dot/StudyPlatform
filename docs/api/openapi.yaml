@@ -219,6 +219,32 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/RepositoryImportAnalysis" }
 
+  /repositories/{provider}/{externalId}/tree:
+    get:
+      tags: [Repository]
+      summary: 저장 위치 선택을 위한 Provider 저장소 tree 조회
+      operationId: listProviderRepositoryTree
+      x-implementation-status: implemented
+      parameters:
+        - name: provider
+          in: path
+          required: true
+          schema: { $ref: "#/components/schemas/RepositoryProvider" }
+        - name: externalId
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        "200":
+          description: normalized repository tree entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/RepositoryTreeEntry" }
+        "413":
+          $ref: "#/components/responses/InvalidRequest"
+
   /auth/gitlab/login:
     get:
       tags: [Auth]
@@ -1276,6 +1302,58 @@ paths:
         "409":
           $ref: "#/components/responses/Conflict"
 
+  /workspaces/{workspaceId}/sessions/{date}/items/{itemId}/completion:
+    parameters:
+      - $ref: "#/components/parameters/WorkspaceId"
+      - $ref: "#/components/parameters/SessionDate"
+      - $ref: "#/components/parameters/ItemId"
+    put:
+      tags: [Submissions]
+      summary: 내 체크형 항목 완료
+      operationId: completeChecklistItem
+      x-implementation-status: implemented
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                expectedFileCommitId:
+                  type: [string, "null"]
+      responses:
+        "200":
+          description: 체크 상태가 반영된 Workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspace"
+        "409":
+          $ref: "#/components/responses/Conflict"
+    delete:
+      tags: [Submissions]
+      summary: 내 체크형 항목 완료 해제
+      operationId: reopenChecklistItem
+      x-implementation-status: implemented
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                expectedFileCommitId:
+                  type: [string, "null"]
+      responses:
+        "200":
+          description: 체크 상태가 해제된 Workspace
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Workspace"
+        "409":
+          $ref: "#/components/responses/Conflict"
+
   /workspaces/{workspaceId}/sessions/{date}/members/{memberId}/submission:
     get:
       tags: [Submissions]
@@ -2139,16 +2217,16 @@ components:
 
     RepositoryImportAnalysis:
       type: object
-      required: [projectId, classification, repositoryBasePath, repositorySchemaVersion, treeFingerprint, totalFiles, compatibleSessions, compatibleSubmissions, ignoredFiles, issues]
+      required: [projectId, classification, repositoryBasePath, repositorySchemaVersion, treeFingerprint, totalFiles, compatibleSessions, compatibleSubmissions, ignoredFiles, issues, detectedLayout, layoutConfidence, detectedRecords]
       properties:
         projectId: { type: integer, format: int64 }
         projectPath: { type: string }
         defaultBranch: { type: string }
         classification:
           type: string
-          enum: [EMPTY, COMPATIBLE, LEGACY, PARTIALLY_COMPATIBLE, CONFLICTED]
+          enum: [EMPTY, COMPATIBLE, LEGACY, DETECTED, PARTIALLY_COMPATIBLE, CONFLICTED]
         repositoryBasePath: { type: string }
-        repositorySchemaVersion: { type: integer, enum: [1, 2] }
+        repositorySchemaVersion: { type: integer, enum: [1, 2, 3] }
         treeFingerprint: { type: string, minLength: 64, maxLength: 64 }
         totalFiles: { type: integer, minimum: 0 }
         compatibleSessions: { type: integer, minimum: 0 }
@@ -2162,6 +2240,40 @@ components:
               path: { type: string }
               code: { type: string }
               message: { type: string }
+        detectedLayout:
+          oneOf:
+            - $ref: "#/components/schemas/RepositoryStorageLayout"
+            - type: "null"
+        layoutConfidence: { type: number, minimum: 0, maximum: 1 }
+        detectedRecords: { type: integer, minimum: 0 }
+
+    RepositoryStorageLayout:
+      type: object
+      required: [folderBlocks, fileNameBlocks, yearFormat, monthFormat, dateFormat, dayFormat, extension]
+      properties:
+        folderBlocks:
+          type: array
+          uniqueItems: true
+          items: { type: string, enum: [YEAR, MONTH, DATE, DAY, NAME] }
+        fileNameBlocks:
+          type: array
+          minItems: 1
+          maxItems: 1
+          uniqueItems: true
+          items: { type: string, enum: [DATE, NAME] }
+        yearFormat: { type: string, enum: [YYYY, YY, YYYY_KO, YY_KO] }
+        monthFormat: { type: string, enum: [MM, M, YYYY-MM, YY-MM, YYYYMM, YYMM, MM_KO, M_KO, YYYY_MM_KO, YY_MM_KO] }
+        dateFormat: { type: string, enum: [YYYY-MM-DD, YYYYMMDD, YY-MM-DD, YYMMDD, YYYY_MM_DD_KO, YY_MM_DD_KO, YYYY_MM_DD_KO_SPACE, YY_MM_DD_KO_SPACE] }
+        dayFormat: { type: string, enum: [DD, DD_KO] }
+        extension: { type: string, enum: [md] }
+
+    RepositoryTreeEntry:
+      type: object
+      required: [path, name, type]
+      properties:
+        path: { type: string }
+        name: { type: string }
+        type: { type: string, enum: [blob, tree] }
 
     GitLabProject:
       type: object
@@ -2208,7 +2320,7 @@ components:
           type: integer
         importMode:
           type: string
-          enum: [EMPTY, COMPATIBLE, LEGACY, PARTIALLY_COMPATIBLE]
+          enum: [EMPTY, COMPATIBLE, LEGACY, DETECTED, PARTIALLY_COMPATIBLE]
         deletedAt:
           type: [string, "null"]
           format: date-time
@@ -2230,6 +2342,10 @@ components:
                 $ref: "#/components/schemas/WorkspaceMember"
             settings:
               $ref: "#/components/schemas/WorkspaceSettings"
+            storageLayout:
+              oneOf:
+                - $ref: "#/components/schemas/RepositoryStorageLayout"
+                - type: "null"
     WorkspaceResponse:
       type: object
       required: [data]
@@ -2263,7 +2379,7 @@ components:
       properties:
         submissionTemplate:
           type: string
-          description: "지원 변수: {action}, {name}, {date}, {item}, {itemId}, {session}. 적용 결과는 최대 200자입니다."
+          description: "지원 변수: {action}, {name}, {date}, {item}, {itemId}, {session}. {session}은 계획 날짜를 사용하며 적용 결과는 최대 200자입니다."
           example: "{action}: {name} · {date} · {item}"
         submissionGuidance:
           type: string
@@ -2279,7 +2395,7 @@ components:
           minLength: 2
           maxLength: 80
         gitlabProjectId:
-          type: integer
+          type: [integer, "null"]
           format: int64
           deprecated: true
         provider:
@@ -2288,17 +2404,20 @@ components:
           type: string
         repositoryBasePath:
           type: string
-          enum: ["", ".study-workspace"]
+          maxLength: 240
+          description: 저장소 루트 기준 학습 기록 경로. 빈 문자열은 저장소 루트입니다.
         repositorySchemaVersion:
           type: integer
-          enum: [1, 2]
+          enum: [1, 2, 3]
         importMode:
           type: string
-          enum: [EMPTY, COMPATIBLE, LEGACY, PARTIALLY_COMPATIBLE]
+          enum: [EMPTY, COMPATIBLE, LEGACY, DETECTED, PARTIALLY_COMPATIBLE]
         expectedTreeFingerprint:
           type: string
           minLength: 64
           maxLength: 64
+        storageLayout:
+          $ref: "#/components/schemas/RepositoryStorageLayout"
     RepositorySchemaMigrationRequest:
       type: object
       required: [expectedTreeFingerprint]
@@ -2491,9 +2610,12 @@ components:
     SubmitType:
       type: string
       enum: [link, text, code, mixed]
+    SessionItemKind:
+      type: string
+      enum: [submission, check, event]
     StudyItem:
       type: object
-      required: [id, order, title, type, submitType, required, status]
+      required: [id, order, title, kind, type, submitType, required, status]
       properties:
         id:
           type: string
@@ -2503,6 +2625,10 @@ components:
           minimum: 1
         title:
           type: string
+        kind:
+          $ref: "#/components/schemas/SessionItemKind"
+        description:
+          type: [string, "null"]
         type:
           $ref: "#/components/schemas/SessionType"
         source:
@@ -2514,6 +2640,18 @@ components:
           $ref: "#/components/schemas/SubmitType"
         required:
           type: boolean
+        deadline:
+          type: [string, "null"]
+          format: date-time
+        secondaryDeadline:
+          type: [string, "null"]
+          format: date-time
+        startTime:
+          type: [string, "null"]
+          pattern: ^\d{2}:\d{2}$
+        endTime:
+          type: [string, "null"]
+          pattern: ^\d{2}:\d{2}$
         status:
           type: string
           enum: [active, cancelled]
@@ -2559,7 +2697,7 @@ components:
           $ref: "#/components/schemas/StudySession"
     SessionItemDraft:
       type: object
-      required: [title, type, submitType, required]
+      required: [title, type, required]
       properties:
         id:
           type: string
@@ -2568,6 +2706,12 @@ components:
           type: string
           minLength: 1
           maxLength: 120
+        kind:
+          $ref: "#/components/schemas/SessionItemKind"
+          description: 생략하면 legacy submission 항목으로 처리
+        description:
+          type: string
+          maxLength: 500
         type:
           $ref: "#/components/schemas/SessionType"
         source:
@@ -2580,6 +2724,18 @@ components:
           $ref: "#/components/schemas/SubmitType"
         required:
           type: boolean
+        deadline:
+          type: [string, "null"]
+          format: date-time
+        secondaryDeadline:
+          type: [string, "null"]
+          format: date-time
+        startTime:
+          type: [string, "null"]
+          pattern: ^\d{2}:\d{2}$
+        endTime:
+          type: [string, "null"]
+          pattern: ^\d{2}:\d{2}$
     CreateSessionRequest:
       type: object
       required: [date, type, title, description, deadline, items]
@@ -2679,7 +2835,8 @@ components:
         itemId:
           type: string
         type:
-          $ref: "#/components/schemas/SubmitType"
+          type: string
+          enum: [link, text, code, mixed, check]
         value:
           type: string
         language:

@@ -93,6 +93,7 @@
 | HTTP | Code | 발생 조건 |
 |---:|---|---|
 | 400 | `INVALID_SUBMISSION_FILE` | 멤버 Markdown Front Matter 파싱 실패 |
+| 400 | `ITEM_NOT_COMPLETABLE` | 체크형이 아닌 항목에 완료 상태 변경 요청 |
 | 404 | `ITEM_NOT_FOUND` | Session에 활성 item 없음 |
 | 404 | `SUBMISSION_NOT_FOUND` | 제거·조회 대상 제출 없음 |
 | 409 | `SUBMISSION_CONFLICT` | 멤버 파일 `last_commit_id` 불일치 |

@@ -10,6 +10,7 @@ import {
   updateAccountProfile,
   type AccentColor,
 } from "@/lib/api/services/authApi";
+import { validateStorageRecordName } from "@/lib/domain/repository-storage-layout";
 
 const accentOptions: Array<{ value: AccentColor; label: string }> = [
   { value: "PURPLE", label: "퍼플" },
@@ -31,9 +32,11 @@ export function ProfileSettingsDialog({ onClose }: { onClose: () => void }) {
   const [timezone, setTimezone] = useState(user?.timezone ?? workspace.settings.timezone);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const recordNameError = validateStorageRecordName(repositoryFileName);
 
   async function submit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (recordNameError) { setError(recordNameError); return; }
     if (mode === "demo") {
       setError("데모 모드에서는 프로필 정보를 변경할 수 없습니다.");
       return;
@@ -83,6 +86,7 @@ export function ProfileSettingsDialog({ onClose }: { onClose: () => void }) {
                 <span>.md</span>
               </div>
               <small>새 제출 파일에 사용할 이름입니다. 기존 제출 파일이 있으면 경로는 유지됩니다.</small>
+              {recordNameError ? <small className="field-error">{recordNameError}</small> : null}
             </label>
             <label>
               <span>시간대</span>
@@ -123,7 +127,7 @@ export function ProfileSettingsDialog({ onClose }: { onClose: () => void }) {
         {error ? <p className="profile-settings-error" role="alert">{error}</p> : null}
         <footer className="profile-settings-actions">
           <button className="button button--ghost" type="button" onClick={onClose}>취소</button>
-          <button className="button button--primary" type="submit" disabled={saving || displayName.trim().length < 2 || !repositoryFileName.trim()}>
+          <button className="button button--primary" type="submit" disabled={saving || displayName.trim().length < 2 || Boolean(recordNameError)}>
             {saving ? "저장 중…" : "프로필 저장"}
           </button>
         </footer>

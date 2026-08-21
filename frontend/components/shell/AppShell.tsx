@@ -18,6 +18,7 @@ import {
 import { AccountMenu } from "@/components/account/AccountMenu";
 import { ActivityInbox } from "@/components/notifications/ActivityInbox";
 import { AppThemeProvider, useAppTheme } from "@/components/providers/AppThemeProvider";
+import { useAuth } from "@/components/providers/AuthProvider";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { Avatar } from "@/components/ui/Avatar";
 import { Toast } from "@/components/ui/Toast";
@@ -48,6 +49,11 @@ export function AppShell({ children }: { children: ReactNode }) {
 
 function ThemedAppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const { mode } = useAuth();
+  const brandHref = mode === "demo" ? "/" : "/today";
+  const brandLabel = mode === "demo"
+    ? "Study-ing 랜딩 페이지로 이동"
+    : "Study-ing 오늘 페이지로 이동";
   const pageTransitionPath = getPageTransitionPath(pathname);
   const scheduleEditorRoute = pathname === APP_ROUTES.scheduleNew
     || /^\/schedule\/[^/]+\/edit$/.test(pathname);
@@ -98,7 +104,7 @@ function ThemedAppShell({ children }: { children: ReactNode }) {
   return (
     <div className="app-frame" data-theme={themeMode.toLowerCase()} data-accent={accentColor.toLowerCase()}>
       <aside className="sidebar" aria-label="주요 메뉴">
-        <Link className="brand-block" href="/" aria-label="Study-ing 랜딩 페이지로 이동">
+        <Link className="brand-block" href={brandHref} aria-label={brandLabel}>
           <Image className="app-brand-icon" src="/study-ing-icon.png" alt="" width={898} height={898} unoptimized priority />
           <div>
             <strong>Study-ing</strong>
@@ -175,7 +181,7 @@ function ThemedAppShell({ children }: { children: ReactNode }) {
         >
           <Menu size={21} />
         </button>
-        <Link className="mobile-brand" href="/" aria-label="Study-ing 랜딩 페이지로 이동">
+        <Link className="mobile-brand" href={brandHref} aria-label={brandLabel}>
           <Image src="/study-ing-icon.png" alt="" width={898} height={898} unoptimized priority />
           <strong>Study-ing</strong>
         </Link>

@@ -31,7 +31,7 @@ export interface MemberScore {
 
 export function getActiveRequiredItems(session: StudySession) {
   return session.items.filter(
-    (item) => item.required && item.status === "active",
+    (item) => item.required && (item.kind ?? "submission") !== "event" && item.status === "active",
   );
 }
 
@@ -138,7 +138,9 @@ export function getMemberScore(
   let missedCount = 0;
 
   sessions.forEach((session) => {
-    const requiredItems = getActiveRequiredItems(session);
+    const requiredItems = getActiveRequiredItems(session).filter(
+      (item) => (item.kind ?? "submission") === "submission",
+    );
     const file =
       workspace.submissions[getSubmissionKey(session.folder, member.id)];
 
@@ -154,8 +156,8 @@ export function getMemberScore(
 
       const itemPoints = getSubmissionPoints(
         submission.submittedAt,
-        session.deadline,
-        session.secondaryDeadline,
+        item.deadline ?? session.deadline,
+        item.secondaryDeadline ?? session.secondaryDeadline,
       );
       points += itemPoints;
       if (itemPoints === SCORE_RULES.primary) primaryCount += 1;

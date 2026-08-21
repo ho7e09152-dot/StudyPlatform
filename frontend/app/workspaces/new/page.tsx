@@ -1,6 +1,6 @@
 "use client";
 
-import { WorkspaceOnboarding } from "@/components/onboarding/WorkspaceOnboarding";
+import { WorkspaceConnectionFlow } from "@/components/onboarding/WorkspaceOnboarding";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { useRouter } from "next/navigation";
 
@@ -8,8 +8,8 @@ export default function NewWorkspacePage() {
 	const router = useRouter();
   const { workspaces, switchWorkspace, activateWorkspace } = useWorkspace();
   return (
-    <WorkspaceOnboarding
-      embedded
+    <WorkspaceConnectionFlow
+      withinAppShell
       existingWorkspaces={workspaces}
       onOpenWorkspace={(workspace) => {
         switchWorkspace(workspace.id);

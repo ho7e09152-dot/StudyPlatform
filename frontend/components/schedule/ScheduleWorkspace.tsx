@@ -6,16 +6,19 @@ import {
   ArrowRight,
   CalendarDays,
   CalendarRange,
+  CheckSquare2,
   ChevronLeft,
   ChevronRight,
   List,
+  Clock3,
+  FileUp,
   Plus,
   Search,
   SlidersHorizontal,
 } from "lucide-react";
 import { useWorkspace } from "@/components/providers/WorkspaceProvider";
 import { SESSION_TYPE_META } from "@/lib/domain/constants";
-import { formatDate, formatTime } from "@/lib/domain/format";
+import { formatDate } from "@/lib/domain/format";
 import { getMemberProgress } from "@/lib/domain/metrics";
 import { canManageSchedules } from "@/lib/domain/permissions";
 import type { SessionType, StudySession } from "@/lib/domain/types";
@@ -49,10 +52,14 @@ function scheduleStatus(session: StudySession, referenceDate: string) {
   if (session.status === "cancelled") return { label: "취소됨", tone: "danger" };
   if (session.date === referenceDate) return { label: "오늘", tone: "primary" };
   if (session.date > referenceDate) return { label: "예정", tone: "neutral" };
-  if (session.secondaryDeadline && session.secondaryDeadline.slice(0, 10) >= referenceDate) {
+  if (session.items.some((item) => item.status === "active" && item.secondaryDeadline?.slice(0, 10) >= referenceDate)) {
     return { label: "지각 제출 가능", tone: "warning" };
   }
   return { label: "지난 일정", tone: "neutral" };
+}
+
+function itemKindLabel(kind: StudySession["items"][number]["kind"]) {
+  return (kind ?? "submission") === "submission" ? "제출" : kind === "check" ? "체크" : "시간";
 }
 
 function ScheduleRow({
@@ -66,28 +73,22 @@ function ScheduleRow({
 }) {
   const { workspace, currentUserId } = useWorkspace();
   const status = scheduleStatus(session, referenceDate);
-  const meta = SESSION_TYPE_META[session.type];
   const myProgress = getMemberProgress(workspace, session).find(
     (progress) => progress.member.id === currentUserId,
   );
   const activeItems = session.items.filter((item) => item.status === "active");
-  const usesSecondaryDeadline = Boolean(
-    session.secondaryDeadline
-      && session.date < referenceDate
-      && session.secondaryDeadline.slice(0, 10) >= referenceDate,
-  );
-  const visibleDeadline = usesSecondaryDeadline ? session.secondaryDeadline! : session.deadline;
-  const deadlineLabel = `${activeItems.length}개 항목 · ${usesSecondaryDeadline ? "2차 " : ""}${formatTime(visibleDeadline)} 마감`;
+  const leadItem = activeItems[0];
+  const itemSummary = `제출 ${activeItems.filter((item) => (item.kind ?? "submission") === "submission").length} · 체크 ${activeItems.filter((item) => item.kind === "check").length} · 시간 ${activeItems.filter((item) => item.kind === "event").length}`;
 
   if (variant === "list") {
     const showRowState = status.label !== "오늘";
 
     return (
-      <Link className="schedule-row schedule-list-row" href={APP_ROUTES.scheduleDetail(session.date)} title={session.title}>
+      <Link className="schedule-row schedule-list-row" href={APP_ROUTES.scheduleDetail(session.date)} title={leadItem?.title ?? formatDate(session.date, false)}>
         <span className="schedule-list-row__primary">
-          <span className={`type-chip type-chip--${meta.tone}`}>{meta.label}</span>
-          <strong>{session.title}</strong>
-          <small>{deadlineLabel}</small>
+          <span className="type-chip">{activeItems.length}개</span>
+          <strong>{leadItem?.title ?? formatDate(session.date, false)}</strong>
+          <small>{activeItems.slice(1).map((item) => item.title).join(" · ") || itemSummary}</small>
         </span>
         <span className="schedule-list-row__aside">
           <span className="schedule-list-row__progress">
@@ -107,15 +108,15 @@ function ScheduleRow({
   }
 
   return (
-    <Link className="schedule-row" href={APP_ROUTES.scheduleDetail(session.date)} title={session.title}>
-      <span className={`type-chip type-chip--${meta.tone}`}>{meta.label}</span>
+    <Link className="schedule-row" href={APP_ROUTES.scheduleDetail(session.date)} title={leadItem?.title ?? formatDate(session.date, false)}>
+      <span className="type-chip">{activeItems.length}개</span>
       <span className="schedule-row__main">
         <span>
-          <strong>{session.title}</strong>
+          <strong>{leadItem?.title ?? formatDate(session.date, false)}</strong>
           {session.change?.changed ? <em className="status-badge warning">변경됨</em> : null}
         </span>
         <small>
-          {deadlineLabel}
+          {itemSummary}
         </small>
       </span>
       <span className="schedule-row__progress">
@@ -182,9 +183,7 @@ export function ScheduleWorkspace() {
         || (statusFilter === "upcoming" && session.status !== "cancelled" && session.date > referenceDate)
         || (statusFilter === "past" && session.status !== "cancelled" && session.date < referenceDate);
       const matchesQuery = !query || [
-        session.title,
-        session.description,
-        ...session.items.flatMap((item) => [item.title, item.source ?? ""]),
+        ...session.items.flatMap((item) => [item.title, item.description ?? "", item.source ?? ""]),
       ].some((value) => value.toLocaleLowerCase("ko").includes(query));
       return matchesType && matchesStatus && matchesQuery;
     });
@@ -239,9 +238,9 @@ export function ScheduleWorkspace() {
         <div>
           <p className="eyebrow">학습 계획</p>
           <h1>학습 일정</h1>
-          <p>스터디의 학습 계획과 마감을 확인하세요.</p>
+          <p>날짜별 제출, 체크, 시간 항목을 확인하세요.</p>
         </div>
-        {canManage ? <Link href={APP_ROUTES.scheduleNew} className="button button--primary"><Plus size={17} /> 새 일정</Link> : null}
+        {canManage ? <Link href={APP_ROUTES.scheduleNew} className="button button--primary"><Plus size={17} /> 항목 추가</Link> : null}
       </header>
 
       <section className="schedule-view-toolbar" aria-label="일정 보기 방식">
@@ -259,7 +258,7 @@ export function ScheduleWorkspace() {
       <section className="schedule-filters" aria-label="일정 검색 및 필터">
         <label className="schedule-search">
           <Search size={17} aria-hidden="true" />
-          <input type="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="일정 또는 학습 항목 검색" aria-label="일정 또는 학습 항목 검색" />
+          <input type="search" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} placeholder="항목 검색" aria-label="항목 검색" />
         </label>
         <label>
           <span className="sr-only">일정 상태</span>
@@ -281,9 +280,9 @@ export function ScheduleWorkspace() {
         {!allSessions.length ? (
           <section className="surface schedule-empty" aria-labelledby="schedule-empty-title">
           <CalendarDays size={28} aria-hidden="true" />
-          <strong id="schedule-empty-title">아직 학습 일정이 없어요.</strong>
-          <p>{canManage ? "첫 학습 일정을 만들어 스터디를 시작해보세요." : "관리자가 학습 일정을 만들면 여기에 표시됩니다."}</p>
-          {canManage ? <Link href={APP_ROUTES.scheduleNew} className="button button--primary">새 일정 만들기</Link> : null}
+          <strong id="schedule-empty-title">아직 등록된 항목이 없어요.</strong>
+          <p>{canManage ? "날짜를 선택하고 첫 항목을 추가해보세요." : "관리자가 항목을 추가하면 여기에 표시됩니다."}</p>
+          {canManage ? <Link href={APP_ROUTES.scheduleNew} className="button button--primary">항목 추가</Link> : null}
           </section>
         ) : !filteredSessions.length ? (
           <section className="surface schedule-empty" aria-labelledby="schedule-search-empty-title">
@@ -300,23 +299,27 @@ export function ScheduleWorkspace() {
             {calendarDays.map((date) => {
               const dateKey = toDateKey(date);
               const daySessions = sessionsByDate.get(dateKey) ?? [];
+              const dayItems = daySessions.flatMap((session) => session.items.filter((item) => item.status === "active"));
               const inMonth = date.getMonth() === visibleMonth.getMonth();
               return (
                 <div key={dateKey} className={`schedule-calendar__day${inMonth ? "" : " is-outside"}${dateKey === referenceDate ? " is-today" : ""}${dateKey === selectedDate ? " is-selected" : ""}`}>
-                  <button type="button" className="schedule-calendar__date" aria-label={`${formatDate(dateKey, true)}, 일정 ${daySessions.length}개 선택`} aria-pressed={dateKey === selectedDate} onClick={() => setSelectedDate(dateKey)}>{date.getDate()}<span className="schedule-calendar__mobile-dots" aria-hidden="true">{daySessions.slice(0, 3).map((session) => <i key={session.date} />)}</span></button>
+                  <button type="button" className="schedule-calendar__date" aria-label={`${formatDate(dateKey, true)}, 항목 ${dayItems.length}개 선택`} aria-pressed={dateKey === selectedDate} onClick={() => setSelectedDate(dateKey)}>{date.getDate()}<span className="schedule-calendar__mobile-dots" aria-hidden="true">{dayItems.slice(0, 3).map((item) => <i key={item.id} />)}</span></button>
                   <div className="schedule-calendar__events">
-                    {daySessions.slice(0, 2).map((session) => (
-                      <Link key={session.date} href={APP_ROUTES.scheduleDetail(session.date)} title={session.title}><span aria-hidden="true" />{session.title}</Link>
+                    {dayItems.slice(0, 4).map((item) => (
+                      <Link key={item.id} className={`schedule-calendar-item schedule-calendar-item--${item.kind ?? "submission"}`} href={APP_ROUTES.scheduleDetail(dateKey)} title={`${itemKindLabel(item.kind)}: ${item.title}`}>
+                        <span aria-hidden="true">{(item.kind ?? "submission") === "submission" ? <FileUp size={11} /> : item.kind === "check" ? <CheckSquare2 size={11} /> : <Clock3 size={11} />}</span>
+                        {item.title}{item.kind === "event" && item.startTime ? ` · ${item.startTime}` : ""}
+                      </Link>
                     ))}
-                    {daySessions.length > 2 ? <button type="button" onClick={() => setSelectedDate(dateKey)}>+ {daySessions.length - 2}개 더 보기</button> : null}
+                    {dayItems.length > 4 ? <button type="button" onClick={() => setSelectedDate(dateKey)}>+ {dayItems.length - 4}개 더 보기</button> : null}
                   </div>
                 </div>
               );
             })}
           </div>
           <div className="schedule-mobile-agenda">
-            <header><div><p className="eyebrow">선택한 날짜</p><h2 id="selected-date-agenda">{formatDate(selectedDate, false)}</h2></div><span>{selectedSessions.length}개 일정</span></header>
-            {selectedSessions.length ? selectedSessions.map((session) => <ScheduleRow key={session.date} session={session} referenceDate={referenceDate} />) : <div className="schedule-mobile-agenda__empty"><p>이 날짜에는 학습 일정이 없어요.</p>{canManage ? <Link href={APP_ROUTES.scheduleNew}>일정 만들기 <ArrowRight size={14} /></Link> : null}</div>}
+            <header><div><p className="eyebrow">선택한 날짜</p><h2 id="selected-date-agenda">{formatDate(selectedDate, false)}</h2></div><span>{selectedSessions.flatMap((session) => session.items.filter((item) => item.status === "active")).length}개 항목</span></header>
+            {selectedSessions.length ? selectedSessions.map((session) => <ScheduleRow key={session.date} session={session} referenceDate={referenceDate} />) : <div className="schedule-mobile-agenda__empty"><p>이 날짜에는 등록된 항목이 없어요.</p>{canManage ? <Link href={APP_ROUTES.scheduleNew}>항목 추가 <ArrowRight size={14} /></Link> : null}</div>}
           </div>
           </section>
         )}

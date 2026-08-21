@@ -17,7 +17,10 @@ import java.time.Instant;
 import java.util.Base64;
 
 import com.studyworkspace.auth.dto.GitLabOAuthSession;
+import com.studyworkspace.auth.service.OAuthAccountService;
 import com.studyworkspace.auth.service.GitLabOAuthTokenProvider;
+import com.studyworkspace.auth.support.OAuthTestAccounts;
+import com.studyworkspace.common.security.ApiRateLimitFilter;
 import com.studyworkspace.gitlab.dto.GitLabUser;
 import com.studyworkspace.workspace.security.WorkspaceRepositoryAccessVerifier;
 import jakarta.servlet.http.Cookie;
@@ -25,12 +28,14 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.session.Session;
 import org.springframework.session.SessionRepository;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.annotation.Transactional;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
@@ -46,6 +51,15 @@ class SecurityBoundaryTests {
 	@Autowired
 	private SessionRepository<?> sessionRepository;
 
+	@Autowired
+	private FilterRegistrationBean<GitLabSessionAuthenticationFilter> gitLabSessionAuthenticationFilterRegistration;
+
+	@Autowired
+	private FilterRegistrationBean<ApiRateLimitFilter> apiRateLimitFilterRegistration;
+
+	@Autowired
+	private OAuthAccountService accountService;
+
 	@MockitoBean
 	private GitLabOAuthTokenProvider tokenProvider;
 
@@ -59,6 +73,8 @@ class SecurityBoundaryTests {
 			user, "access-token", "refresh-token", Instant.now().plusSeconds(3600), "api"
 		));
 		when(repositoryAccessVerifier.verifyAtLogin(anyList(), any())).thenAnswer(invocation -> invocation.getArgument(0));
+		when(repositoryAccessVerifier.verifyAtLogin(anyList(), any(StudyIngPrincipal.class), any()))
+			.thenAnswer(invocation -> invocation.getArgument(0));
 	}
 
 	@Test
@@ -84,6 +100,12 @@ class SecurityBoundaryTests {
 	void sessionIdentityUsesStableSerializationVersions() {
 		assertThat(ObjectStreamClass.lookup(GitLabUser.class).getSerialVersionUID()).isZero();
 		assertThat(ObjectStreamClass.lookup(StudyIngPrincipal.class).getSerialVersionUID()).isEqualTo(1L);
+	}
+
+	@Test
+	void sessionAuthenticationFilterOnlyRunsInsideSpringSecurity() {
+		assertThat(gitLabSessionAuthenticationFilterRegistration.isEnabled()).isFalse();
+		assertThat(apiRateLimitFilterRegistration.isEnabled()).isFalse();
 	}
 
 	@Test
@@ -123,6 +145,31 @@ class SecurityBoundaryTests {
 			HttpSessionSecurityContextRepository.SPRING_SECURITY_CONTEXT_KEY
 		);
 		assertThat(securityContext).isNull();
+	}
+
+	@Test
+	@Transactional
+	void stableSessionAuthenticatesPublicProbeAndProtectedApiConsistently() throws Exception {
+		GitLabOAuthSession oauth = new GitLabOAuthSession(
+			new GitLabUser(880101L, "session-consistency", "Session Consistency", null,
+				"https://gitlab.example/session-consistency"),
+			"access-token", "refresh-token", Instant.now().plusSeconds(3600), "api"
+		);
+		StudyIngPrincipal principal = OAuthTestAccounts.completeGitLabRegistration(accountService, oauth);
+		SessionRepository<Session> sessions = sessions();
+		Session session = sessions.createSession();
+		session.setAttribute(AuthSessionAttributes.STUDY_ING_USER, principal);
+		sessions.save(session);
+		String cookieValue = Base64.getEncoder().encodeToString(
+			session.getId().getBytes(StandardCharsets.UTF_8)
+		);
+		Cookie sessionCookie = new Cookie("SESSION", cookieValue);
+
+		mockMvc.perform(get("/api/v1/auth/me").cookie(sessionCookie))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.authenticated").value(true));
+		mockMvc.perform(get("/api/v1/workspaces").cookie(sessionCookie))
+			.andExpect(status().isOk());
 	}
 
 	@Test

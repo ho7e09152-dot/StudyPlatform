@@ -40,7 +40,7 @@ public class SubmissionReviewService {
 	) {
 		ReviewTarget target = requireTarget(workspace, date, memberId);
 		List<ReviewComment> comments = repositories.require(workspace.repository()).listCommitComments(
-			accessToken, workspace.repository(), target.submission().lastCommitId()
+			accessToken, workspace.repository(), target.commitId()
 		).stream().map(SubmissionReviewService::toReviewComment).toList();
 		return thread(target, comments);
 	}
@@ -61,7 +61,7 @@ public class SubmissionReviewService {
 			throw new WorkspaceException("REVIEW_BODY_TOO_LONG", "리뷰 댓글은 4,000자 이하로 입력해 주세요.", 400);
 		}
 		repositories.require(workspace.repository()).createCommitComment(
-			accessToken, workspace.repository(), target.submission().lastCommitId(), normalized
+			accessToken, workspace.repository(), target.commitId(), normalized
 		);
 		return list(accessToken, workspace, date, memberId);
 	}
@@ -79,11 +79,13 @@ public class SubmissionReviewService {
 		if (submission == null || !StringUtils.hasText(submission.lastCommitId())) {
 			throw new WorkspaceException("SUBMISSION_NOT_FOUND", "리뷰할 제출 커밋이 없습니다.", 404);
 		}
+		String commitId = submission.lastCommitId();
 		return new ReviewTarget(
 			session,
 			member,
 			submission,
-			WorkspaceRepositoryLayout.submissionPath(workspace, session, member.fileName())
+			WorkspaceRepositoryLayout.submissionPath(workspace, session, member),
+			commitId
 		);
 	}
 
@@ -92,7 +94,7 @@ public class SubmissionReviewService {
 			target.member().id(),
 			target.member().displayName(),
 			target.filePath(),
-			target.submission().lastCommitId(),
+			target.commitId(),
 			List.copyOf(comments)
 		);
 	}
@@ -112,6 +114,7 @@ public class SubmissionReviewService {
 		StudySession session,
 		StudyMember member,
 		MemberSubmissionFile submission,
-		String filePath
+		String filePath,
+		String commitId
 	) { }
 }

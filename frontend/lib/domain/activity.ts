@@ -29,7 +29,7 @@ export function getActivityTodos(
         (item) => !file?.submissions.some((submission) => submission.itemId === item.id),
       );
       if (!missing.length) return [];
-      const deadline = getNearestDeadline(session, now, workspace.settings.timezone);
+      const deadline = getNearestDeadline(session, missing, now, workspace.settings.timezone);
       return [{
         session,
         missingTitles: missing.map((item) => item.title),
@@ -81,8 +81,16 @@ export function formatActivityTimestamp(
   return `${calendarDate} ${time}`;
 }
 
-function getNearestDeadline(session: StudySession, now: Date, timeZone: string) {
-  const deadlines = [session.deadline, session.secondaryDeadline]
+function getNearestDeadline(
+  session: StudySession,
+  missingItems: StudySession["items"],
+  now: Date,
+  timeZone: string,
+) {
+  const deadlines = missingItems.flatMap((item) => [
+    item.deadline ?? session.deadline,
+    item.secondaryDeadline ?? session.secondaryDeadline,
+  ])
     .filter((value): value is string => Boolean(value))
     .map((value) => new Date(value))
     .sort((a, b) => a.getTime() - b.getTime());

@@ -8,7 +8,7 @@ import { ArrowLeft, BookOpenCheck, FolderGit2, MessageSquareText } from "lucide-
 import { AuthNotice } from "@/components/auth/AuthNotice";
 import { AuthProviderButton } from "@/components/auth/AuthProviderButton";
 import { getAuthSession, getProviderCapabilities, getProviderLoginUrl } from "@/lib/api/services/authApi";
-import { getLoginNoticeState } from "@/lib/auth/loginState";
+import { getLoginNoticeState, shouldAutoResumeAuthenticatedSession } from "@/lib/auth/loginState";
 import { safeAppReturnUrl } from "@/lib/auth/redirects";
 import { clearDemoSession, getDemoEntryUrl } from "@/lib/demo/session";
 import { getProviderDescriptor, orderLoginProviders, type ProviderId } from "@/lib/providers/provider-descriptors";
@@ -26,22 +26,24 @@ export function LoginPage({ initialAuthProviders = ["GITLAB"] }: { initialAuthPr
   useEffect(() => {
     clearDemoSession();
     const controller = new AbortController();
-    void getAuthSession(controller.signal)
-      .then((session) => {
-        if (!session.authenticated || !session.user) return;
-        if (!session.user.profileCompleted) return;
-        window.location.replace(returnUrl);
-      })
-      .catch(() => {
-        // The login entry remains usable when no authenticated session exists.
-      });
+    if (shouldAutoResumeAuthenticatedSession(oauthError)) {
+      void getAuthSession(controller.signal)
+        .then((session) => {
+          if (!session.authenticated || !session.user) return;
+          if (!session.user.profileCompleted) return;
+          window.location.replace(returnUrl);
+        })
+        .catch(() => {
+          // The login entry remains usable when no authenticated session exists.
+        });
+    }
     void getProviderCapabilities(controller.signal)
       .then((capabilities) => setAuthProviders(capabilities.authProviders))
       .catch(() => {
         // GitLab remains the safe baseline when capability discovery is unavailable.
       });
     return () => controller.abort();
-  }, [returnUrl]);
+  }, [oauthError, returnUrl]);
 
   return (
     <main className="auth-entry-page">

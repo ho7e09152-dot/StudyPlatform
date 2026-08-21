@@ -5,6 +5,7 @@ import com.studyworkspace.common.api.ApiErrorResponse;
 import com.studyworkspace.common.security.ApiRateLimitFilter;
 import jakarta.servlet.http.HttpServletResponse;
 import java.nio.charset.StandardCharsets;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.MediaType;
@@ -19,6 +20,28 @@ import tools.jackson.databind.ObjectMapper;
 
 @Configuration
 public class SecurityConfig {
+
+	/**
+	 * The authentication filter belongs exclusively to the Spring Security chain.
+	 * Without this registration override Spring Boot also installs the @Component as
+	 * a servlet filter, causing OncePerRequestFilter to skip it inside the security
+	 * chain after the request SecurityContext has been reset.
+	 */
+	@Bean
+	FilterRegistrationBean<GitLabSessionAuthenticationFilter> gitLabSessionAuthenticationFilterRegistration(
+		GitLabSessionAuthenticationFilter filter
+	) {
+		FilterRegistrationBean<GitLabSessionAuthenticationFilter> registration = new FilterRegistrationBean<>(filter);
+		registration.setEnabled(false);
+		return registration;
+	}
+
+	@Bean
+	FilterRegistrationBean<ApiRateLimitFilter> apiRateLimitFilterRegistration(ApiRateLimitFilter filter) {
+		FilterRegistrationBean<ApiRateLimitFilter> registration = new FilterRegistrationBean<>(filter);
+		registration.setEnabled(false);
+		return registration;
+	}
 
 	@Bean
 	SecurityFilterChain securityFilterChain(

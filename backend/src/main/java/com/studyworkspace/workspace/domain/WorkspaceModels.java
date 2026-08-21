@@ -3,6 +3,8 @@ package com.studyworkspace.workspace.domain;
 import java.util.List;
 import java.util.Map;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 public final class WorkspaceModels {
 
 	private WorkspaceModels() {
@@ -38,13 +40,32 @@ public final class WorkspaceModels {
 		boolean required,
 		String status,
 		String replaces,
-		String replacedBy
+		String replacedBy,
+		String kind,
+		String description,
+		String deadline,
+		String secondaryDeadline,
+		String startTime,
+		String endTime
 	) {
+		public SessionItem {
+			kind = kind == null || kind.isBlank() ? "submission" : kind.trim().toLowerCase(java.util.Locale.ROOT);
+		}
+
+		public SessionItem(
+			String id, int order, String title, String type, String source, String url, String submitType,
+			boolean required, String status, String replaces, String replacedBy
+		) {
+			this(id, order, title, type, source, url, submitType, required, status, replaces, replacedBy,
+				"submission", null, null, null, null, null);
+		}
+
 		public SessionItem(
 			String id, int order, String title, String source, String url, String submitType,
 			boolean required, String status, String replaces, String replacedBy
 		) {
-			this(id, order, title, "algorithm", source, url, submitType, required, status, replaces, replacedBy);
+			this(id, order, title, "algorithm", source, url, submitType, required, status, replaces, replacedBy,
+				"submission", null, null, null, null, null);
 		}
 	}
 
@@ -82,6 +103,7 @@ public final class WorkspaceModels {
 	) {
 	}
 
+	@JsonIgnoreProperties(value = "itemCommitIds")
 	public record MemberSubmissionFile(
 		int version,
 		String memberId,
@@ -95,8 +117,7 @@ public final class WorkspaceModels {
 		String reflection,
 		String lastCommitId,
 		String lastCommitMessage
-	) {
-	}
+	) { }
 
 	public record Notifications(
 		boolean scheduleChanges,
@@ -172,8 +193,20 @@ public final class WorkspaceModels {
 		Map<String, StudySession> sessions,
 		Map<String, MemberSubmissionFile> submissions,
 		WorkspaceSettings settings,
-		RepositoryIdentity repository
+		RepositoryIdentity repository,
+		RepositoryStorageLayout storageLayout
 	) {
+		public WorkspaceState(
+			String id, String name, long gitlabProjectId, String gitlabProjectPath, String defaultBranch,
+			String repositoryBasePath, Integer repositorySchemaVersion, String importMode, String status,
+			String lastSyncedAt, List<StudyMember> members, Map<String, StudySession> sessions,
+			Map<String, MemberSubmissionFile> submissions, WorkspaceSettings settings, RepositoryIdentity repository
+		) {
+			this(id, name, gitlabProjectId, gitlabProjectPath, defaultBranch, repositoryBasePath,
+				repositorySchemaVersion, importMode, status, lastSyncedAt, members, sessions, submissions, settings,
+				repository, null);
+		}
+
 		public WorkspaceState(
 			String id, String name, long gitlabProjectId, String gitlabProjectPath, String defaultBranch,
 			String repositoryBasePath, Integer repositorySchemaVersion, String importMode,
@@ -218,9 +251,12 @@ public final class WorkspaceModels {
 	) {
 	}
 
+	public record CompletionRequest(String expectedFileCommitId) {
+	}
+
 	public record CreateWorkspaceRequest(
 		String name,
-		long gitlabProjectId,
+		Long gitlabProjectId,
 		String gitlabProjectPath,
 		String defaultBranch,
 		String timezone,
@@ -232,8 +268,20 @@ public final class WorkspaceModels {
 		String repositoryWebUrl,
 		String repositoryVisibility,
 		String provider,
-		String externalRepositoryId
+		String externalRepositoryId,
+		RepositoryStorageLayout storageLayout
 	) {
+		public CreateWorkspaceRequest(
+			String name, long gitlabProjectId, String gitlabProjectPath, String defaultBranch, String timezone,
+			String repositoryBasePath, Integer repositorySchemaVersion, String importMode,
+			String expectedTreeFingerprint, String ownerRepositoryFileName, String repositoryWebUrl,
+			String repositoryVisibility, String provider, String externalRepositoryId
+		) {
+			this(name, gitlabProjectId, gitlabProjectPath, defaultBranch, timezone, repositoryBasePath,
+				repositorySchemaVersion, importMode, expectedTreeFingerprint, ownerRepositoryFileName,
+				repositoryWebUrl, repositoryVisibility, provider, externalRepositoryId, null);
+		}
+
 		public CreateWorkspaceRequest(
 			String name, long gitlabProjectId, String gitlabProjectPath, String defaultBranch, String timezone,
 			String repositoryBasePath, Integer repositorySchemaVersion, String importMode,

@@ -15,6 +15,7 @@ import com.studyworkspace.gitlab.dto.GitLabFileContent;
 import com.studyworkspace.gitlab.service.GitLabOAuthProjectService;
 import com.studyworkspace.gitlab.service.RepositoryPathPolicy;
 import com.studyworkspace.workspace.domain.WorkspaceException;
+import com.studyworkspace.workspace.domain.RepositoryStorageLayout;
 import org.junit.jupiter.api.Test;
 import tools.jackson.databind.ObjectMapper;
 
@@ -55,11 +56,40 @@ class GitLabSubmissionFileServiceTests {
 			.isEqualTo("SUBMISSION_CONFLICT");
 	}
 
+	@Test
+	void customLayoutKeepsAllItemsInOneMemberFile() {
+		when(gitLab.createRepositoryFile(anyString(), anyLong(), anyString(), anyString(), anyString(), anyString(), anyString()))
+			.thenReturn(file("item-sha"));
+		StudySession session = SubmissionMarkdownCodecTests.session();
+		SessionItem item = session.items().getFirst();
+
+		String sha = service.write(
+			"token", customWorkspace(), session, item, member(), null,
+			SubmissionMarkdownCodecTests.submission(null), "submit: item"
+		);
+
+		assertThat(sha).isEqualTo("item-sha");
+		verify(gitLab).createRepositoryFile(
+			eq("token"), eq(42L), eq("study/2026-08-09/owner.md"), eq("main"),
+			contains("itemId: \"" + item.id() + "\""), eq("submit: item"), eq("Owner")
+		);
+	}
+
 	private static WorkspaceState workspace() {
 		return new WorkspaceState(
 			"workspace", "Study", 42, "team/study", "main", "ACTIVE", "2026-08-09T00:00:00Z",
 			List.of(member()), Map.of(), Map.of(),
 			new WorkspaceSettings("Asia/Seoul", true, new Notifications(true, true, true))
+		);
+	}
+
+	private static WorkspaceState customWorkspace() {
+		return new WorkspaceState(
+			"workspace", "Study", 42, "team/study", "main", "study", 3, "EMPTY", "ACTIVE", null,
+			List.of(member()), Map.of(), Map.of(),
+			new WorkspaceSettings("Asia/Seoul", true, new Notifications(true, true, true)),
+			new RepositoryIdentity("GITLAB", "42", "team/study", null, "private", "main", true, true, true, "40"),
+			new RepositoryStorageLayout(List.of("DATE"), List.of("NAME"), "YYYY", "MM", "YYYY-MM-DD", "DD", "md")
 		);
 	}
 

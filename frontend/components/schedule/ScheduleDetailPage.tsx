@@ -25,8 +25,7 @@ import { StorageDetails } from "@/components/ui/StorageDetails";
 import { getStorageDetailsCopy } from "@/lib/domain/storage";
 import { PreSubmissionWarning } from "@/components/review/PreSubmissionWarning";
 import { getUserFacingError } from "@/lib/api/errors";
-import { SESSION_TYPE_META } from "@/lib/domain/constants";
-import { formatDate, formatDateTime, formatTime, getSessionRepositoryPath } from "@/lib/domain/format";
+import { formatDate, formatDateTime, getSessionRepositoryPath } from "@/lib/domain/format";
 import { getDashboardMetrics, getMemberProgress, getSubmissionKey } from "@/lib/domain/metrics";
 import { canManageSchedules } from "@/lib/domain/permissions";
 import type { MemberProgress, StudyMember } from "@/lib/domain/types";
@@ -48,7 +47,7 @@ function getMemberStatus(progress: MemberProgress, currentUserId: string) {
 }
 
 export function ScheduleDetailPage({ date }: { date: string }) {
-  const { workspace, referenceDate, currentUserId, submitItem, cancelSession } = useWorkspace();
+  const { workspace, referenceDate, currentUserId, submitItem, toggleChecklistItem, cancelSession } = useWorkspace();
   const session = workspace.sessions[date];
   const [submissionItemId, setSubmissionItemId] = useState<string | null>(null);
   const [selectedMember, setSelectedMember] = useState<StudyMember | null>(null);
@@ -57,6 +56,8 @@ export function ScheduleDetailPage({ date }: { date: string }) {
   const [confirmCancel, setConfirmCancel] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [cancelError, setCancelError] = useState("");
+  const [checkingItemId, setCheckingItemId] = useState<string | null>(null);
+  const [checkError, setCheckError] = useState("");
 
   const activeItems = useMemo(() => session?.items.filter((item) => item.status === "active") ?? [], [session]);
   const members = useMemo(() => session ? getMemberProgress(workspace, session) : [], [session, workspace]);
@@ -74,11 +75,16 @@ export function ScheduleDetailPage({ date }: { date: string }) {
 
   const currentMember = workspace.members.find((member) => member.id === currentUserId);
   const canManage = canManageSchedules(currentMember);
-  const meta = SESSION_TYPE_META[session.type];
-  const status = getStatus(session.date, session.status, referenceDate, session.secondaryDeadline);
+  const latestSecondaryDeadline = activeItems
+    .map((item) => item.secondaryDeadline)
+    .filter((value): value is string => Boolean(value))
+    .sort()
+    .at(-1);
+  const status = getStatus(session.date, session.status, referenceDate, latestSecondaryDeadline);
   const myProgress = members.find((progress) => progress.member.id === currentUserId);
   const myFile = workspace.submissions[getSubmissionKey(session.folder, currentUserId)];
   const completionRate = myProgress?.completionRate ?? 0;
+  const hasTrackableItems = activeItems.some((item) => (item.kind ?? "submission") !== "event" && item.required);
   const completedSchedule = session.status === "cancelled" || session.date < referenceDate;
   const changedBy = workspace.members.find(
     (member) => member.id === session.updatedBy || member.username === session.updatedBy,
@@ -105,6 +111,18 @@ export function ScheduleDetailPage({ date }: { date: string }) {
     }
   }
 
+  async function updateChecklist(itemId: string, completed: boolean) {
+    setCheckingItemId(itemId);
+    setCheckError("");
+    try {
+      await toggleChecklistItem(session.date, itemId, completed);
+    } catch (error) {
+      setCheckError(getUserFacingError(error, "체크 상태를 변경하지 못했습니다."));
+    } finally {
+      setCheckingItemId(null);
+    }
+  }
+
   function closeCancelConfirmation() {
     setConfirmCancel(false);
     setMenuOpen(false);
@@ -118,14 +136,11 @@ export function ScheduleDetailPage({ date }: { date: string }) {
         <div>
           <div className="schedule-detail-header__badges">
             <span className={`status-badge ${status.tone}`}>{status.label}</span>
-            <span className={`type-chip type-chip--${meta.tone}`}>{meta.label}</span>
             {session.change?.changed ? <span className="status-badge warning">변경됨</span> : null}
           </div>
-          <h1>{session.title}</h1>
+          <h1>{formatDate(session.date, true)}</h1>
           <div className="schedule-detail-header__meta">
-            <span><CalendarDays size={15} /> {formatDate(session.date, true)}</span>
-            <span><Clock3 size={15} /> 1차 마감 {formatTime(session.deadline)}</span>
-            {session.secondaryDeadline ? <span><Clock3 size={15} /> 2차 마감 {formatTime(session.secondaryDeadline)}</span> : null}
+            <span><CalendarDays size={15} /> 등록된 항목 {activeItems.length}개</span>
           </div>
         </div>
         {canManage ? (
@@ -150,34 +165,39 @@ export function ScheduleDetailPage({ date }: { date: string }) {
         </details>
       ) : null}
 
-      <section className="schedule-detail-description" aria-labelledby="schedule-description-title">
-        <h2 id="schedule-description-title">설명</h2>
-        <p>{session.description || "등록된 일정 설명이 없습니다."}</p>
-      </section>
-
-      <section className="schedule-my-progress" aria-labelledby="schedule-my-progress-title">
+      {hasTrackableItems ? <section className="schedule-my-progress" aria-labelledby="schedule-my-progress-title">
         <header><div><h2 id="schedule-my-progress-title">내 진행</h2><p>{myProgress?.completedItems ?? 0} / {myProgress?.requiredItems ?? 0} 완료</p></div></header>
         <ProgressBar value={completionRate} label="내 일정 완료율" />
-      </section>
+      </section> : null}
 
       <div className="schedule-detail-grid">
         <section className="surface today-plan schedule-learning-items" aria-labelledby="schedule-learning-items-title">
-          <header className="today-section-head"><div><h2 id="schedule-learning-items-title">학습 항목</h2><p>{activeItems.length}개 항목 · {formatTime(session.deadline)} 마감</p></div></header>
+          <header className="today-section-head"><div><h2 id="schedule-learning-items-title">항목</h2><p>제출, 체크, 시간 항목 {activeItems.length}개</p></div></header>
           <div className="today-plan-list">
             {activeItems.map((item) => {
               const entry = myFile?.submissions.find((candidate) => candidate.itemId === item.id);
+              const kind = item.kind ?? "submission";
+              const checked = kind === "check" && Boolean(entry);
               return (
                 <article key={item.id}>
-                  <span className={`today-plan-status ${entry ? "is-done" : ""}`} aria-hidden="true">{entry ? <Check size={15} /> : <Circle size={15} />}</span>
-                  <div><strong>{item.title}</strong><span className="sr-only">{entry ? "완료" : "미제출"}{item.required ? "" : ", 선택 항목"}</span>{item.url ? <a href={item.url} target="_blank" rel="noreferrer">학습 자료 열기 <ExternalLink size={13} /></a> : null}</div>
-                  {session.status !== "cancelled" ? <button type="button" className={entry ? "today-row-action today-row-action--edit" : "button button--secondary button--small"} onClick={() => setSubmissionItemId(item.id)}>{entry ? "제출 보기" : "학습하기"}</button> : null}
+                  <span className={`today-plan-status ${entry ? "is-done" : ""}`} aria-hidden="true">{kind === "event" ? <Clock3 size={15} /> : entry ? <Check size={15} /> : <Circle size={15} />}</span>
+                  <div>
+                    <strong>{item.title}</strong>
+                    {item.description ? <small>{item.description}</small> : null}
+                    <span className="sr-only">{kind === "event" ? "시간 일정" : entry ? "완료" : "미완료"}{item.required ? "" : ", 선택 항목"}</span>
+                    {kind === "event" ? <small>{item.startTime}–{item.endTime}</small> : null}
+                    {item.url ? <a href={item.url} target="_blank" rel="noreferrer">학습 자료 열기 <ExternalLink size={13} /></a> : null}
+                  </div>
+                  {session.status !== "cancelled" && kind === "submission" ? <button type="button" className={entry ? "today-row-action today-row-action--edit" : "button button--secondary button--small"} onClick={() => setSubmissionItemId(item.id)}>{entry ? "제출 보기" : "학습하기"}</button> : null}
+                  {session.status !== "cancelled" && kind === "check" ? <button type="button" className={checked ? "today-row-action today-row-action--edit" : "button button--secondary button--small"} disabled={checkingItemId === item.id} onClick={() => void updateChecklist(item.id, !checked)}>{checked ? "완료 취소" : "완료 체크"}</button> : null}
                 </article>
               );
             })}
           </div>
+          {checkError ? <p className="field-error" role="alert">{checkError}</p> : null}
         </section>
 
-        <section className="surface today-team schedule-team-progress" aria-labelledby="schedule-team-progress-title">
+        {hasTrackableItems ? <section className="surface today-team schedule-team-progress" aria-labelledby="schedule-team-progress-title">
           <header className="today-section-head today-team__head"><div><h2 id="schedule-team-progress-title">팀 진행 상황</h2><p>{metrics?.completedMembers ?? 0}명 / {metrics?.totalMembers ?? 0}명 완료</p></div></header>
           <div className="today-team__progress"><ProgressBar value={metrics?.submissionRate ?? 0} label="팀 일정 완료율" /></div>
           <div className="today-team-list">
@@ -187,7 +207,7 @@ export function ScheduleDetailPage({ date }: { date: string }) {
               return <button type="button" key={progress.member.id} disabled={!file} aria-label={`${progress.member.displayName}, ${progress.completedItems}/${progress.requiredItems}, ${memberStatus.label}${file ? ", 제출과 리뷰 보기" : ""}`} onClick={() => requestMember(progress.member)}><Avatar member={progress.member} /><span><strong>{progress.member.displayName}{progress.member.id === currentUserId ? " (나)" : ""}</strong></span><em>{progress.completedItems} / {progress.requiredItems}</em><span className={`status-badge ${memberStatus.tone}`}>{memberStatus.label}</span>{file ? <ChevronRight size={16} /> : <span aria-hidden="true" />}</button>;
             }) : <div className="today-team-empty"><Users size={23} /><strong>팀원이 없습니다</strong></div>}
           </div>
-        </section>
+        </section> : null}
       </div>
 
       {completedSchedule ? <section className="schedule-library-link"><div><strong>학습 결과를 다시 보고 싶나요?</strong><p>완료된 제출 콘텐츠는 학습 라이브러리에서 이어서 탐색할 수 있어요.</p></div><Link href={APP_ROUTES.librarySession(session.date)}>학습 결과 보기 <ArrowRight size={15} /></Link></section> : null}

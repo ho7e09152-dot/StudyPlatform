@@ -19,7 +19,7 @@ import { PreSubmissionWarning } from "@/components/review/PreSubmissionWarning";
 import { MemberDetailDialog } from "./MemberDetailDialog";
 import { SubmissionDialog } from "./SubmissionDialog";
 import { TodayNotice } from "./TodayNotice";
-import { SESSION_TYPE_META } from "@/lib/domain/constants";
+import { getUserFacingError } from "@/lib/api/errors";
 import { formatDate, formatDateTime, formatTime } from "@/lib/domain/format";
 import {
   getActiveRequiredItems,
@@ -45,9 +45,9 @@ export function TodayWorkspace() {
         </header>
         <section className="surface schedule-empty today-empty" aria-labelledby="today-empty-title">
           <CalendarDays size={30} aria-hidden="true" />
-          <strong id="today-empty-title">오늘 등록된 학습 일정이 없습니다</strong>
-          <p>새 일정을 만들거나 활동함에서 놓친 학습을 확인해 보세요.</p>
-          <Link href="/schedule" className="button button--primary"><CalendarDays size={16} /> 일정 열기</Link>
+          <strong id="today-empty-title">오늘 등록된 항목이 없습니다</strong>
+          <p>필요한 항목을 추가하거나 활동함에서 놓친 학습을 확인해 보세요.</p>
+          <Link href="/schedule/new" className="button button--primary"><CalendarDays size={16} /> 항목 추가</Link>
         </section>
       </div>
     );
@@ -66,10 +66,12 @@ function getMemberStatus(progress: MemberProgress, currentUserId: string) {
 }
 
 function TodaySession({ session }: { session: StudySession }) {
-  const { workspace, currentUserId, submitItem } = useWorkspace();
+  const { workspace, currentUserId, submitItem, toggleChecklistItem } = useWorkspace();
   const [submissionItemId, setSubmissionItemId] = useState<string | null>(null);
   const [selectedMember, setSelectedMember] = useState<StudyMember | null>(null);
   const [pendingMember, setPendingMember] = useState<StudyMember | null>(null);
+  const [checkingItemId, setCheckingItemId] = useState<string | null>(null);
+  const [checkError, setCheckError] = useState("");
 
   const requiredItems = useMemo(() => getActiveRequiredItems(session), [session]);
   const activeItems = useMemo(
@@ -83,20 +85,36 @@ function TodaySession({ session }: { session: StudySession }) {
   const nextItem = requiredItems.find(
     (item) => !myFile?.submissions.some((entry) => entry.itemId === item.id),
   );
-  const meta = SESSION_TYPE_META[session.type];
+  const focusItem = nextItem ?? activeItems.find((item) => (item.kind ?? "submission") === "submission");
   const started = Boolean(myFile?.submissions.length);
   const focusActionLabel = nextItem
-    ? started
-      ? "계속 학습하기"
-      : "학습 시작하기"
-    : "내 제출 보기";
+    ? (nextItem.kind ?? "submission") === "check"
+      ? "완료 체크"
+      : started ? "계속 학습하기" : "학습 시작하기"
+    : focusItem ? "내 제출 보기" : "확인할 항목 없음";
   const changedBy = workspace.members.find(
     (member) => member.id === session.updatedBy || member.username === session.updatedBy,
   )?.displayName ?? session.updatedBy;
 
+  async function updateChecklist(itemId: string, completed: boolean) {
+    setCheckingItemId(itemId);
+    setCheckError("");
+    try {
+      await toggleChecklistItem(session.date, itemId, completed);
+    } catch (error) {
+      setCheckError(getUserFacingError(error, "체크 상태를 변경하지 못했습니다."));
+    } finally {
+      setCheckingItemId(null);
+    }
+  }
+
   function openFocusAction() {
-    const itemId = nextItem?.id ?? requiredItems[0]?.id ?? activeItems[0]?.id;
-    if (itemId) setSubmissionItemId(itemId);
+    if (!focusItem) return;
+    if ((focusItem.kind ?? "submission") === "check") {
+      void updateChecklist(focusItem.id, true);
+      return;
+    }
+    setSubmissionItemId(focusItem.id);
   }
 
   function requestMember(member: StudyMember) {
@@ -121,30 +139,29 @@ function TodaySession({ session }: { session: StudySession }) {
 
       <section className="surface today-focus" aria-labelledby="today-focus-title">
         <div className="today-focus__heading">
-          <span className={`type-chip type-chip--${meta.tone}`}>{meta.label}</span>
           <div>
             <p>지금 해야 할 학습</p>
-            <h2 id="today-focus-title">{session.title}</h2>
+            <h2 id="today-focus-title">오늘의 항목 {activeItems.length}개</h2>
           </div>
         </div>
 
-        <div className="today-focus__progress">
+        {requiredItems.length ? <div className="today-focus__progress">
           <div>
             <span>{myProgress.completedItems} / {myProgress.requiredItems} 완료</span>
           </div>
           <ProgressBar value={myProgress.completionRate} label="내 오늘 학습 완료율" />
-        </div>
+        </div> : null}
 
         <div className="today-focus__next">
           <div>
             <small>{nextItem ? "다음 학습" : "오늘 학습"}</small>
-            <strong>{nextItem?.title ?? "필수 학습을 모두 마쳤어요"}</strong>
-            <span><Clock3 size={14} aria-hidden="true" /> 1차 마감 {formatTime(session.deadline)}</span>
+            <strong>{focusItem?.title ?? "완료 확인이 없는 시간 일정만 있어요"}</strong>
+            {focusItem?.deadline ? <span><Clock3 size={14} aria-hidden="true" /> 마감 {formatTime(focusItem.deadline)}</span> : null}
           </div>
           <button
             type="button"
             className="button button--primary"
-            disabled={!activeItems.length}
+            disabled={!focusItem || checkingItemId === focusItem.id}
             onClick={openFocusAction}
           >
             {focusActionLabel}<ArrowRight size={16} aria-hidden="true" />
@@ -178,35 +195,42 @@ function TodaySession({ session }: { session: StudySession }) {
           <header className="today-section-head">
             <div>
               <h2 id="today-plan-title">오늘 학습 계획</h2>
-              <p>{activeItems.length}개 학습 항목 · {formatTime(session.deadline)} 마감</p>
+              <p>
+                제출 {activeItems.filter((item) => (item.kind ?? "submission") === "submission").length} · 체크 {activeItems.filter((item) => item.kind === "check").length} · 시간 {activeItems.filter((item) => item.kind === "event").length}
+              </p>
             </div>
           </header>
           <div className="today-plan-list">
             {activeItems.map((item) => {
               const submitted = myFile?.submissions.some((entry) => entry.itemId === item.id);
               const current = item.id === nextItem?.id;
+              const kind = item.kind ?? "submission";
               return (
                 <article key={item.id} className={current ? "is-current" : undefined}>
                   <span className={`today-plan-status ${submitted ? "is-done" : ""}`} aria-hidden="true">
-                    {submitted ? <Check size={15} /> : <Circle size={15} />}
+                    {kind === "event" ? <Clock3 size={15} /> : submitted ? <Check size={15} /> : <Circle size={15} />}
                   </span>
                   <div>
                     <strong>{item.title}</strong>
-                    <span className="sr-only">{submitted ? "완료" : current ? "다음 학습" : "미제출"}{!item.required ? ", 선택 항목" : ""}</span>
+                    {item.description ? <small>{item.description}</small> : null}
+                    <span className="sr-only">{kind === "event" ? "시간 일정" : submitted ? "완료" : current ? "다음 항목" : "미완료"}{!item.required ? ", 선택 항목" : ""}</span>
+                    {kind === "event" ? <small>{item.startTime}–{item.endTime}</small> : null}
                     {item.url ? <a href={item.url} target="_blank" rel="noreferrer">학습 자료 열기 <ExternalLink size={13} aria-hidden="true" /></a> : null}
                   </div>
-                  <button
+                  {kind === "submission" ? <button
                     type="button"
                     className={current ? "button button--secondary button--small" : `today-row-action${submitted ? " today-row-action--edit" : ""}`}
                     aria-label={submitted ? `${item.title} 제출 수정` : undefined}
                     onClick={() => setSubmissionItemId(item.id)}
                   >
                     {submitted ? "제출 수정" : current ? "계속하기" : "제출"}
-                  </button>
+                  </button> : null}
+                  {kind === "check" ? <button type="button" className={submitted ? "today-row-action today-row-action--edit" : "button button--secondary button--small"} disabled={checkingItemId === item.id} onClick={() => void updateChecklist(item.id, !submitted)}>{submitted ? "완료 취소" : "완료 체크"}</button> : null}
                 </article>
               );
             })}
           </div>
+          {checkError ? <p className="field-error" role="alert">{checkError}</p> : null}
           <footer className="today-section-footer">
             <Link href="/schedule">전체 일정 보기 <ArrowRight size={15} aria-hidden="true" /></Link>
           </footer>
@@ -271,7 +295,7 @@ function TodaySession({ session }: { session: StudySession }) {
           onClose={() => setSelectedMember(null)}
         />
       ) : null}
-      {pendingMember ? <PreSubmissionWarning onClose={() => setPendingMember(null)} onProceed={() => { setSelectedMember(pendingMember); setPendingMember(null); }} onContinueLearning={() => { if (nextItem) setSubmissionItemId(nextItem.id); setPendingMember(null); }} /> : null}
+      {pendingMember ? <PreSubmissionWarning onClose={() => setPendingMember(null)} onProceed={() => { setSelectedMember(pendingMember); setPendingMember(null); }} onContinueLearning={() => { openFocusAction(); setPendingMember(null); }} /> : null}
     </div>
   );
 }

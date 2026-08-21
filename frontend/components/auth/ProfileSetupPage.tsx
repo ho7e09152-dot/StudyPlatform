@@ -7,6 +7,7 @@ import type { StudyIngUser } from "@/lib/api/services/authApi";
 import { getUserFacingError } from "@/lib/api/errors";
 import { ProviderIcon } from "@/components/providers/ProviderIcon";
 import { getProviderDescriptor, type ProviderId } from "@/lib/providers/provider-descriptors";
+import { validateStorageRecordName } from "@/lib/domain/repository-storage-layout";
 
 export function ProfileSetupPage({
   user,
@@ -38,9 +39,11 @@ export function ProfileSetupPage({
   const [timezone] = useState(
     user.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Seoul",
   );
+  const recordNameError = validateStorageRecordName(repositoryFileName);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    if (recordNameError) { setError(recordNameError); return; }
     setSaving(true);
     setError("");
     try {
@@ -99,6 +102,7 @@ export function ProfileSetupPage({
               <span>.md</span>
             </div>
             <small>학습 기록 파일 이름에 사용됩니다.</small>
+            {recordNameError ? <small className="field-error">{recordNameError}</small> : null}
           </label>
 
           <fieldset className="profile-consents">
@@ -119,7 +123,7 @@ export function ProfileSetupPage({
 
           {error ? <div className="onboarding-error" role="alert">{error}</div> : null}
 
-          <button className="button button--primary" type="submit" disabled={saving || !confirmMinimumAge || !acceptTerms || !acceptPrivacy || displayName.trim().length < 2 || !repositoryFileName.trim()}>
+          <button className="button button--primary" type="submit" disabled={saving || !confirmMinimumAge || !acceptTerms || !acceptPrivacy || displayName.trim().length < 2 || Boolean(recordNameError)}>
             {saving ? <><LoaderCircle className="spin" size={17} /> 저장 중…</> : "프로필 저장하고 계속하기"}
           </button>
         </form>

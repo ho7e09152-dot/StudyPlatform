@@ -16,6 +16,7 @@ import {
   listWorkspaces,
 	joinWorkspace as joinWorkspaceApi,
   saveWorkspaceSession,
+  setChecklistCompletion,
   softDeleteWorkspace,
   migrateRepositorySchema,
   syncWorkspace as syncWorkspaceApi,
@@ -68,6 +69,7 @@ interface WorkspaceContextValue {
     itemId: string,
     draft: SubmissionDraft,
   ) => Promise<void>;
+  toggleChecklistItem: (date: string, itemId: string, completed: boolean) => Promise<void>;
   saveSession: (
     draft: SessionDraft,
     expectedRevision?: number,
@@ -400,6 +402,62 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     [backendConnected, currentUserId, notify, replaceWorkspace, updateCurrentWorkspace, workspace],
   );
 
+  const toggleChecklistItem = useCallback(async (date: string, itemId: string, completed: boolean) => {
+    const session = workspace.sessions[date];
+    const member = workspace.members.find((candidate) => candidate.id === currentUserId);
+    const item = session?.items.find((candidate) => candidate.id === itemId && candidate.status === "active");
+    if (!session || !member || !item || (item.kind ?? "submission") !== "check") {
+      throw new Error("ITEM_NOT_COMPLETABLE");
+    }
+
+    const key = getSubmissionKey(session.folder, member.id);
+    const previousFile = workspace.submissions[key];
+    if (backendConnected) {
+      const updated = await setChecklistCompletion(
+        workspace.id,
+        date,
+        itemId,
+        completed,
+        previousFile?.lastCommitId,
+      );
+      replaceWorkspace(updated);
+    } else {
+      const now = new Date().toISOString();
+      const existing = previousFile?.submissions.find((entry) => entry.itemId === itemId);
+      const submissions = completed
+        ? [
+            ...(previousFile?.submissions.filter((entry) => entry.itemId !== itemId) ?? []),
+            {
+              itemId,
+              type: "check" as const,
+              value: "completed",
+              submittedAt: existing?.submittedAt ?? now,
+              updatedAt: now,
+            },
+          ]
+        : previousFile?.submissions.filter((entry) => entry.itemId !== itemId) ?? [];
+      updateCurrentWorkspace((current) => ({
+        ...current,
+        submissions: {
+          ...current.submissions,
+          [key]: {
+            version: 1,
+            memberId: member.id,
+            gitlabUserId: member.gitlabUserId,
+            username: member.displayName,
+            date: session.folder,
+            sessionRevision: session.revision,
+            sessionType: session.type,
+            updatedAt: now,
+            submissions,
+            lastCommitId: makeCommitId(),
+          },
+        },
+      }));
+    }
+    notify(completed ? "체크 항목을 완료했습니다" : "체크 항목을 다시 열었습니다", item.title);
+  }, [backendConnected, currentUserId, notify, replaceWorkspace, updateCurrentWorkspace, workspace]);
+
   const saveSession = useCallback(
     async (draft: SessionDraft, expectedRevision?: number) => {
       const current = workspace.sessions[draft.date];
@@ -614,6 +672,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     addMember,
     updateMemberRole,
     submitItem,
+    toggleChecklistItem,
     saveSession,
     cancelSession,
     toggleNotification,
