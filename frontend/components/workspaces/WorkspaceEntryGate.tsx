@@ -34,8 +34,8 @@ export function WorkspaceEntryGate({
     <main className="workspace-entry-gate">
       <div className="workspace-hub page-workspace">
         <header className="workspace-hub__header">
-          <div><h1>Workspace</h1><p>참여할 수 있는 스터디 공간을 확인하거나 새 저장소를 연결하세요.</p></div>
-          <Link className="button button--secondary" href={APP_ROUTES.workspaceNew}><Plus size={17} /> 새 Workspace 연결</Link>
+          <div><h1>Workspace</h1><p>참여 중인 Workspace를 선택하거나 새 Workspace를 연결하세요.</p></div>
+          <Link className="button button--secondary" href={APP_ROUTES.workspaceNew}><Plus size={17} aria-hidden="true" /> 새 Workspace 연결</Link>
         </header>
         <DiscoverableWorkspaceSection
           hideWhenEmpty={false}

@@ -38,6 +38,18 @@ interface CsrfResponse {
 
 let csrfTokenPromise: Promise<CsrfResponse> | null = null;
 
+const PROVIDER_SCOPED_AUTH_ERROR_CODES = new Set([
+	"PROVIDER_ACCOUNT_REQUIRED",
+	"PROVIDER_REAUTH_REQUIRED",
+	"GITHUB_REAUTH_REQUIRED",
+	"GITLAB_RECONNECT_REQUIRED",
+	"GITLAB_AUTHENTICATION_FAILED",
+]);
+
+export function shouldRedirectToLoginForUnauthorized(code?: string) {
+	return !code || !PROVIDER_SCOPED_AUTH_ERROR_CODES.has(code);
+}
+
 export function resetCsrfToken() {
 	csrfTokenPromise = null;
 }
@@ -104,7 +116,8 @@ async function apiRequestAttempt<T>(
     if (
       response.status === 401 &&
       typeof window !== "undefined" &&
-      !path.startsWith("/api/v1/auth/")
+      !path.startsWith("/api/v1/auth/") &&
+		shouldRedirectToLoginForUnauthorized(body?.code)
     ) {
       const returnUrl = `${window.location.pathname}${window.location.search}`;
       window.location.replace(

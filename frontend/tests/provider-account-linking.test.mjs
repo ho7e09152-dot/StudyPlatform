@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildProviderAccountRows, getProviderLinkNotice, parseProviderLinkResult } from "../lib/providers/connected-accounts.ts";
+import {
+  buildProviderAccountRows,
+  getConnectedProviderIds,
+  getProviderLinkNotice,
+  parseProviderLinkResult,
+  resolveRepositoryProvider,
+} from "../lib/providers/connected-accounts.ts";
 
 const gitLabAccount = {
   id: "gitlab-account",
@@ -42,6 +48,17 @@ test("connected GitHub account replaces the connect row without duplication", ()
   assert.equal(rows.length, 2);
   assert.equal(rows[1].username, "github-user");
   assert.equal(rows[1].status, "CONNECTED");
+});
+
+test("repository provider selection enables only actually connected accounts", () => {
+  assert.deepEqual(getConnectedProviderIds([gitLabAccount]), ["GITLAB"]);
+  assert.deepEqual(getConnectedProviderIds([githubAccount]), ["GITHUB"]);
+  assert.deepEqual(getConnectedProviderIds([
+    gitLabAccount,
+    { ...githubAccount, status: "REAUTH_REQUIRED" },
+  ]), ["GITLAB"]);
+  assert.equal(resolveRepositoryProvider("GITLAB", ["GITLAB", "GITHUB"], ["GITHUB"]), "GITHUB");
+  assert.equal(resolveRepositoryProvider("GITHUB", ["GITLAB", "GITHUB"], ["GITLAB"]), "GITLAB");
 });
 
 test("callback result parsing keeps success, cancel, collision, existing account, expiry and failure distinct", () => {
