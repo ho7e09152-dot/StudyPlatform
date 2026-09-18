@@ -85,9 +85,13 @@ public class WorkspaceRepositoryAccessVerifier {
 				accessible.put(provider, requirePort(provider).listAccessibleRepositories(token).stream()
 					.collect(Collectors.toMap(RepositoryMembership::repositoryId, Function.identity(), (left, right) -> left)));
 			} catch (WorkspaceException exception) {
-				if (!"PROVIDER_ACCOUNT_REQUIRED".equals(exception.code())) throw exception;
+				if (!isProviderCredentialUnavailable(exception.code())) throw exception;
 				accessible.put(provider, Map.of());
 			} catch (RepositoryProviderException exception) {
+				if (exception.upstreamStatus() == 401 && isProviderCredentialUnavailable(exception.code())) {
+					accessible.put(provider, Map.of());
+					continue;
+				}
 				throw providerFailure(exception);
 			}
 		}
@@ -100,6 +104,14 @@ public class WorkspaceRepositoryAccessVerifier {
 		}).toList();
 		if (verified.isEmpty()) throw accessRevoked(null);
 		return verified;
+	}
+
+	private static boolean isProviderCredentialUnavailable(String code) {
+		return "PROVIDER_ACCOUNT_REQUIRED".equals(code)
+			|| "PROVIDER_REAUTH_REQUIRED".equals(code)
+			|| "GITHUB_REAUTH_REQUIRED".equals(code)
+			|| "GITLAB_RECONNECT_REQUIRED".equals(code)
+			|| "GITLAB_AUTHENTICATION_FAILED".equals(code);
 	}
 
 	/** Login/bootstrap verification uses one provider project-list call for all joined Workspaces. */

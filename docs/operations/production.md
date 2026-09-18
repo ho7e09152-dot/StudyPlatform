@@ -23,7 +23,7 @@ curl -fsS http://127.0.0.1:8080/actuator/health/readiness
 
 Flyway migrations run before the application accepts traffic. Do not enable Hibernate schema creation in production.
 
-현재 application migration은 V13까지다. V10은 독립적인 consent·retention index, V11은 multi-provider identity·repository 기반, V12는 GitHub account-link state, V13은 Repository Connection capability를 추가한다. 사용자 traffic을 전달하기 전에 시작 log에서 V13 적용을 확인한다.
+현재 application migration은 V14까지다. V10은 독립적인 consent·retention index, V11은 multi-provider identity·repository 기반, V12는 GitHub account-link state, V13은 Repository Connection capability, V14는 Backend content source 전환을 위한 additive table과 Workspace별 storage mode를 추가한다. V14 배포만으로 정본이 바뀌지는 않으며 기존 Workspace는 `REPOSITORY_PRIMARY`를 유지한다. 사용자 traffic을 전달하기 전에 시작 log에서 V14 적용을 확인한다.
 
 ## Reverse proxy
 

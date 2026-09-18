@@ -6,6 +6,7 @@ import com.studyworkspace.workspace.domain.WorkspaceException;
 import com.studyworkspace.workspace.infrastructure.AuditEventRepository;
 import com.studyworkspace.workspace.infrastructure.InAppNotificationRepository;
 import com.studyworkspace.workspace.infrastructure.WorkspaceAnnouncementRepository;
+import com.studyworkspace.workspace.infrastructure.WorkspaceContentAttributionRepository;
 import com.studyworkspace.workspace.infrastructure.WorkspaceDocumentRepository;
 import com.studyworkspace.workspace.infrastructure.WorkspaceMessageRepository;
 import com.studyworkspace.workspace.service.WorkspaceService;
@@ -19,6 +20,7 @@ public class AccountDeletionService {
 	private final UserAccountRepository userRepository;
 	private final InAppNotificationRepository notificationRepository;
 	private final WorkspaceAnnouncementRepository announcementRepository;
+	private final WorkspaceContentAttributionRepository contentAttributionRepository;
 	private final WorkspaceMessageRepository messageRepository;
 	private final WorkspaceDocumentRepository documentRepository;
 	private final AuditEventRepository auditEventRepository;
@@ -28,6 +30,7 @@ public class AccountDeletionService {
 		UserAccountRepository userRepository,
 		InAppNotificationRepository notificationRepository,
 		WorkspaceAnnouncementRepository announcementRepository,
+		WorkspaceContentAttributionRepository contentAttributionRepository,
 		WorkspaceMessageRepository messageRepository,
 		WorkspaceDocumentRepository documentRepository,
 		AuditEventRepository auditEventRepository
@@ -36,6 +39,7 @@ public class AccountDeletionService {
 		this.userRepository = userRepository;
 		this.notificationRepository = notificationRepository;
 		this.announcementRepository = announcementRepository;
+		this.contentAttributionRepository = contentAttributionRepository;
 		this.messageRepository = messageRepository;
 		this.documentRepository = documentRepository;
 		this.auditEventRepository = auditEventRepository;
@@ -49,6 +53,7 @@ public class AccountDeletionService {
 		workspaceService.anonymizeUserForAccountDeletion(gitLabUserId);
 		notificationRepository.deleteForRecipient(gitLabUserId);
 		announcementRepository.anonymizeAuthor(user.id());
+		contentAttributionRepository.anonymizeUser(user.id());
 		messageRepository.anonymizeAuthor(user.id());
 		documentRepository.anonymizeAuthor(user.id());
 		auditEventRepository.anonymizeUserReferences(user.id(), Long.toString(gitLabUserId));

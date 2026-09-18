@@ -28,6 +28,7 @@ import com.studyworkspace.workspace.service.GitLabSessionFileService;
 import com.studyworkspace.workspace.service.GitLabSessionSyncService;
 import com.studyworkspace.workspace.service.GitLabSubmissionFileService;
 import com.studyworkspace.workspace.service.WorkspaceService;
+import com.studyworkspace.workspace.service.WorkspaceContentMigrationCoordinator;
 import com.studyworkspace.workspace.service.SessionYamlSerializer;
 import com.studyworkspace.workspace.service.SubmissionMarkdownCodec;
 import com.studyworkspace.workspace.service.GitLabWorkspaceMemberService;
@@ -95,6 +96,7 @@ public class WorkspaceController {
 	private final RepositoryInitializationService repositoryInitializationService;
 	private final RepositorySchemaMigrationService repositorySchemaMigrationService;
 	private final SubmissionReviewService submissionReviewService;
+	private final WorkspaceContentMigrationCoordinator contentMigrationCoordinator;
 
 	public WorkspaceController(
 		WorkspaceService service,
@@ -119,7 +121,8 @@ public class WorkspaceController {
 		OAuthAccountService accountService,
 		RepositoryInitializationService repositoryInitializationService,
 		RepositorySchemaMigrationService repositorySchemaMigrationService,
-		SubmissionReviewService submissionReviewService
+		SubmissionReviewService submissionReviewService,
+		WorkspaceContentMigrationCoordinator contentMigrationCoordinator
 	) {
 		this.service = service;
 		this.tokenProvider = tokenProvider;
@@ -144,19 +147,13 @@ public class WorkspaceController {
 		this.repositoryInitializationService = repositoryInitializationService;
 		this.repositorySchemaMigrationService = repositorySchemaMigrationService;
 		this.submissionReviewService = submissionReviewService;
+		this.contentMigrationCoordinator = contentMigrationCoordinator;
 	}
 
 	@GetMapping
-	public List<WorkspaceState> listWorkspaces(
-		@AuthenticationPrincipal GitLabUser user,
-		HttpServletRequest servletRequest
-	) {
+	public List<WorkspaceState> listWorkspaces(@AuthenticationPrincipal GitLabUser user) {
 		String studyIngUserId = user instanceof StudyIngPrincipal principal ? principal.userId() : null;
-		List<WorkspaceState> joined = service.list(studyIngUserId, user.id());
-		if (joined.isEmpty()) return joined;
-		return user instanceof StudyIngPrincipal principal
-			? repositoryAccessVerifier.verifyAtLogin(joined, principal, servletRequest)
-			: repositoryAccessVerifier.verifyAtLogin(joined, tokenProvider.requireValidSession(servletRequest));
+		return service.list(studyIngUserId, user.id());
 	}
 
 	@GetMapping("/discoverable")
@@ -299,7 +296,7 @@ public class WorkspaceController {
 	public List<StudyMember> listMemberCandidates(@PathVariable String workspaceId,
 		@AuthenticationPrincipal StudyIngPrincipal user, HttpServletRequest servletRequest) {
 		requireGitLabWorkspace(workspaceId);
-		String accessToken = credentialResolver.resolve(user, service.get(workspaceId), servletRequest).accessToken();
+		String accessToken = requireRepositoryToken(user, service.get(workspaceId), servletRequest);
 		return memberService.candidates(accessToken, workspaceId);
 	}
 
@@ -312,7 +309,7 @@ public class WorkspaceController {
 	) {
 		accessService.requireManager(workspaceId, user.id(), false);
 		requireGitLabWorkspace(workspaceId);
-		String accessToken = credentialResolver.resolve(user, service.get(workspaceId), servletRequest).accessToken();
+		String accessToken = requireRepositoryToken(user, service.get(workspaceId), servletRequest);
 		WorkspaceState updated = memberService.addVerified(accessToken, workspaceId, member.gitlabUserId());
 		auditEventService.record(workspaceId, user, "MEMBER_ADDED", "MEMBER", Long.toString(member.gitlabUserId()), Map.of());
 		return updated;
@@ -352,7 +349,7 @@ public class WorkspaceController {
 	) {
 		accessService.requireManager(workspaceId, user.id(), false);
 		requireGitLabWorkspace(workspaceId);
-		String accessToken = credentialResolver.resolve(user, service.get(workspaceId), servletRequest).accessToken();
+		String accessToken = requireRepositoryToken(user, service.get(workspaceId), servletRequest);
 		WorkspaceState updated = memberService.sync(accessToken, workspaceId);
 		auditEventService.record(workspaceId, user, "MEMBERS_SYNCED", "WORKSPACE", workspaceId, Map.of("memberCount", updated.members().size()));
 		return updated;
@@ -365,7 +362,7 @@ public class WorkspaceController {
 		HttpServletRequest servletRequest
 	) {
 		accessService.requireManager(workspaceId, user.id(), false);
-		String accessToken = credentialResolver.resolve(user, service.get(workspaceId), servletRequest).accessToken();
+		String accessToken = requireRepositoryToken(user, service.get(workspaceId), servletRequest);
 		String jobId = syncJobService.start(workspaceId, "REPOSITORY_SYNC");
 		try {
 			WorkspaceSyncResponse result = sessionSyncService.sync(accessToken, workspaceId);
@@ -390,6 +387,42 @@ public class WorkspaceController {
 		}
 	}
 
+	@PostMapping("/{workspaceId}/content-migration/prepare")
+	public WorkspaceContentMigrationCoordinator.PreparationReport prepareContentMigration(
+		@PathVariable String workspaceId,
+		@AuthenticationPrincipal StudyIngPrincipal user,
+		HttpServletRequest servletRequest
+	) {
+		accessService.requireOwner(workspaceId, user.id(), false);
+		WorkspaceState workspace = service.get(workspaceId);
+		String accessToken = requireRepositoryToken(user, workspace, servletRequest);
+		String jobId = syncJobService.start(workspaceId, "CONTENT_MIGRATION_PREPARE");
+		try {
+			WorkspaceContentMigrationCoordinator.PreparationReport result =
+				contentMigrationCoordinator.prepareStableSnapshot(accessToken, workspaceId);
+			syncJobService.complete(jobId, false);
+			auditEventService.record(
+				workspaceId, user, "CONTENT_MIGRATION_SNAPSHOT_VERIFIED", "SYNC_JOB", jobId,
+				Map.of(
+					"attempts", result.attempts(),
+					"sessions", result.content().sessionCount(),
+					"submissions", result.content().submissionCount(),
+					"reviews", result.reviews().reviewCount()
+				)
+			);
+			return result;
+		} catch (WorkspaceException exception) {
+			syncJobService.fail(jobId, exception.code(), exception.getMessage());
+			throw exception;
+		} catch (RepositoryProviderException exception) {
+			syncJobService.fail(jobId, exception.code(), exception.getMessage());
+			throw exception;
+		} catch (RuntimeException exception) {
+			syncJobService.fail(jobId, "CONTENT_MIGRATION_PREPARE_FAILED", "전환 준비 중 내부 오류가 발생했습니다.");
+			throw exception;
+		}
+	}
+
 	@GetMapping("/{workspaceId}/repository-schema/migration")
 	public RepositorySchemaMigrationPreview previewRepositorySchemaMigration(
 		@PathVariable String workspaceId,
@@ -398,7 +431,7 @@ public class WorkspaceController {
 	) {
 		accessService.requireOwner(workspaceId, user.id(), false);
 		WorkspaceState workspace = service.get(workspaceId);
-		String accessToken = credentialResolver.resolve(user, workspace, servletRequest).accessToken();
+		String accessToken = requireRepositoryToken(user, workspace, servletRequest);
 		return repositorySchemaMigrationService.preview(accessToken, workspace);
 	}
 
@@ -411,7 +444,7 @@ public class WorkspaceController {
 	) {
 		accessService.requireOwner(workspaceId, user.id(), false);
 		WorkspaceState current = service.get(workspaceId);
-		String accessToken = credentialResolver.resolve(user, current, servletRequest).accessToken();
+		String accessToken = requireRepositoryToken(user, current, servletRequest);
 		OAuthAccountService.AccountProfile profile = accountService.requireProfileByUserId(user.userId());
 		RepositorySchemaMigrationService.MigrationCommit commit = repositorySchemaMigrationService.migrate(
 			accessToken,
@@ -491,7 +524,7 @@ public class WorkspaceController {
 		HttpServletRequest servletRequest
 	) {
 		accessService.requireManager(workspaceId, user.id(), false);
-		String accessToken = credentialResolver.resolve(user, service.get(workspaceId), servletRequest).accessToken();
+		String accessToken = requireRepositoryToken(user, service.get(workspaceId), servletRequest);
 		WorkspaceState updated = service.saveSession(
 			workspaceId,
 			null,
@@ -519,7 +552,7 @@ public class WorkspaceController {
 		HttpServletRequest servletRequest
 	) {
 		accessService.requireManager(workspaceId, user.id(), false);
-		String accessToken = credentialResolver.resolve(user, service.get(workspaceId), servletRequest).accessToken();
+		String accessToken = requireRepositoryToken(user, service.get(workspaceId), servletRequest);
 		WorkspaceState updated = service.saveSession(
 			workspaceId,
 			date,
@@ -540,7 +573,7 @@ public class WorkspaceController {
 		HttpServletRequest servletRequest
 	) {
 		accessService.requireManager(workspaceId, user.id(), false);
-		String accessToken = credentialResolver.resolve(user, service.get(workspaceId), servletRequest).accessToken();
+		String accessToken = requireRepositoryToken(user, service.get(workspaceId), servletRequest);
 		WorkspaceState updated = service.cancelSession(
 			workspaceId,
 			date,
@@ -598,7 +631,7 @@ public class WorkspaceController {
 		HttpServletRequest servletRequest
 	) {
 		WorkspaceState workspace = service.get(workspaceId);
-		String accessToken = credentialResolver.resolve(user, workspace, servletRequest).accessToken();
+		String accessToken = requireRepositoryToken(user, workspace, servletRequest);
 		return submissionReviewService.list(accessToken, workspace, date, memberId);
 	}
 
@@ -613,7 +646,7 @@ public class WorkspaceController {
 		HttpServletRequest servletRequest
 	) {
 		WorkspaceState workspace = service.get(workspaceId);
-		String accessToken = credentialResolver.resolve(user, workspace, servletRequest).accessToken();
+		String accessToken = requireRepositoryToken(user, workspace, servletRequest);
 		StudyMember target = workspace.members().stream()
 			.filter(member -> member.id().equals(memberId))
 			.findFirst()
@@ -644,7 +677,7 @@ public class WorkspaceController {
 		@AuthenticationPrincipal StudyIngPrincipal user,
 		HttpServletRequest servletRequest
 	) {
-		String accessToken = credentialResolver.resolve(user, service.get(workspaceId), servletRequest).accessToken();
+		String accessToken = requireRepositoryToken(user, service.get(workspaceId), servletRequest);
 		WorkspaceState updated = service.upsertSubmission(
 			workspaceId, date, itemId, request, user.id(),
 			(workspace, session, member, current, next, commitMessage) -> submissionFileService.write(
@@ -663,7 +696,7 @@ public class WorkspaceController {
 		@AuthenticationPrincipal StudyIngPrincipal user,
 		HttpServletRequest servletRequest
 	) {
-		String accessToken = credentialResolver.resolve(user, service.get(workspaceId), servletRequest).accessToken();
+		String accessToken = requireRepositoryToken(user, service.get(workspaceId), servletRequest);
 		WorkspaceState updated = service.deleteSubmission(
 			workspaceId, date, itemId, user.id(),
 			(workspace, session, member, current, next, commitMessage) -> submissionFileService.write(
@@ -775,6 +808,16 @@ public class WorkspaceController {
 
 	private static Map<String, Object> treeItem(String path, String name, String type) {
 		return Map.of("id", "local-" + path, "name", name, "type", type, "path", path, "mode", "blob".equals(type) ? "100644" : "040000");
+	}
+
+	private String requireRepositoryToken(
+		StudyIngPrincipal user,
+		WorkspaceState workspace,
+		HttpServletRequest servletRequest
+	) {
+		RepositoryCredentialResolver.ResolvedCredential credential = credentialResolver.resolve(user, workspace, servletRequest);
+		repositoryAccessVerifier.requireRepositoryAccess(workspace.id(), user.userId(), credential.accessToken());
+		return credential.accessToken();
 	}
 
 	private static RepositoryProvider parseProvider(String value) {

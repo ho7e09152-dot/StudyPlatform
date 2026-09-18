@@ -44,6 +44,7 @@ docs/
 | [현재 아키텍처](architecture/overview.md) | 시스템 경계, 저장 위치, 주요 사용자 흐름과 권한 |
 | [Workspace](architecture/workspaces.md) | 멤버십, Discovery/Join, 권한 재검증과 삭제 |
 | [Repository 저장 구조](architecture/repository-storage.md) | `.study-workspace` 파일 구조와 V1 호환 |
+| [Backend 정본 전환 계획](architecture/backend-source-of-truth-migration.md) | DB 정본·제출 파일 전용 Repository로 단계적 전환 |
 | [Records](architecture/records.md) | 기간, 완료율과 점수 계산 정의 |
 | [Provider identity](architecture/providers/identity.md) | Study-ing 사용자와 외부 계정의 관계 |
 | [Repository Provider](architecture/providers/repository.md) | 정규화된 Repository 연결과 credential 해석 |

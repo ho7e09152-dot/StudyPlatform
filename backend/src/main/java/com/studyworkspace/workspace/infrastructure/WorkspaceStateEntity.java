@@ -40,6 +40,18 @@ public class WorkspaceStateEntity {
 	@Column(name = "import_mode", nullable = false, length = 32)
 	private String importMode;
 
+	@Column(name = "storage_mode", nullable = false, length = 32)
+	private String storageMode;
+
+	@Column(name = "content_schema_version", nullable = false)
+	private int contentSchemaVersion;
+
+	@Column(name = "content_migration_started_at")
+	private Instant contentMigrationStartedAt;
+
+	@Column(name = "content_migration_completed_at")
+	private Instant contentMigrationCompletedAt;
+
 	@Column(nullable = false, length = 100)
 	private String timezone;
 
@@ -84,6 +96,10 @@ public class WorkspaceStateEntity {
 			entity.repositoryBasePath = state.repositoryBasePath() == null ? "" : state.repositoryBasePath();
 			entity.repositorySchemaVersion = state.repositorySchemaVersion() == null || state.repositorySchemaVersion() < 1 ? 1 : state.repositorySchemaVersion();
 			entity.importMode = state.importMode() == null ? "COMPATIBLE" : state.importMode();
+			entity.storageMode = previous == null ? "REPOSITORY_PRIMARY" : previous.storageMode;
+			entity.contentSchemaVersion = previous == null ? 1 : previous.contentSchemaVersion;
+			entity.contentMigrationStartedAt = previous == null ? null : previous.contentMigrationStartedAt;
+			entity.contentMigrationCompletedAt = previous == null ? null : previous.contentMigrationCompletedAt;
 			entity.timezone = state.settings().timezone();
 			entity.status = state.status();
 			entity.createdAt = previous == null ? now : previous.createdAt;
@@ -129,6 +145,22 @@ public class WorkspaceStateEntity {
 
 	public String status() {
 		return status;
+	}
+
+	public String storageMode() {
+		return storageMode;
+	}
+
+	public int contentSchemaVersion() {
+		return contentSchemaVersion;
+	}
+
+	public Instant contentMigrationStartedAt() {
+		return contentMigrationStartedAt;
+	}
+
+	public Instant contentMigrationCompletedAt() {
+		return contentMigrationCompletedAt;
 	}
 
 	private static Instant parseInstant(String value) {

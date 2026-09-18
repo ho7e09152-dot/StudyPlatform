@@ -5,6 +5,7 @@ import com.studyworkspace.common.api.ApiErrorResponse;
 import com.studyworkspace.common.security.ApiRateLimitFilter;
 import jakarta.servlet.http.HttpServletResponse;
 import java.nio.charset.StandardCharsets;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.MediaType;
@@ -19,6 +20,15 @@ import tools.jackson.databind.ObjectMapper;
 
 @Configuration
 public class SecurityConfig {
+
+	@Bean
+	FilterRegistrationBean<GitLabSessionAuthenticationFilter> gitLabSessionAuthenticationFilterRegistration(
+		GitLabSessionAuthenticationFilter filter
+	) {
+		FilterRegistrationBean<GitLabSessionAuthenticationFilter> registration = new FilterRegistrationBean<>(filter);
+		registration.setEnabled(false);
+		return registration;
+	}
 
 	@Bean
 	SecurityFilterChain securityFilterChain(
