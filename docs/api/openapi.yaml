@@ -558,6 +558,7 @@ paths:
     get:
       tags: [Workspaces]
       summary: 내 Workspace 목록
+      description: 활성 Workspace membership을 기준으로 DB 상태를 반환하며, 외부 Provider 장애나 재인증 필요 상태 때문에 목록 전체를 실패시키지 않습니다.
       operationId: listMyWorkspaces
       x-implementation-status: implemented-db-cache
       responses:
@@ -679,6 +680,7 @@ paths:
     get:
       tags: [Workspaces]
       summary: Workspace 상세
+      description: 활성 Workspace membership을 검증해 DB 상태를 반환합니다. 실제 Repository 작업의 권한 검증은 해당 작업 API에서 별도로 수행합니다.
       operationId: getWorkspace
       x-implementation-status: implemented
       responses:
@@ -912,6 +914,33 @@ paths:
           $ref: "#/components/responses/WorkspaceAccessDenied"
         "429":
           description: GitLab 요청 제한
+
+  /workspaces/{workspaceId}/content-migration/prepare:
+    post:
+      tags: [Workspaces]
+      summary: Repository 원본의 DB 전환 snapshot 준비
+      description: Owner의 현재 Repository 권한으로 일정·제출·review를 두 번 이상 읽어 동일한 snapshot인지 확인하고 정규화 DB에 적재합니다. 이 작업만으로 storage_mode를 DATABASE_PRIMARY로 변경하지 않습니다.
+      operationId: prepareWorkspaceContentMigration
+      x-implementation-status: implemented
+      parameters:
+        - $ref: "#/components/parameters/WorkspaceId"
+      responses:
+        "200":
+          description: 두 번 연속 동일하게 검증된 legacy snapshot
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ContentMigrationPreparationReport"
+        "401":
+          $ref: "#/components/responses/AuthRequired"
+        "403":
+          $ref: "#/components/responses/WorkspaceAccessDenied"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "429":
+          description: Repository Provider 요청 제한
+        "503":
+          description: Repository Provider 연결 또는 credential을 사용할 수 없음
 
   /workspaces/{workspaceId}/repository-schema/migration:
     get:
@@ -2481,6 +2510,46 @@ components:
         syncedAt:
           type: string
           format: date-time
+
+    ContentMigrationPreparationReport:
+      type: object
+      required: [workspaceId, status, attempts, content, reviews, blockers]
+      properties:
+        workspaceId: { type: string }
+        status: { type: string, enum: [LEGACY_SNAPSHOT_VERIFIED] }
+        attempts: { type: integer, minimum: 2, maximum: 3 }
+        content:
+          $ref: "#/components/schemas/ContentMigrationBackfillReport"
+        reviews:
+          $ref: "#/components/schemas/ContentMigrationReviewReport"
+        blockers:
+          type: array
+          items: { type: string }
+    ContentMigrationBackfillReport:
+      type: object
+      required: [workspaceId, status, sessionCount, itemCount, threadCount, submissionCount, reflectionCount, sourceFingerprint, databaseFingerprint, reviewsPending, verifiedAt]
+      properties:
+        workspaceId: { type: string }
+        status: { type: string, enum: [BACKFILL_VERIFIED] }
+        sessionCount: { type: integer, minimum: 0 }
+        itemCount: { type: integer, minimum: 0 }
+        threadCount: { type: integer, minimum: 0 }
+        submissionCount: { type: integer, minimum: 0 }
+        reflectionCount: { type: integer, minimum: 0 }
+        sourceFingerprint: { type: string, minLength: 64, maxLength: 64 }
+        databaseFingerprint: { type: string, minLength: 64, maxLength: 64 }
+        reviewsPending: { type: boolean, enum: [true] }
+        verifiedAt: { type: string, format: date-time }
+    ContentMigrationReviewReport:
+      type: object
+      required: [workspaceId, reviewCount, sourceFingerprint, databaseFingerprint, reviewsPending, verifiedAt]
+      properties:
+        workspaceId: { type: string }
+        reviewCount: { type: integer, minimum: 0 }
+        sourceFingerprint: { type: string, minLength: 64, maxLength: 64 }
+        databaseFingerprint: { type: string, minLength: 64, maxLength: 64 }
+        reviewsPending: { type: boolean, enum: [false] }
+        verifiedAt: { type: string, format: date-time }
 
     SessionType:
       type: string

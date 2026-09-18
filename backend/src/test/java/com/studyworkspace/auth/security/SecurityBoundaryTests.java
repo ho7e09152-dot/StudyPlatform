@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
+import static com.studyworkspace.auth.support.OAuthTestAccounts.completeGitLabRegistration;
 
 import java.nio.charset.StandardCharsets;
 import java.io.ObjectStreamClass;
@@ -17,13 +18,21 @@ import java.time.Instant;
 import java.util.Base64;
 
 import com.studyworkspace.auth.dto.GitLabOAuthSession;
+import com.studyworkspace.auth.security.StudyIngAuthenticationToken;
+import com.studyworkspace.auth.service.OAuthAccountService;
 import com.studyworkspace.auth.service.GitLabOAuthTokenProvider;
 import com.studyworkspace.gitlab.dto.GitLabUser;
+import com.studyworkspace.workspace.domain.RepositoryProvider;
+import com.studyworkspace.workspace.domain.WorkspaceException;
+import com.studyworkspace.workspace.domain.WorkspaceModels.WorkspaceState;
 import com.studyworkspace.workspace.security.WorkspaceRepositoryAccessVerifier;
+import com.studyworkspace.workspace.service.RepositoryCredentialResolver;
 import jakarta.servlet.http.Cookie;
+import jakarta.servlet.http.HttpServletRequest;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.session.Session;
@@ -31,9 +40,11 @@ import org.springframework.session.SessionRepository;
 import org.springframework.security.web.context.HttpSessionSecurityContextRepository;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.annotation.Transactional;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyList;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 
 @SpringBootTest(properties = "app.demo.persistence-path=build/test-data/security-boundary-workspaces.json")
@@ -46,11 +57,20 @@ class SecurityBoundaryTests {
 	@Autowired
 	private SessionRepository<?> sessionRepository;
 
+	@Autowired
+	private FilterRegistrationBean<GitLabSessionAuthenticationFilter> gitLabSessionAuthenticationFilterRegistration;
+
+	@Autowired
+	private OAuthAccountService accountService;
+
 	@MockitoBean
 	private GitLabOAuthTokenProvider tokenProvider;
 
 	@MockitoBean
 	private WorkspaceRepositoryAccessVerifier repositoryAccessVerifier;
+
+	@MockitoBean
+	private RepositoryCredentialResolver credentialResolver;
 
 	@BeforeEach
 	void providerAccess() {
@@ -58,7 +78,6 @@ class SecurityBoundaryTests {
 		when(tokenProvider.requireValidSession(any())).thenReturn(new GitLabOAuthSession(
 			user, "access-token", "refresh-token", Instant.now().plusSeconds(3600), "api"
 		));
-		when(repositoryAccessVerifier.verifyAtLogin(anyList(), any())).thenAnswer(invocation -> invocation.getArgument(0));
 	}
 
 	@Test
@@ -87,6 +106,11 @@ class SecurityBoundaryTests {
 	}
 
 	@Test
+	void sessionAuthenticationFilterOnlyRunsInsideSpringSecurity() {
+		assertThat(gitLabSessionAuthenticationFilterRegistration.isEnabled()).isFalse();
+	}
+
+	@Test
 	void unauthenticatedProviderLinkStartIsRejected() throws Exception {
 		mockMvc.perform(get("/api/v1/provider-accounts/github/link"))
 			.andExpect(status().isUnauthorized())
@@ -99,6 +123,7 @@ class SecurityBoundaryTests {
 			.andExpect(status().isOk())
 			.andExpect(jsonPath("$.length()").value(2))
 			.andExpect(jsonPath("$[*].id").value(containsInAnyOrder("workspace-evening", "workspace-reading")));
+		verifyNoInteractions(repositoryAccessVerifier);
 	}
 
 	@Test
@@ -126,10 +151,92 @@ class SecurityBoundaryTests {
 	}
 
 	@Test
+	@Transactional
+	void stableSessionAuthenticatesPublicProbeAndProtectedApiConsistently() throws Exception {
+		GitLabOAuthSession oauth = new GitLabOAuthSession(
+			new GitLabUser(101, "gitlab-user-a", "GitLab User A", null, "https://gitlab.example/gitlab-user-a"),
+			"access-token", "refresh-token", Instant.now().plusSeconds(3600), "api"
+		);
+		StudyIngPrincipal principal = completeGitLabRegistration(accountService, oauth);
+		SessionRepository<Session> sessions = sessions();
+		Session session = sessions.createSession();
+		session.setAttribute(AuthSessionAttributes.STUDY_ING_USER, principal);
+		sessions.save(session);
+		String cookieValue = Base64.getEncoder().encodeToString(
+			session.getId().getBytes(StandardCharsets.UTF_8)
+		);
+		Cookie sessionCookie = new Cookie("SESSION", cookieValue);
+
+		mockMvc.perform(get("/api/v1/auth/me").cookie(sessionCookie))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.authenticated").value(true));
+		mockMvc.perform(get("/api/v1/workspaces").cookie(sessionCookie))
+			.andExpect(status().isOk());
+	}
+
+	@Test
 	void nonMemberCannotReadWorkspace() throws Exception {
 		mockMvc.perform(get("/api/v1/workspaces/workspace-evening").with(oauthUser(999, "outsider")))
 			.andExpect(status().isForbidden())
 			.andExpect(jsonPath("$.code").value("WORKSPACE_ACCESS_DENIED"));
+	}
+
+	@Test
+	void activeMemberCanReadDatabaseWorkspaceWhenRepositoryProviderIsUnavailable() throws Exception {
+		mockMvc.perform(get("/api/v1/workspaces/workspace-evening").with(oauthUser(101, "gitlab-user-a")))
+			.andExpect(status().isOk())
+			.andExpect(jsonPath("$.id").value("workspace-evening"));
+		verifyNoInteractions(repositoryAccessVerifier);
+	}
+
+	@Test
+	void repositorySyncStillRequiresAProviderCredential() throws Exception {
+		when(credentialResolver.resolve(
+			any(StudyIngPrincipal.class), any(WorkspaceState.class), any(HttpServletRequest.class)
+		)).thenThrow(new WorkspaceException(
+			"REPOSITORY_PROVIDER_UNAVAILABLE", "현재 저장소 Provider를 사용할 수 없습니다.", 503
+		));
+
+		mockMvc.perform(post("/api/v1/workspaces/workspace-evening/sync")
+				.with(studyIngUser(101, "gitlab-user-a"))
+				.with(csrf()))
+			.andExpect(status().isServiceUnavailable())
+			.andExpect(jsonPath("$.code").value("REPOSITORY_PROVIDER_UNAVAILABLE"));
+	}
+
+	@Test
+	void contentMigrationPreparationStillRequiresAProviderCredential() throws Exception {
+		when(credentialResolver.resolve(
+			any(StudyIngPrincipal.class), any(WorkspaceState.class), any(HttpServletRequest.class)
+		)).thenThrow(new WorkspaceException(
+			"REPOSITORY_PROVIDER_UNAVAILABLE", "현재 저장소 Provider를 사용할 수 없습니다.", 503
+		));
+
+		mockMvc.perform(post("/api/v1/workspaces/workspace-evening/content-migration/prepare")
+				.with(studyIngUser(101, "gitlab-user-a"))
+				.with(csrf()))
+			.andExpect(status().isServiceUnavailable())
+			.andExpect(jsonPath("$.code").value("REPOSITORY_PROVIDER_UNAVAILABLE"));
+	}
+
+	@Test
+	void repositorySyncStillRequiresAccessToTheConnectedRepository() throws Exception {
+		when(credentialResolver.resolve(
+			any(StudyIngPrincipal.class), any(WorkspaceState.class), any(HttpServletRequest.class)
+		)).thenReturn(new RepositoryCredentialResolver.ResolvedCredential(
+			RepositoryProvider.GITLAB, "provider-account-101", "access-token"
+		));
+		doThrow(new WorkspaceException(
+			"REPOSITORY_ACCESS_REVOKED", "GitLab 프로젝트 접근 권한을 확인해주세요.", 403
+		)).when(repositoryAccessVerifier).requireRepositoryAccess(
+			"workspace-evening", "study-user-101", "access-token"
+		);
+
+		mockMvc.perform(post("/api/v1/workspaces/workspace-evening/sync")
+				.with(studyIngUser(101, "gitlab-user-a"))
+				.with(csrf()))
+			.andExpect(status().isForbidden())
+			.andExpect(jsonPath("$.code").value("REPOSITORY_ACCESS_REVOKED"));
 	}
 
 	@Test
@@ -146,6 +253,20 @@ class SecurityBoundaryTests {
 	private static org.springframework.test.web.servlet.request.RequestPostProcessor oauthUser(long userId, String username) {
 		GitLabUser user = new GitLabUser(userId, username, username, null, "https://gitlab.example/" + username);
 		return authentication(new GitLabAuthenticationToken(user));
+	}
+
+	private static org.springframework.test.web.servlet.request.RequestPostProcessor studyIngUser(long userId, String username) {
+		StudyIngPrincipal principal = new StudyIngPrincipal(
+			"study-user-" + userId,
+			"provider-account-" + userId,
+			RepositoryProvider.GITLAB,
+			Long.toString(userId),
+			username,
+			username,
+			null,
+			"https://gitlab.example/" + username
+		);
+		return authentication(new StudyIngAuthenticationToken(principal));
 	}
 
 	@SuppressWarnings({"rawtypes", "unchecked"})

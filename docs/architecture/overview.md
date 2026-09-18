@@ -11,7 +11,8 @@ Browser
           ↓
 Spring Boot API
   ├─ stable StudyIngUser identity
-  ├─ Workspace role and repository permission checks
+  ├─ Workspace role checks for app data
+  ├─ repository permission checks for Provider operations
   ├─ ProviderAccount + encrypted OAuthCredential
   ├─ GitLab/GitHub adapters behind normalized ports
   └─ PostgreSQL + Spring Session JDBC
@@ -60,8 +61,8 @@ GitLab OAuth 로그인
 
 - `OWNER`, `MANAGER`, `MEMBER`는 Study-ing Workspace 역할입니다.
 - Repository permission은 외부 Provider가 확인하는 별도 권한입니다.
-- Workspace 접근은 활성 membership과 현재 Repository access policy를 모두 통과해야 합니다.
-- Repository write는 행동하는 사용자의 해당 ProviderAccount credential을 사용합니다.
+- Workspace의 DB 기반 데이터 접근은 활성 membership을 통과해야 하며 Provider 장애나 재인증 필요 상태에 종속되지 않습니다.
+- Repository 조회·쓰기·동기화는 현재 Repository access policy를 추가로 통과해야 하며, 행동하는 사용자의 해당 ProviderAccount credential을 사용합니다.
 - Workspace 생성자의 credential을 공용 credential로 사용하지 않습니다.
 - revision, document version 또는 `last_commit_id`가 오래되면 409로 거부합니다.
 

@@ -11,9 +11,9 @@ Study-ing은 연결된 GitLab 또는 GitHub Repository를 학습 기록의 원�
 ## 불변조건
 
 - API path, `operationId`, schema, field, enum, error code를 문서 번역이나 UI 편의를 위해 바꾸지 않는다.
-- Workspace role과 Repository permission을 별도로 검증한다. 클라이언트의 capability 표시는 서버 권한 검사를 대신하지 않는다.
+- 모든 Workspace 데이터 접근은 Workspace role을 검증하고, 실제 Repository 조회·쓰기 작업은 Repository permission도 별도로 검증한다. 클라이언트의 capability 표시는 서버 권한 검사를 대신하지 않는다.
 - GitLab과 GitHub의 Login, Connected Account linking과 Repository 기능은 서버 capability와 Provider 설정으로 각각 제한한다.
-- 일정·제출의 원본은 Workspace에 연결된 Repository이며 DB는 계정, Workspace, 설정, 알림과 조회용 상태를 보관한다.
+- 일정·제출의 원본은 Workspace에 연결된 Repository이며 DB는 계정, Workspace, 설정, 알림과 조회용 상태를 보관한다. Provider 장애나 재인증 필요 상태가 DB 기반 Workspace 목록·화면 접근까지 차단해서는 안 된다.
 - optimistic locking의 `expectedRevision`·`lastCommitId`와 기존 migration 순서를 보존한다.
 
 ## 보안과 개인정보
