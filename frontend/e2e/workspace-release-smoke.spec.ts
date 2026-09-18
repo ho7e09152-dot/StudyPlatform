@@ -495,6 +495,116 @@ test.describe("Workspace release smoke", () => {
     expect(errors.filter((error) => !error.includes("404"))).toEqual([]);
   });
 
+	test("Workspace Hub는 선택 Row와 참여 CTA의 위계를 구분한다", async ({ page }) => {
+		const errors = captureUnexpectedErrors(page);
+		const discoverable = [
+			{
+				workspaceId: "discoverable-1",
+				workspaceName: "test_study",
+				provider: "GITLAB",
+				externalRepositoryId: "101",
+				repositoryFullName: "lhc0688/test_study",
+				repositoryId: "repository-101",
+				repositoryPath: "lhc0688/test_study",
+				defaultBranch: "main",
+				eligibility: "REPOSITORY_WRITE_CONFIRMED",
+			},
+			{
+				workspaceId: "discoverable-2",
+				workspaceName: "백엔드 아키텍처와 운영 자동화를 함께 공부하는 아주 긴 Workspace 이름",
+				provider: "GITHUB",
+				externalRepositoryId: "202",
+				repositoryFullName: "study-ing-community/backend-architecture-and-operations-automation-study",
+				repositoryId: "repository-202",
+				repositoryPath: "study-ing-community/backend-architecture-and-operations-automation-study",
+				defaultBranch: "main",
+				eligibility: "REPOSITORY_WRITE_CONFIRMED",
+			},
+		];
+		await page.route("**/api/v1/workspaces/discoverable", (route) => route.fulfill({
+			status: 200,
+			contentType: "application/json",
+			body: JSON.stringify(discoverable),
+		}));
+		await page.route("**/api/v1/workspaces/deleted", (route) => route.fulfill({
+			status: 200,
+			contentType: "application/json",
+			body: "[]",
+		}));
+		await page.route("**/api/v1/auth/csrf", (route) => route.fulfill({
+			status: 200,
+			contentType: "application/json",
+			body: JSON.stringify({ token: "workspace-hub-test", headerName: "X-CSRF-TOKEN" }),
+		}));
+		await page.route("**/api/v1/workspaces/discoverable-1/join", async (route) => {
+			await new Promise((resolve) => setTimeout(resolve, 200));
+			await route.fulfill({
+				status: 200,
+				contentType: "application/json",
+				body: JSON.stringify({
+					workspace: { ...structuredClone(initialWorkspaces[0]), id: "discoverable-1", name: "test_study" },
+					joined: true,
+				}),
+			});
+		});
+
+		await openWorkspacePage(page, "/workspaces");
+		await expect(page.getByText("참여 중인 Workspace를 선택하거나 새 Workspace를 연결하세요.")).toBeVisible();
+		await expect(page.getByRole("link", { name: "새 Workspace 연결" })).toHaveClass(/button--secondary/);
+		await expect(page.locator(".workspace-hub__count")).toHaveText("2");
+		await expect(page.getByRole("button", { name: "test_study Workspace 참여하기" })).toBeVisible();
+		const hubWidth = await page.locator(".workspace-hub").evaluate((element) => element.getBoundingClientRect().width);
+		expect(hubWidth).toBeLessThanOrEqual(900);
+		const rowStyle = await page.locator(".workspace-hub__list--discoverable > div").first().evaluate((element) => {
+			const style = getComputedStyle(element);
+			return { borderStyle: style.borderTopStyle, borderRadius: style.borderRadius, background: style.backgroundColor };
+		});
+		expect(rowStyle.borderStyle).toBe("solid");
+		expect(rowStyle.borderRadius).not.toBe("0px");
+		expect(rowStyle.background).not.toBe("rgba(0, 0, 0, 0)");
+		expect(errors).toEqual([]);
+
+		await page.getByRole("button", { name: "test_study Workspace 참여하기" }).click();
+		await expect(page.getByRole("button", { name: /test_study Workspace 참여하기/ })).toContainText("참여 중…");
+		await expect(page).toHaveURL(/\/today$/);
+	});
+
+	test("Workspace 연결은 실제 연결된 Provider 계정만 선택할 수 있다", async ({ page }) => {
+		const errors = captureUnexpectedErrors(page);
+		const repositoryRequests: string[] = [];
+		await page.route("**/api/v1/capabilities", (route) => route.fulfill({
+			status: 200,
+			contentType: "application/json",
+			body: JSON.stringify({
+				authProviders: ["GITLAB", "GITHUB"],
+				accountLinkProviders: ["GITLAB", "GITHUB"],
+				repositoryProviders: ["GITLAB", "GITHUB"],
+				features: { workspaceDiscovery: true },
+			}),
+		}));
+		await page.route("**/api/v1/repositories?*", (route) => {
+			repositoryRequests.push(route.request().url());
+			return route.fulfill({ status: 200, contentType: "application/json", body: "[]" });
+		});
+		await page.route("**/api/v1/workspaces/discoverable", (route) => route.fulfill({
+			status: 200,
+			contentType: "application/json",
+			body: "[]",
+		}));
+
+		await openWorkspacePage(page, "/workspaces/new");
+		const gitLabTab = page.getByRole("tab", { name: "GitLab", exact: true });
+		const gitHubTab = page.getByRole("tab", { name: "GitHub (계정 연결 필요)", exact: true });
+		await expect(gitLabTab).toBeEnabled();
+		await expect(gitLabTab).toHaveAttribute("aria-selected", "true");
+		await expect(gitHubTab).toBeDisabled();
+		await expect(gitHubTab).toContainText("연결 필요");
+		await expect(page.getByText("GitHub 계정을 연결한 후 저장소를 선택할 수 있습니다.")).toHaveCount(0);
+		await page.waitForTimeout(200);
+		expect(repositoryRequests.some((url) => url.includes("provider=GITHUB"))).toBe(false);
+		expect(errors).toEqual([]);
+	});
+
 	test("GitHub linking capability가 꺼진 배포에서는 Settings 밖에 GitHub UI가 없다", async ({ page }) => {
 		const errors = captureUnexpectedErrors(page);
 		await openWorkspacePage(page, "/settings/accounts");

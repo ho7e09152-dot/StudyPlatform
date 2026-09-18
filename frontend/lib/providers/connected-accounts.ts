@@ -3,6 +3,23 @@ import type { ProviderId } from "./provider-descriptors.ts";
 
 export type ProviderAccountRow = ProviderAccount;
 
+export function getConnectedProviderIds(accounts: ProviderAccount[]): ProviderId[] {
+  return Array.from(new Set(
+    accounts
+      .filter((account) => account.status === "CONNECTED")
+      .map((account) => account.provider),
+  ));
+}
+
+export function resolveRepositoryProvider(
+  current: ProviderId,
+  available: ProviderId[],
+  connected: ProviderId[],
+): ProviderId {
+  if (available.includes(current) && connected.includes(current)) return current;
+  return available.find((provider) => connected.includes(provider)) ?? current;
+}
+
 /** Capability is the only source that may introduce a provider row into Settings. */
 export function buildProviderAccountRows(
   accounts: ProviderAccount[],

@@ -12,6 +12,7 @@ import { APP_ROUTES } from "@/lib/routes";
 import { getUserFacingError } from "@/lib/api/errors";
 import { DiscoverableWorkspaceSection } from "@/components/workspaces/DiscoverableWorkspaceSection";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { ProviderIcon } from "@/components/providers/ProviderIcon";
 
 function remainingDays(expiresAt: string) {
   return Math.max(0, Math.ceil((new Date(expiresAt).getTime() - Date.now()) / 86_400_000));
@@ -61,12 +62,12 @@ export function WorkspaceHub() {
   return (
     <div className="workspace-hub page-workspace">
       <header className="workspace-hub__header">
-        <div><h1>Workspace</h1><p>참여 중인 스터디 공간을 선택하거나 새 저장소를 연결하세요.</p></div>
-        <Link className="button button--primary" href={APP_ROUTES.workspaceNew}><Plus size={17} /> 새 Workspace 연결</Link>
+        <div><h1>Workspace</h1><p>참여 중인 Workspace를 선택하거나 새 Workspace를 연결하세요.</p></div>
+        <Link className="button button--secondary" href={APP_ROUTES.workspaceNew}><Plus size={17} aria-hidden="true" /> 새 Workspace 연결</Link>
       </header>
 
       <section className="workspace-hub__section" aria-labelledby="my-workspaces-title">
-        <div className="section-header"><div><h2 id="my-workspaces-title">내 Workspace</h2><p>{workspaces.length}개의 스터디 공간에 참여하고 있습니다.</p></div></div>
+        <div className="section-header"><div><h2 id="my-workspaces-title">내 Workspace</h2></div></div>
         <div className="workspace-hub__list">
           {workspaces.map((candidate) => {
             const connection = getWorkspaceRepositoryConnection(candidate);
@@ -74,12 +75,13 @@ export function WorkspaceHub() {
             const current = candidate.id === workspace.id;
             return (
               <button type="button" key={candidate.id} onClick={() => openWorkspace(candidate.id)}>
-                <span className="workspace-hub__icon"><FolderGit2 size={20} /></span>
+                <span className="workspace-hub__icon"><FolderGit2 size={20} aria-hidden="true" /></span>
                 <span className="workspace-hub__copy">
-                  <span><strong>{candidate.name}</strong>{current ? <em><CircleDot size={14} /> 현재 사용 중</em> : null}</span>
-                  <small>
-                    {REPOSITORY_PROVIDER_LABEL[connection.provider]}
-                    {connection.repositoryPath ? <span className="workspace-hub__repository-path"> · {connection.repositoryPath}</span> : <span> · 저장 정보 없음</span>}
+                  <span><strong title={candidate.name}>{candidate.name}</strong>{current ? <em><CircleDot size={14} aria-hidden="true" /> 현재 사용 중</em> : null}</span>
+                  <small className="workspace-hub__repository" title={connection.repositoryPath ?? undefined}>
+                    <ProviderIcon provider={connection.provider} size={14} aria-hidden="true" />
+                    <span>{REPOSITORY_PROVIDER_LABEL[connection.provider]}</span>
+                    {connection.repositoryPath ? <><span className="workspace-hub__repository-separator" aria-hidden="true">·</span><span className="workspace-hub__repository-path">{connection.repositoryPath}</span></> : <><span className="workspace-hub__repository-separator" aria-hidden="true">·</span><span>저장 정보 없음</span></>}
                   </small>
                 </span>
                 <span className="workspace-hub__role">{member ? APP_ROLE_LABEL[member.role] : "멤버"}</span>
@@ -104,7 +106,7 @@ export function WorkspaceHub() {
               const connection = getWorkspaceRepositoryConnection(item.workspace);
               return (
                 <div key={item.workspace.id}>
-                  <span className="workspace-hub__icon"><RotateCcw size={19} /></span>
+                  <span className="workspace-hub__icon"><RotateCcw size={19} aria-hidden="true" /></span>
                   <span className="workspace-hub__copy"><strong>{item.workspace.name}</strong><small>{REPOSITORY_PROVIDER_LABEL[connection.provider]}{connection.repositoryPath ? ` · ${connection.repositoryPath}` : ""} · {remainingDays(item.deletionExpiresAt)}일 후 영구 삭제</small></span>
                   <button className="button button--secondary button--small" type="button" disabled={restoring === item.workspace.id} onClick={() => void restore(item)}>{restoring === item.workspace.id ? "복원 중…" : "복원"}</button>
                 </div>

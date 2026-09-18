@@ -13,6 +13,7 @@ import type { Workspace } from "@/lib/domain/types";
 import { APP_ROUTES } from "@/lib/routes";
 import { getProviderDescriptor } from "@/lib/providers/provider-descriptors";
 import { useAuth } from "@/components/providers/AuthProvider";
+import { ProviderIcon } from "@/components/providers/ProviderIcon";
 
 export function DiscoverableWorkspaceSection({
   onJoin,
@@ -97,8 +98,11 @@ export function DiscoverableWorkspaceSection({
     <section className="workspace-hub__section workspace-discovery" aria-labelledby="discoverable-workspaces-title">
       <div className="section-header">
         <div>
-          <h2 id="discoverable-workspaces-title">참여 가능한 Workspace</h2>
-          <p>연결된 저장소 권한으로 참여할 수 있는 Workspace입니다.</p>
+          <div className="workspace-hub__section-heading">
+            <h2 id="discoverable-workspaces-title">참여 가능한 Workspace</h2>
+            {!loading && !error ? <span className="workspace-hub__count" aria-label={`${items.length}개`}>{items.length}</span> : null}
+          </div>
+          <p>연결된 저장소 권한으로 바로 참여할 수 있어요.</p>
         </div>
       </div>
 
@@ -120,12 +124,17 @@ export function DiscoverableWorkspaceSection({
         <div className="workspace-hub__list workspace-hub__list--discoverable">
           {items.map((item) => (
             <div key={item.workspaceId}>
-              <span className="workspace-hub__icon"><FolderGit2 size={20} /></span>
+              <span className="workspace-hub__icon"><FolderGit2 size={20} aria-hidden="true" /></span>
               <span className="workspace-hub__copy">
-                <strong>{item.workspaceName}</strong>
-                <small>{getProviderDescriptor(item.provider).displayName}<span className="workspace-hub__repository-path"> · {item.repositoryFullName}</span></small>
+                <strong title={item.workspaceName}>{item.workspaceName}</strong>
+                <small className="workspace-hub__repository" title={item.repositoryFullName}>
+                  <ProviderIcon provider={item.provider} size={14} aria-hidden="true" />
+                  <span>{getProviderDescriptor(item.provider).displayName}</span>
+                  <span className="workspace-hub__repository-separator" aria-hidden="true">·</span>
+                  <span className="workspace-hub__repository-path">{item.repositoryFullName}</span>
+                </small>
               </span>
-              <button className="button button--primary button--small" type="button" disabled={joining !== null} onClick={() => void join(item)}>
+              <button className="button button--primary button--small" type="button" aria-label={`${item.workspaceName} Workspace 참여하기`} disabled={joining !== null} onClick={() => void join(item)}>
                 {joining === item.workspaceId ? <><LoaderCircle className="spin" size={14} /> 참여 중…</> : "참여하기"}
               </button>
             </div>

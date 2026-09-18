@@ -15,8 +15,7 @@ import {
   Search,
 } from "lucide-react";
 import { ApiError } from "@/lib/api/client/http";
-import { getGitLabReconnectUrl } from "@/lib/api/services/authApi";
-import { getProviderCapabilities } from "@/lib/api/services/authApi";
+import { getGitLabReconnectUrl, getProviderCapabilities, listProviderAccounts } from "@/lib/api/services/authApi";
 import {
   createWorkspace,
   joinWorkspace,
@@ -31,11 +30,12 @@ import {
   type Repository,
 } from "@/lib/domain/repository";
 import { getProviderDescriptor, type ProviderId } from "@/lib/providers/provider-descriptors";
+import { getConnectedProviderIds, resolveRepositoryProvider } from "@/lib/providers/connected-accounts";
 import { ProviderIcon } from "@/components/providers/ProviderIcon";
+import { useAuth } from "@/components/providers/AuthProvider";
 import type { Workspace } from "@/lib/domain/types";
 import { APP_ROUTES } from "@/lib/routes";
 import { getUserFacingError } from "@/lib/api/errors";
-import { useAuth } from "@/components/providers/AuthProvider";
 import {
   createDemoWorkspace,
   getDemoRepositoryAnalysis,
@@ -61,6 +61,9 @@ export function WorkspaceConnectionFlow({
   const [repositories, setRepositories] = useState<Repository[]>(() => demoMode ? listDemoRepositories() : []);
 	const [provider, setProvider] = useState<ProviderId>("GITLAB");
 	const [repositoryProviders, setRepositoryProviders] = useState<ProviderId[]>(["GITLAB"]);
+	const [connectedProviders, setConnectedProviders] = useState<ProviderId[]>(mode === "demo" ? ["GITLAB"] : []);
+	const [providerAccountsResolved, setProviderAccountsResolved] = useState(mode === "demo");
+	const [providerAccountError, setProviderAccountError] = useState("");
   const [discoverable, setDiscoverable] = useState<DiscoverableWorkspace[]>([]);
   const [search, setSearch] = useState("");
   const [searched, setSearched] = useState(false);
@@ -87,8 +90,10 @@ export function WorkspaceConnectionFlow({
     ? discoverable.find((candidate) => candidate.provider === selected.provider && candidate.externalRepositoryId === selected.externalId)
     : undefined;
 	const providerDescriptor = getProviderDescriptor(provider);
+	const providerConnected = connectedProviders.includes(provider);
 
   async function loadRepositories(query = "") {
+    if (!providerAccountsResolved || !providerConnected) return;
     setState("loading");
     setError("");
     setReconnectRequired(false);
@@ -121,26 +126,46 @@ export function WorkspaceConnectionFlow({
 		return;
 	}
 	const controller = new AbortController();
-	void getProviderCapabilities(controller.signal).then((result) => {
-		const available = result.repositoryProviders?.length ? result.repositoryProviders : ["GITLAB"];
+	const accountRequest = listProviderAccounts(controller.signal);
+	void Promise.allSettled([
+		getProviderCapabilities(controller.signal),
+		accountRequest,
+	]).then(([capabilityResult, accountResult]) => {
+		if (controller.signal.aborted) return;
+		const available = capabilityResult.status === "fulfilled" && capabilityResult.value.repositoryProviders?.length
+			? capabilityResult.value.repositoryProviders
+			: ["GITLAB"] as ProviderId[];
+		const connected = accountResult.status === "fulfilled" && accountResult.value
+				? getConnectedProviderIds(accountResult.value)
+				: [];
 		setRepositoryProviders(available);
-		if (!available.includes(provider)) setProvider(available[0]);
-	}).catch(() => undefined);
+		setConnectedProviders(connected);
+		setProvider((current) => resolveRepositoryProvider(current, available, connected));
+		setProviderAccountError(accountResult.status === "rejected"
+			? "연결된 계정 상태를 확인하지 못했습니다. 잠시 후 다시 시도해 주세요."
+			: "");
+		setProviderAccountsResolved(true);
+		if (!available.some((item) => connected.includes(item))) setState("ready");
+	});
 	return () => controller.abort();
-	}, [demoMode, provider]);
+	}, [demoMode]);
 
   useEffect(() => {
-	if (demoMode) {
-		return;
-	}
-    void listRepositories("", undefined, provider)
+	if (demoMode) return;
+	if (!providerAccountsResolved || !providerConnected) return;
+	const controller = new AbortController();
+    void listRepositories("", controller.signal, provider)
 		.then((projects) => setRepositories(projects))
       .catch((requestError) => {
+		if (controller.signal.aborted) return;
 		setReconnectRequired(requestError instanceof ApiError && requestError.code.includes("REAUTH"));
 		setError(getUserFacingError(requestError, "저장소를 불러오지 못했습니다."));
       })
-      .finally(() => setState("ready"));
-  }, [demoMode, provider]);
+		.finally(() => {
+			if (!controller.signal.aborted) setState("ready");
+		});
+	return () => controller.abort();
+  }, [demoMode, provider, providerAccountsResolved, providerConnected]);
 
 	useEffect(() => {
 		if (demoMode) {
@@ -285,15 +310,22 @@ export function WorkspaceConnectionFlow({
 
 		{repositoryProviders.length > 1 ? (
 		  <div className="workspace-connect__provider-selector" role="tablist" aria-label="저장소 Provider">
-			{repositoryProviders.map((item) => (
-			  <button key={item} type="button" role="tab" aria-selected={provider === item}
+			{repositoryProviders.map((item) => {
+			  const connected = connectedProviders.includes(item);
+			  const descriptor = getProviderDescriptor(item);
+			  return <button key={item} type="button" role="tab" aria-selected={provider === item}
+				aria-label={`${descriptor.displayName}${providerAccountsResolved && !connected ? " (계정 연결 필요)" : ""}`}
+				disabled={!providerAccountsResolved || !connected}
+				title={providerAccountsResolved && !connected ? `${descriptor.displayName} 계정을 먼저 연결해 주세요.` : undefined}
 				className={provider === item ? "is-selected" : undefined}
 				onClick={() => { setState("loading"); setProvider(item); setSelectedId(null); setAnalysis(null); setError(""); }}>
-				<ProviderIcon provider={item} size={16} /> {getProviderDescriptor(item).displayName}
-			  </button>
-			))}
+				<ProviderIcon provider={item} size={16} aria-hidden="true" /> {descriptor.displayName}
+				{providerAccountsResolved && !connected ? <small>연결 필요</small> : null}
+			  </button>;
+			})}
 		  </div>
 		) : null}
+		{providerAccountError ? <div className="workspace-connect__error workspace-connect__provider-error" role="alert"><AlertTriangle size={18} /><span><strong>연결된 계정을 확인하지 못했어요.</strong><small>{providerAccountError}</small></span></div> : null}
 
         <section className="workspace-connect__section" aria-labelledby="repository-select-title">
           <div className="workspace-connect__section-heading">
@@ -303,11 +335,13 @@ export function WorkspaceConnectionFlow({
           <form className="repository-search" onSubmit={handleSearch} role="search">
             <Search size={18} aria-hidden="true" />
 			<input aria-label={`${providerDescriptor.repositoryLabel} 검색`} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="저장소 이름으로 검색" />
-            <button className="button button--secondary" type="submit" disabled={state === "loading"}>검색</button>
+			<button className="button button--secondary" type="submit" disabled={state === "loading" || !providerAccountsResolved || !providerConnected}>검색</button>
           </form>
 
           {state === "loading" ? (
             <div className="workspace-connect__status" role="status" aria-live="polite"><LoaderCircle className="spin" /> 접근 가능한 프로젝트를 불러오고 있어요.</div>
+          ) : !providerConnected ? (
+			<div className="workspace-connect__status">{providerDescriptor.displayName} 계정을 연결한 후 저장소를 선택할 수 있습니다.</div>
           ) : repositories.length ? (
 			<div className="repository-list" role="listbox" aria-label={`접근 가능한 ${providerDescriptor.repositoryLabel}`}>
               {repositories.map((repository) => {
